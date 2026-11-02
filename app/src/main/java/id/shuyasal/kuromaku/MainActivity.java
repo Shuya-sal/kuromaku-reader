@@ -5,11 +5,13 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -31,6 +33,7 @@ import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Novels;
 import id.shuyasal.kuromaku.net.CatalogLoader;
 import id.shuyasal.kuromaku.ui.LibraryPage;
+import id.shuyasal.kuromaku.ui.Motion;
 import id.shuyasal.kuromaku.ui.NovelListPage;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
@@ -44,21 +47,35 @@ import id.shuyasal.kuromaku.ui.Ui;
  * synopsis, continue reading, and the volume list where every volume carries its
  * own cover). A back button returns to the list.
  *
+ * <p>Header rules: the toolbar is one fixed 58 dp row placed <em>below</em> the
+ * status bar inset, so its title can never collide with the clock, and a long
+ * title can only ellipsize — it can never wrap and make the bar taller. The bar
+ * names the current page ("Perpustakaan" / "Detail Novel"); the application name
+ * appears once inside the page content instead of being repeated.
+ *
  * <p>Nothing here loads the source website as a page: catalogues come from each
  * novel's own source shape and chapters are extracted by {@code ChapterParser},
  * so there is no Blogspot chrome and no advertising.
  */
 public class MainActivity extends AppCompatActivity {
 
+    /** Toolbar height in dp, excluding the system inset. Comfortably 56–64 dp. */
+    private static final int TOOLBAR_DP = 58;
+
     private Prefs prefs;
     private Palette palette;
     private LinearLayout root;
+    private LinearLayout toolbar;
+    private LinearLayout toolbarRow;
+    private FrameLayout pageHost;
     private LinearLayout content;
-    private LinearLayout barBox;
     private LinearLayout spinnerRow;
     private TextView status;
-    private TextView barSubtitle;
+    private TextView titleText;
+    private TextView subtitleView;
     private Button backButton;
+    private ImageButton refreshButton;
+    private ImageButton themeButton;
     private ScrollView scroller;
 
     /** Novel whose detail page is open; null shows the library list. */
@@ -81,7 +98,11 @@ public class MainActivity extends AppCompatActivity {
         palette = Palette.of(prefs.theme());
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         buildShell();
-        loadLibraries();
+        // Paint whatever is already in memory first, then fetch in the
+        // background: a returning user sees their library immediately instead
+        // of an empty screen with a spinner.
+        render();
+        loadLibraries(false);
     }
 
     private void buildShell() {
@@ -89,68 +110,28 @@ public class MainActivity extends AppCompatActivity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(palette.background);
 
-        barBox = new LinearLayout(this);
-        barBox.setOrientation(LinearLayout.HORIZONTAL);
-        barBox.setGravity(Gravity.CENTER_VERTICAL);
-        barBox.setBackgroundColor(palette.surface);
-        int pad = Ui.dp(this, 14);
-        barBox.setPadding(pad, Ui.dp(this, 12), pad, Ui.dp(this, 12));
-
-        backButton = Ui.chip(this, "‹", palette);
-        backButton.setTag("back_to_library");
-        backButton.setTextSize(14);
-        backButton.setOnClickListener(v -> showLibrary());
-        backButton.setVisibility(View.GONE);
-        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        backParams.setMargins(0, 0, Ui.dp(this, 8), 0);
-        barBox.addView(backButton, backParams);
-
-        LinearLayout titles = new LinearLayout(this);
-        titles.setOrientation(LinearLayout.VERTICAL);
-        TextView title = Ui.label(this, "Kuromaku Reader", 19, palette.text);
-        title.setTag("app_title");
-        title.setTypeface(null, Typeface.BOLD);
-        titles.addView(title);
-        barSubtitle = Ui.label(this, subtitleText(), 12, palette.muted);
-        barSubtitle.setTag("app_subtitle");
-        titles.addView(barSubtitle);
-        barBox.addView(titles, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-
-        Button refresh = Ui.chip(this, "Muat ulang", palette);
-        refresh.setTextSize(12);
-        refresh.setTag("refresh");
-        refresh.setOnClickListener(v -> loadLibraries());
-        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        refreshParams.setMargins(0, 0, Ui.dp(this, 6), 0);
-        barBox.addView(refresh, refreshParams);
-
-        Button themeButton = Ui.chip(this, palette.label, palette);
-        themeButton.setTag("theme");
-        themeButton.setOnClickListener(v -> {
-            prefs.setTheme((prefs.theme() + 1) % 3);
-            palette = Palette.of(prefs.theme());
-            rebuildShell();
-        });
-        barBox.addView(themeButton);
-
-        root.addView(barBox, new LinearLayout.LayoutParams(
+        root.addView(buildToolbar(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         spinnerRow = new LinearLayout(this);
         spinnerRow.setGravity(Gravity.CENTER);
-        spinnerRow.setPadding(0, Ui.dp(this, 24), 0, Ui.dp(this, 8));
+        spinnerRow.setPadding(0, Ui.dp(this, 20), 0, Ui.dp(this, 6));
         ProgressBar spinner = new ProgressBar(this);
         spinner.setIndeterminate(true);
         spinnerRow.addView(spinner);
         root.addView(spinnerRow);
 
         status = Ui.label(this, "Memuat katalog dari Kaori Translation…", 12, palette.muted);
+        status.setTag("load_status");
         status.setGravity(Gravity.CENTER);
-        status.setPadding(pad, 0, pad, Ui.dp(this, 10));
+        status.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 14), Ui.dp(this, 10));
         root.addView(status);
+
+        // Only the page area moves during navigation: the toolbar and the status
+        // bar inset stay perfectly still, so nothing ever slides under the clock.
+        pageHost = new FrameLayout(this);
+        pageHost.setTag("page_host");
+        pageHost.setBackgroundColor(palette.background);
 
         scroller = new ScrollView(this);
         scroller.setTag("library_scroller");
@@ -158,10 +139,14 @@ public class MainActivity extends AppCompatActivity {
         scroller.setFillViewport(true);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(pad, Ui.dp(this, 4), pad, Ui.dp(this, 32));
+        content.setTag("page_content");
+        content.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14), Ui.dp(this, 32));
         scroller.addView(content, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(scroller, new LinearLayout.LayoutParams(
+        pageHost.addView(scroller, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        root.addView(pageHost, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         setContentView(root);
@@ -169,7 +154,89 @@ public class MainActivity extends AppCompatActivity {
         applyInsetsListener();
     }
 
+    /**
+     * Compact toolbar: optional back button, one-line page title, refresh and
+     * theme icons. Every control is at least 48 dp and spaced evenly, and the row
+     * height is fixed so wrapped text can never inflate the bar.
+     */
+    private View buildToolbar() {
+        toolbar = new LinearLayout(this);
+        toolbar.setOrientation(LinearLayout.VERTICAL);
+        toolbar.setTag("toolbar");
+        toolbar.setBackgroundColor(palette.surface);
+
+        toolbarRow = new LinearLayout(this);
+        toolbarRow.setOrientation(LinearLayout.HORIZONTAL);
+        toolbarRow.setGravity(Gravity.CENTER_VERTICAL);
+        toolbarRow.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 6), 0);
+
+        backButton = Ui.backButton(this, palette);
+        backButton.setTag("back_to_library");
+        backButton.setOnClickListener(v -> showLibrary());
+        backButton.setVisibility(View.GONE);
+        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP));
+        backParams.setMargins(0, 0, Ui.dp(this, 6), 0);
+        toolbarRow.addView(backButton, backParams);
+
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.setGravity(Gravity.CENTER_VERTICAL);
+        titles.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 6), 0);
+
+        titleText = Ui.label(this, "Perpustakaan", 17, palette.text);
+        titleText.setTag("app_title");
+        titleText.setTypeface(null, Typeface.BOLD);
+        titleText.setSingleLine(true);
+        titleText.setEllipsize(TextUtils.TruncateAt.END);
+        titles.addView(titleText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        subtitleView = Ui.label(this, subtitleText(), 11, palette.muted);
+        subtitleView.setTag("app_subtitle");
+        subtitleView.setSingleLine(true);
+        subtitleView.setEllipsize(TextUtils.TruncateAt.END);
+        titles.addView(subtitleView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        toolbarRow.addView(titles, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        refreshButton = Ui.iconButton(this, R.drawable.ic_refresh, "Muat ulang katalog", palette);
+        refreshButton.setTag("refresh");
+        refreshButton.setOnClickListener(v -> loadLibraries(true));
+        toolbarRow.addView(refreshButton, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        themeButton = Ui.iconButton(this, palette.themeIcon(), themeDescription(), palette);
+        themeButton.setTag("theme");
+        themeButton.setOnClickListener(v -> {
+            prefs.setTheme((prefs.theme() + 1) % 3);
+            palette = Palette.of(prefs.theme());
+            rebuildShell();
+        });
+        LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP));
+        themeParams.setMargins(Ui.dp(this, 2), 0, 0, 0);
+        toolbarRow.addView(themeButton, themeParams);
+
+        toolbar.addView(toolbarRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, TOOLBAR_DP)));
+
+        View divider = new View(this);
+        divider.setTag("toolbar_divider");
+        divider.setBackgroundColor(palette.divider);
+        toolbar.addView(divider, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Ui.dp(this, 1))));
+        return toolbar;
+    }
+
+    private String themeDescription() {
+        return palette.darkIcons ? "Ganti ke tema terang" : "Ganti ke tema gelap";
+    }
+
     private String subtitleText() {
+        // The novel's own name only; the application name is not repeated here.
         if (selectedNovel != null) return selectedNovel.title;
         return Novels.all().size() + " novel · Kaori Translation";
     }
@@ -188,11 +255,16 @@ public class MainActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(root);
     }
 
+    /**
+     * The status bar inset is padding above the toolbar row, so the bar's 58 dp
+     * of content starts below the clock instead of underneath it.
+     */
     private void applyInsets() {
-        if (barBox != null) barBox.setPadding(Ui.dp(this, 14), insetTop + Ui.dp(this, 12),
-                Ui.dp(this, 14), Ui.dp(this, 12));
+        if (toolbar != null) {
+            toolbar.setPadding(0, insetTop, 0, 0);
+        }
         if (content != null) {
-            content.setPadding(Ui.dp(this, 14), Ui.dp(this, 4), Ui.dp(this, 14),
+            content.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14),
                     Ui.dp(this, 32) + insetBottom);
         }
     }
@@ -218,8 +290,15 @@ public class MainActivity extends AppCompatActivity {
      * Loads every novel's catalogue in the background. One failing novel must not
      * hide the other, so failures are collected and reported alongside the list.
      */
-    private void loadLibraries() {
+    private void loadLibraries(boolean force) {
         if (loading) return;
+        if (!force && allCatalogsCached()) {
+            // Nothing to fetch: catalogs from this session are already on screen.
+            spinnerRow.setVisibility(View.GONE);
+            status.setVisibility(View.GONE);
+            render();
+            return;
+        }
         loading = true;
         failed.clear();
         spinnerRow.setVisibility(View.VISIBLE);
@@ -251,6 +330,13 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    private boolean allCatalogsCached() {
+        for (Novel novel : Novels.all()) {
+            if (Session.catalog(novel.id) == null) return false;
+        }
+        return true;
+    }
+
     /** Draws either the novel list or the open novel's detail page. */
     private void render() {
         spinnerRow.setVisibility(loading ? View.VISIBLE : View.GONE);
@@ -260,7 +346,8 @@ public class MainActivity extends AppCompatActivity {
         content.removeAllViews();
 
         backButton.setVisibility(selectedNovel == null ? View.GONE : View.VISIBLE);
-        barSubtitle.setText(subtitleText());
+        titleText.setText(selectedNovel == null ? "Perpustakaan" : "Detail Novel");
+        subtitleView.setText(subtitleText());
 
         if (!failed.isEmpty()) {
             TextView warning = Ui.label(this, "⚠ " + failed.get(0), 12, palette.accent);
@@ -310,9 +397,7 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onToggleVolume(String volumeKey) {
-                keepScrollHere();
-                scoped.toggleExpanded(volumeKey);
-                render();
+                toggleVolume(scoped, volumeKey);
             }
 
             @Override
@@ -327,25 +412,59 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
-    /** Opens one novel's detail page. */
+    /**
+     * Volume accordion with real motion: a closing volume collapses to zero
+     * height before the page is rebuilt, an opening one expands from zero up to
+     * its natural height. With motion disabled the state just changes.
+     */
+    private void toggleVolume(Prefs scoped, String volumeKey) {
+        boolean open = scoped.isExpanded(volumeKey);
+        keepScrollHere();
+
+        if (open) {
+            View body = content.findViewWithTag("chapters:" + volumeKey);
+            if (body != null && Motion.enabled(this)) {
+                Motion.collapse(body, () -> {
+                    scoped.toggleExpanded(volumeKey);
+                    render();
+                });
+                return;
+            }
+            scoped.toggleExpanded(volumeKey);
+            render();
+            return;
+        }
+
+        scoped.toggleExpanded(volumeKey);
+        render();
+        View opened = content.findViewWithTag("chapters:" + volumeKey);
+        if (opened != null && Motion.enabled(this)) {
+            opened.post(() -> Motion.expand(opened));
+        }
+    }
+
+    /** Opens one novel's detail page: the new page fades in from the right. */
     private void showNovel(Novel novel) {
         selectedNovel = novel;
         synopsisOpen = false;
         pendingScrollY = 0;
-        if (Session.catalog(novel.id) == null) {
-            loadLibraries();
-        } else {
-            render();
-            scroller.post(() -> scroller.scrollTo(0, 0));
-        }
-    }
-
-    private void showLibrary() {
-        selectedNovel = null;
-        synopsisOpen = false;
-        pendingScrollY = 0;
         render();
         scroller.post(() -> scroller.scrollTo(0, 0));
+        if (Session.catalog(novel.id) == null) loadLibraries(true);
+        Motion.enterFromRight(pageHost);
+    }
+
+    /** Returns to the library list: the detail page slides right and fades out. */
+    private void showLibrary() {
+        if (selectedNovel == null) return;
+        Motion.exitToRight(pageHost, () -> {
+            selectedNovel = null;
+            synopsisOpen = false;
+            pendingScrollY = 0;
+            render();
+            scroller.post(() -> scroller.scrollTo(0, 0));
+            Motion.enterFromLeft(pageHost);
+        });
     }
 
     private void keepScrollHere() {
@@ -363,6 +482,10 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra(ReaderActivity.EXTRA_NOVEL, novel.id);
         intent.putExtra(ReaderActivity.EXTRA_URL, chapter.url);
         startActivity(intent);
+        // Chapter list → Reader Mode: fade in plus a light slide from the right.
+        if (Motion.enabled(this)) {
+            overridePendingTransition(R.anim.kuromaku_enter_right, R.anim.kuromaku_exit_left);
+        }
     }
 
     private void openImage(String url, String caption) {
@@ -372,6 +495,9 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra(ImageViewerActivity.EXTRA_CAPTION, caption);
         try {
             startActivity(intent);
+            if (Motion.enabled(this)) {
+                overridePendingTransition(R.anim.kuromaku_fade_in, R.anim.kuromaku_fade_out);
+            }
         } catch (Exception error) {
             Toast.makeText(this, "Penampil gambar tidak tersedia", Toast.LENGTH_SHORT).show();
         }
@@ -385,6 +511,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** Android Back: detail page → library list, library → leave the app. */
     @Override
     public void onBackPressed() {
         if (selectedNovel != null) {

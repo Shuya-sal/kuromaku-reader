@@ -13,6 +13,7 @@ import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
 
+import id.shuyasal.kuromaku.R;
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
 import id.shuyasal.kuromaku.data.Novel;
@@ -285,9 +286,11 @@ public final class LibraryPage {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setTag("volume:" + key);
-        row.setBackground(Ui.rounded(palette.surface, palette.divider, 10, context));
+        row.setBackground(Ui.ripple(context, palette.surface, palette.divider, 10,
+                palette.ripple));
         row.setPadding(Ui.dp(context, 10), Ui.dp(context, 9),
                 Ui.dp(context, 12), Ui.dp(context, 9));
+        row.setMinimumHeight(Ui.dp(context, Ui.TOUCH_DP));
 
         addVolumeThumb(row, volume);
 
@@ -303,8 +306,16 @@ public final class LibraryPage {
         name.setTypeface(null, Typeface.BOLD);
         nameRow.addView(name);
 
-        TextView chevron = Ui.label(context, open ? "  ▾" : "  ▸", 13, palette.accent);
-        nameRow.addView(chevron);
+        ImageView chevron = new ImageView(context);
+        chevron.setTag("chevron:" + key);
+        chevron.setImageDrawable(Ui.tinted(context, R.drawable.ic_chevron_right,
+                palette.accent));
+        chevron.setRotation(open ? 90f : 0f);
+        chevron.setContentDescription(open ? "Tutup daftar chapter" : "Buka daftar chapter");
+        LinearLayout.LayoutParams chevronParams = new LinearLayout.LayoutParams(
+                Ui.dp(context, 18), Ui.dp(context, 18));
+        chevronParams.setMargins(Ui.dp(context, 6), 0, 0, 0);
+        nameRow.addView(chevron, chevronParams);
         texts.addView(nameRow);
 
         String count = volume.chapterCount() == 0
@@ -386,8 +397,10 @@ public final class LibraryPage {
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setTag("chapter:" + chapter.url);
+        row.setBackground(Ui.ripple(context, 0, 0, 8, palette.ripple));
         row.setPadding(Ui.dp(context, 26), Ui.dp(context, 12),
                 Ui.dp(context, 4), Ui.dp(context, 12));
+        row.setMinimumHeight(Ui.dp(context, Ui.TOUCH_DP));
 
         TextView label = Ui.label(context, chapter.label, 14,
                 finished ? palette.muted : palette.text);

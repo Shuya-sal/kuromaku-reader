@@ -55,14 +55,16 @@ public final class NovelListPage {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setTag("novel_list");
 
-        TextView heading = Ui.label(context, "Perpustakaan", 20, palette.text);
+        // The toolbar already says "Perpustakaan", so the app name is printed
+        // here exactly once instead of repeating the page name in the body.
+        TextView heading = Ui.label(context, "Kuromaku Reader", 20, palette.text);
         heading.setTag("library_heading");
         heading.setTypeface(null, Typeface.BOLD);
         content.addView(heading);
 
         TextView sub = Ui.label(context,
                 novels.size() + " novel · sumber Kaori Translation", 12, palette.muted);
-        sub.setPadding(0, Ui.dp(context, 2), 0, Ui.dp(context, 14));
+        sub.setPadding(0, Ui.dp(context, 2), 0, Ui.dp(context, 12));
         content.addView(sub);
 
         for (Novel novel : novels) {
@@ -77,9 +79,11 @@ public final class NovelListPage {
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setGravity(Gravity.CENTER_VERTICAL);
         card.setTag("novel_card:" + novel.id);
-        card.setBackground(Ui.rounded(palette.surface, palette.divider, 12, context));
+        card.setBackground(Ui.ripple(context, palette.surface, palette.divider, 12,
+                palette.ripple));
         card.setPadding(Ui.dp(context, 10), Ui.dp(context, 10),
                 Ui.dp(context, 12), Ui.dp(context, 10));
+        card.setMinimumHeight(Ui.dp(context, 112));
 
         addCover(card, novel);
 

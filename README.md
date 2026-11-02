@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.4
+# Kuromaku Reader 2.5
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -15,6 +15,55 @@ Versi 2.4 menambahkan **novel kedua**, *Magical★Explorer*, dan memperbaiki tam
 daftar volume: halaman perpustakaan berisi kartu cover kedua novel, halaman detail
 tiap novel menampilkan **cover berbeda untuk setiap volume**, progres baca disimpan
 terpisah per novel, dan navigasi chapter tidak pernah menyeberang ke novel lain.
+
+Versi 2.5 memoles **header dan animasi**: toolbar ringkas dengan status bar inset
+yang benar, tombol **Kembali** berlabel yang mudah ditekan, tombol aksi berbentuk
+ikon, dan animasi navigasi 180–250 ms yang menghormati pengaturan
+*Remove animations* Android. Tidak ada fitur 2.4 yang dihapus.
+
+## Fitur (baru di 2.5)
+
+**Header ringkas di seluruh halaman**
+- Toolbar satu baris setinggi **58 dp** (di luar system inset) dengan garis pemisah
+  tipis. Status bar inset diterapkan sebagai padding **di atas** toolbar, jadi judul
+  tidak pernah bertabrakan dengan jam atau ikon baterai, termasuk di layar dengan notch.
+- Judul toolbar **selalu satu baris** dan memakai ellipsize; teks yang panjang tidak
+  bisa lagi membungkus dan membuat toolbar meninggi.
+- Judul tidak diulang: toolbar menulis nama halaman (**Perpustakaan** / **Detail Novel**),
+  sedangkan nama aplikasi muncul satu kali di awal daftar novel.
+- Halaman detail memakai judul singkat **Detail Novel**; judul lengkap novel tetap
+  ditampilkan di bagian konten bersama cover, metadata, sinopsis, dan daftar volume.
+- Reader Mode memakai toolbar 56 dp: tombol Kembali, judul chapter satu baris, dan
+  ikon pengaturan tampilan. Metadata chapter dipindah ke baris kecil di bawahnya.
+
+**Tombol Kembali**
+- Berupa rounded rectangle berisi ikon panah kiri dan teks **Kembali**, tinggi 48 dp,
+  lebar minimal 92 dp, dengan ripple sesuai tema gelap/terang.
+- Dipakai konsisten di halaman detail novel, daftar chapter, dan Reader Mode, serta
+  pada penampil ilustrasi (label "Tutup").
+- Tombol Back Android tetap bekerja: dari detail kembali ke perpustakaan, dari
+  Reader Mode menutup panel pengaturan lebih dulu.
+
+**Tombol aksi header**
+- **Muat ulang** menjadi ikon refresh, **Gelap/Terang** menjadi ikon bulan/matahari;
+  keduanya kotak 48 dp dengan `contentDescription` untuk pembaca layar.
+- Jarak antar elemen konsisten (padding 6 dp + margin 2–6 dp) sehingga toolbar tidak
+  pernah melar karena teks terbungkus.
+
+**Animasi navigasi**
+- Perpustakaan → Detail novel: fade-in + slide ringan dari kanan (220 ms).
+- Detail novel → Perpustakaan: slide ringan ke kanan + fade-out, lalu halaman tujuan
+  fade-in dari kiri (220 ms).
+- Detail novel → Daftar chapter dan Daftar chapter → Reader Mode: fade-in + slide
+  ringan memakai `overridePendingTransition` dengan durasi 220 ms.
+- Accordion volume: expand dari tinggi 0 ke tinggi alami dan collapse ke 0 (200 ms).
+- Kartu novel, baris volume, baris chapter, tombol Kembali, dan tombol ikon memakai
+  `RippleDrawable` yang diwarnai sesuai tema.
+- Semua animasi **menghormati "Remove animations"**: bila skala animator sistem 0,
+  `Motion.enabled()` mengembalikan `false` dan perubahan state langsung diterapkan
+  tanpa animasi — navigasi tidak pernah tertahan.
+- Hanya `alpha`, `translationX`, dan tinggi accordion yang dianimasikan; tidak ada
+  animasi layout daftar penuh, sehingga tidak menimbulkan lag.
 
 ## Fitur
 
@@ -221,7 +270,7 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **117 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **135 pengujian**, semuanya lulus:
 
 - **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
   `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
@@ -261,6 +310,21 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 - **TwoNovelTest** (10) — dua novel di perpustakaan, satu kartu per novel, ketuk kartu membuka
   novel yang benar, progres & accordion tidak bocor antar novel, tema/huruf tetap bersama,
   `Session` memisahkan katalog, dan reader tidak bisa menyeberang ke novel lain.
+- **HeaderAndMotionTest** (18, Robolectric, layar kecil 320×640dp + sedang 411×891dp) —
+  tinggi toolbar berada di 56–64 dp di luar system inset; status bar inset benar-benar
+  menjadi padding di atas toolbar sehingga judul tidak menabrak jam; judul toolbar selalu
+  satu baris dan memakai ellipsize; halaman detail berjudul **Detail Novel** sementara
+  judul lengkap novel tetap di konten bersama cover/metadata/sinopsis/daftar volume;
+  nama aplikasi tidak tercetak dua kali; tombol Kembali berikon + berlabel "Kembali",
+  48 dp, lebar ≥ 92 dp; `back_to_library`, `refresh`, `theme` semuanya ≥ 48 dp; Muat ulang
+  dan Gelap/Terang berupa `ImageButton` dengan `contentDescription`; kartu novel dan
+  tombol Kembali memakai `RippleDrawable`; Back Android kembali dari detail ke
+  perpustakaan tanpa menutup aplikasi; `Motion.enabled()` mengikuti
+  `ANIMATOR_DURATION_SCALE` (0 = mati); navigasi tetap bekerja dan accordion tetap
+  terbuka saat animasi dimatikan; durasi animasi berada di rentang 180–250 ms;
+  halaman detail tetap bisa digulir sampai atribusi/tombol sumber; tema gelap tetap
+  memakai warna teks yang benar; toolbar Reader Mode punya tombol Kembali berlabel dan
+  ikon pengaturan 48 dp dengan judul satu baris.
 - **ReaderLayoutTest** (7, Robolectric) — geometri panel navigasi, tinggi area baca, progres.
 - **FeedPaginationTest** (11) — halaman pendek tidak menghentikan crawl, Volume 1–7 bertahan
   pada ukuran halaman tidak beraturan (25/22/25/20/12/13), dedupe, peringatan crawl tidak lengkap.
@@ -269,8 +333,19 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
 ```bash
-gradle testDebugUnitTest      # 117 tes
+gradle testDebugUnitTest      # 135 tes
 ```
+
+Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
+tes benar-benar gagal, lalu kode dipulihkan dan seluruh suite hijau kembali.
+
+| Mutasi yang dikembalikan | Tes yang gagal |
+| --- | --- |
+| Toolbar ditinggikan menjadi 92 dp | `toolbarStaysCompactOnASmallPhone` |
+| Judul toolbar dibiarkan membungkus dua baris | `titleIsNeverWrappedOntoTwoLines` |
+| Tombol Kembali dikembalikan menjadi glyph `‹` kecil | `backButtonHasAnArrowAndAVisibleLabel`, `toolbarControlsAreAtLeast48Dp` |
+| Animasi mengabaikan "Remove animations" | `motionHonoursTheSystemAnimationScale` |
+| Status bar inset dihapus dari toolbar | `statusBarInsetPushesTheToolbarBelowTheClock` |
 
 Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
 6 halaman, **117/117 postingan**, Volume 1–7 lengkap.

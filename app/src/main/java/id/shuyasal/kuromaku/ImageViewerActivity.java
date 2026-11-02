@@ -79,10 +79,12 @@ public class ImageViewerActivity extends AppCompatActivity {
         bar.setBackgroundColor(0xCC000000);
         bar.setPadding(Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 10), Ui.dp(this, 8));
 
-        android.widget.Button close = Ui.chip(this, "‹ Tutup", palette);
+        android.widget.Button close = Ui.backButton(this, palette);
+        close.setText("Tutup");
         close.setTag("viewer_close");
         close.setOnClickListener(v -> finish());
-        bar.addView(close);
+        bar.addView(close, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP)));
 
         TextView title = Ui.label(this,
                 caption == null || caption.isEmpty() ? "Ilustrasi" : caption, 12, 0xFFEEEEEE);

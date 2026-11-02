@@ -8,6 +8,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -31,6 +32,7 @@ import id.shuyasal.kuromaku.parser.ChapterParser;
 import id.shuyasal.kuromaku.parser.ContentCache;
 import id.shuyasal.kuromaku.parser.ParseException;
 import id.shuyasal.kuromaku.ui.BlockAdapter;
+import id.shuyasal.kuromaku.ui.Motion;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.ScrollMath;
@@ -70,6 +72,7 @@ public class ReaderActivity extends AppCompatActivity {
     private ScrollView errorScroll;
     private TextView headerTitle;
     private TextView headerMeta;
+    private Button backButton;
     private TextView bottomMeta;
 
     private String chapterUrl;
@@ -237,41 +240,65 @@ public class ReaderActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Compact reader toolbar: a 56 dp row under the status bar inset holding the
+     * "Kembali" button, the chapter title on one line, and the appearance icon.
+     * The row is measured at a fixed height so a long chapter title ellipsizes
+     * instead of pushing the reading area down.
+     */
     private View buildTopBar() {
         topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.VERTICAL);
+        topBar.setTag("reader_toolbar");
         topBar.setBackgroundColor(palette.surface);
-        int pad = Ui.dp(this, 14);
+        int pad = Ui.dp(this, 6);
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(pad, Ui.dp(this, 8), pad, Ui.dp(this, 4));
+        row.setPadding(pad, 0, pad, 0);
 
-        Button back = Ui.chip(this, "‹ Perpustakaan", palette);
-        back.setTextSize(12);
-        back.setOnClickListener(v -> finish());
-        row.addView(back);
+        backButton = Ui.backButton(this, palette);
+        backButton.setOnClickListener(v -> finishWithTransition());
+        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP));
+        backParams.setMargins(0, 0, Ui.dp(this, 6), 0);
+        row.addView(backButton, backParams);
 
         headerTitle = Ui.label(this, "", 13, palette.text);
+        headerTitle.setTag("reader_title");
         headerTitle.setSingleLine(true);
         headerTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        headerTitle.setGravity(Gravity.CENTER);
+        headerTitle.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
-        titleParams.setMargins(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+        titleParams.setMargins(Ui.dp(this, 4), 0, Ui.dp(this, 8), 0);
         row.addView(headerTitle, titleParams);
 
-        Button settings = Ui.chip(this, "Aa", palette);
-        settings.setTextSize(12);
+        ImageButton settings = Ui.iconButton(this, R.drawable.ic_sun, "Pengaturan tampilan",
+                palette);
+        settings.setTag("appearance");
         settings.setOnClickListener(v -> togglePanel());
-        row.addView(settings);
-        topBar.addView(row);
+        row.addView(settings, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+        topBar.addView(row, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 56)));
 
         headerMeta = Ui.label(this, "", 11, palette.muted);
-        headerMeta.setPadding(pad, 0, pad, Ui.dp(this, 8));
+        headerMeta.setTag("reader_meta");
+        headerMeta.setSingleLine(true);
+        headerMeta.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        headerMeta.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 14), Ui.dp(this, 6));
         topBar.addView(headerMeta);
         return topBar;
+    }
+
+    /** Slides the reader away to the right so it matches the list's transition. */
+    private void finishWithTransition() {
+        finish();
+        if (Motion.enabled(this)) {
+            overridePendingTransition(R.anim.kuromaku_enter_left, R.anim.kuromaku_exit_right);
+        }
     }
 
     private View buildBottomBar() {
@@ -634,6 +661,13 @@ public class ReaderActivity extends AppCompatActivity {
         headerTitle.setTextColor(palette.text);
         headerMeta.setTextColor(palette.muted);
         bottomMeta.setTextColor(palette.muted);
+        if (backButton != null) {
+            backButton.setTextColor(palette.text);
+            backButton.setBackground(Ui.ripple(this, palette.surface, palette.divider, 12,
+                    palette.ripple));
+            backButton.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                    Ui.tinted(this, R.drawable.ic_arrow_back, palette.text), null, null, null);
+        }
         adapter.setPalette(palette);
         if (panel != PANEL_NONE) renderPanel();
         if (content == null) {

@@ -39,7 +39,7 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-      - name: Unit tests (feed, parser, images, reader scroll, library page)
+      - name: Unit tests (feed, parser, images, reader scroll, library page, header & motion)
         run: gradle --no-daemon --stacktrace testDebugUnitTest
 
       - name: Upload test report
@@ -64,7 +64,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-debug
+          name: kuromaku-reader-2.5-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -74,7 +74,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.4 (APK)
+          name: Kuromaku Reader 2.5 (APK)
           body: |
             Reader Mode native untuk dua novel dari Kaori Translation:
             *Monogatari no Kuromaku* dan *Magical★Explorer*.
