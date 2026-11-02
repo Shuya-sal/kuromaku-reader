@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kuromaku Reader</string>
+    <string name="library">Perpustakaan</string>
+    <string name="source_note">Konten milik Kaori Translation. Aplikasi ini hanya membuka dan merapikan tampilan; tidak menyimpan salinan novel.</string>
+</resources>
