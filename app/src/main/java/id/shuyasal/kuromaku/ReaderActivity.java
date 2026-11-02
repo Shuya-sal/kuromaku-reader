@@ -48,6 +48,8 @@ import id.shuyasal.kuromaku.ui.Ui;
 public class ReaderActivity extends AppCompatActivity {
 
     public static final String EXTRA_URL = "chapter_url";
+    /** Which novel this chapter belongs to, so navigation never crosses books. */
+    public static final String EXTRA_NOVEL = "novel_id";
 
     private static final int PANEL_NONE = 0;
     private static final int PANEL_SETTINGS = 1;
@@ -55,6 +57,7 @@ public class ReaderActivity extends AppCompatActivity {
     private Prefs prefs;
     private Palette palette;
     private Catalog catalog;
+    private String novelId = "";
 
     private LinearLayout root;
     private LinearLayout topBar;
@@ -92,7 +95,13 @@ public class ReaderActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         prefs = new Prefs(this);
         palette = Palette.of(prefs.theme());
-        catalog = Session.catalog();
+
+        novelId = getIntent().getStringExtra(EXTRA_NOVEL);
+        if (novelId == null || novelId.isEmpty()) novelId = id.shuyasal.kuromaku.data.Novels.MONOGATARI;
+        // Progress, bookmarks and scroll offsets are stored per novel: two books
+        // can have chapters with the same name without overwriting each other.
+        prefs = prefs.scoped(novelId);
+        catalog = Session.catalog(novelId);
 
         chapterUrl = getIntent().getStringExtra(EXTRA_URL);
         if (chapterUrl == null) chapterUrl = prefs.lastUrl();

@@ -70,10 +70,12 @@ public class ReaderLayoutTest {
 
     @Before
     public void setUp() {
+        ContentCache.clear();
         ContentCache.put(URL, longChapter(300));
-        Session.setCatalog(catalog());
+        Session.setCatalog(catalog().withNovel(id.shuyasal.kuromaku.data.Novels.MONOGATARI));
         Intent intent = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ReaderActivity.class);
+        intent.putExtra(ReaderActivity.EXTRA_NOVEL, id.shuyasal.kuromaku.data.Novels.MONOGATARI);
         intent.putExtra(ReaderActivity.EXTRA_URL, URL);
         controller = Robolectric.buildActivity(ReaderActivity.class, intent).setup();
         activity = controller.get();
@@ -208,7 +210,9 @@ public class ReaderLayoutTest {
 
     @Test
     public void readerSurvivesWithoutCatalog() {
-        Session.setCatalog(null);
+        // No catalogue at all: the reader must still open the chapter it was
+        // given, but refuse to guess neighbouring chapters.
+        Session.clear();
         ContentCache.put(URL, longChapter(20));
         Intent intent = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ReaderActivity.class);

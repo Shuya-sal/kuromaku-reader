@@ -3,7 +3,16 @@ package id.shuyasal.kuromaku.ui;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-/** Reading preferences and per-chapter progress. */
+/**
+ * Reading preferences and per-chapter progress.
+ *
+ * <p>Theme, font size and justification belong to the app, but progress does
+ * not: each novel keeps its own bookmark, scroll position and volume accordion
+ * state. Two novels can therefore have chapters with similar names without ever
+ * overwriting each other. A {@link #scoped(String)} instance writes behind a
+ * {@code <novel>:} prefix; the unscoped instance keeps the original keys so the
+ * reading position saved by earlier versions of the app is not lost.
+ */
 public final class Prefs {
 
     public static final int THEME_LIGHT = 0;
@@ -23,10 +32,27 @@ public final class Prefs {
     private static final String KEY_EXPANDED = "expanded_volumes";
 
     private final SharedPreferences prefs;
+    /** "" for the app-wide store, otherwise "<novelId>:". */
+    private final String prefix;
+    private final Context context;
 
     public Prefs(Context context) {
-        this.prefs = context.getApplicationContext()
-                .getSharedPreferences(FILE, Context.MODE_PRIVATE);
+        this(context, "");
+    }
+
+    public Prefs(Context context, String novelId) {
+        this.context = context.getApplicationContext();
+        this.prefs = this.context.getSharedPreferences(FILE, Context.MODE_PRIVATE);
+        this.prefix = novelId == null || novelId.isEmpty() ? "" : novelId + ":";
+    }
+
+    /** A view of the same store bound to one novel. */
+    public Prefs scoped(String novelId) {
+        return new Prefs(context, novelId);
+    }
+
+    private String key(String base) {
+        return prefix + base;
     }
 
     public int theme() {
@@ -61,12 +87,16 @@ public final class Prefs {
         prefs.edit().putBoolean(KEY_JUSTIFY, justify).apply();
     }
 
+    /** Last chapter opened in this novel. */
     public String lastUrl() {
+        String scoped = prefs.getString(key(KEY_LAST_URL), "");
+        if (scoped != null && !scoped.isEmpty()) return scoped;
+        // Fall back to a bookmark written before novels were separated.
         return prefs.getString(KEY_LAST_URL, "");
     }
 
     public void setLastUrl(String url) {
-        prefs.edit().putString(KEY_LAST_URL, url == null ? "" : url).apply();
+        prefs.edit().putString(key(KEY_LAST_URL), url == null ? "" : url).apply();
     }
 
     /**
@@ -76,33 +106,38 @@ public final class Prefs {
     public void setScroll(String url, int position, int offset) {
         if (url == null) return;
         prefs.edit()
-                .putInt(KEY_SCROLL_POS + url, Math.max(0, position))
-                .putInt(KEY_SCROLL_OFF + url, Math.max(0, offset))
+                .putInt(key(KEY_SCROLL_POS) + url, Math.max(0, position))
+                .putInt(key(KEY_SCROLL_OFF) + url, Math.max(0, offset))
                 .apply();
     }
 
     public int scrollPosition(String url) {
         if (url == null) return 0;
-        return prefs.getInt(KEY_SCROLL_POS + url, 0);
+        return prefs.getInt(key(KEY_SCROLL_POS) + url,
+                prefs.getInt(KEY_SCROLL_POS + url, 0));
     }
 
     public int scrollOffset(String url) {
         if (url == null) return 0;
-        return prefs.getInt(KEY_SCROLL_OFF + url, 0);
+        return prefs.getInt(key(KEY_SCROLL_OFF) + url,
+                prefs.getInt(KEY_SCROLL_OFF + url, 0));
     }
 
     public boolean hasScroll(String url) {
-        return url != null && prefs.contains(KEY_SCROLL_POS + url);
+        return url != null
+                && (prefs.contains(key(KEY_SCROLL_POS) + url)
+                || prefs.contains(KEY_SCROLL_POS + url));
     }
 
     public int progress(String url) {
         if (url == null) return 0;
-        return prefs.getInt(KEY_PROGRESS + url, 0);
+        return prefs.getInt(key(KEY_PROGRESS) + url,
+                prefs.getInt(KEY_PROGRESS + url, 0));
     }
 
     public void setProgress(String url, int value) {
         if (url == null) return;
-        prefs.edit().putInt(KEY_PROGRESS + url, Math.max(0, value)).apply();
+        prefs.edit().putInt(key(KEY_PROGRESS) + url, Math.max(0, value)).apply();
     }
 
     public boolean isRead(String url) {
@@ -111,7 +146,7 @@ public final class Prefs {
 
     /** Volume keys whose chapter list is open on the library screen. */
     public java.util.Set<String> expandedVolumes() {
-        java.util.Set<String> stored = prefs.getStringSet(KEY_EXPANDED, null);
+        java.util.Set<String> stored = prefs.getStringSet(key(KEY_EXPANDED), null);
         return stored == null
                 ? new java.util.HashSet<String>()
                 : new java.util.HashSet<String>(stored);
@@ -132,7 +167,7 @@ public final class Prefs {
             expanded.add(volumeKey);
             nowOpen = true;
         }
-        prefs.edit().putStringSet(KEY_EXPANDED, expanded).apply();
+        prefs.edit().putStringSet(key(KEY_EXPANDED), expanded).apply();
         return nowOpen;
     }
 }

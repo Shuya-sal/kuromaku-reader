@@ -25,4 +25,12 @@ public final class ContentCache {
     public static synchronized ChapterContent get(String url) {
         return url == null ? null : CACHE.get(url);
     }
+
+    /**
+     * Drops every cached chapter. Used by tests so one test's fixture can never
+     * be served to another test that reuses the same URL.
+     */
+    public static synchronized void clear() {
+        CACHE.clear();
+    }
 }

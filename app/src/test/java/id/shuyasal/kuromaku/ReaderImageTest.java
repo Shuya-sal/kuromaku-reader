@@ -75,13 +75,16 @@ public class ReaderImageTest {
 
     @Before
     public void setUp() {
+        ContentCache.clear();
         ContentCache.put(URL, illustrationPost());
         List<Chapter> chapters = new ArrayList<>(Arrays.asList(
                 new Chapter("Volume 1 Illustrasi", "Illustrasi", URL, "2025-01-05", 19, 1)));
-        Session.setCatalog(new Catalog(new ArrayList<>(Arrays.asList(new Volume(1, chapters)))));
+        Session.setCatalog(new Catalog(id.shuyasal.kuromaku.data.Novels.MONOGATARI,
+                new ArrayList<>(Arrays.asList(new Volume(1, chapters)))));
 
         Intent intent = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ReaderActivity.class);
+        intent.putExtra(ReaderActivity.EXTRA_NOVEL, id.shuyasal.kuromaku.data.Novels.MONOGATARI);
         intent.putExtra(ReaderActivity.EXTRA_URL, URL);
         activity = Robolectric.buildActivity(ReaderActivity.class, intent).setup().get();
         Shadows.shadowOf(Looper.getMainLooper()).idle();
@@ -169,6 +172,7 @@ public class ReaderImageTest {
 
         Intent intent = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ReaderActivity.class);
+        intent.putExtra(ReaderActivity.EXTRA_NOVEL, id.shuyasal.kuromaku.data.Novels.MONOGATARI);
         intent.putExtra(ReaderActivity.EXTRA_URL, URL);
         ReaderActivity fresh = Robolectric.buildActivity(ReaderActivity.class, intent).setup().get();
         Shadows.shadowOf(Looper.getMainLooper()).idle();

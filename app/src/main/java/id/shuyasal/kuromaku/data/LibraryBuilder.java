@@ -41,6 +41,11 @@ public final class LibraryBuilder {
     private LibraryBuilder() {
     }
 
+    /** Builds the catalogue for one novel. */
+    public static Catalog build(String novelId, List<FeedEntry> entries) {
+        return build(entries).withNovel(novelId);
+    }
+
     public static Catalog build(List<FeedEntry> entries) {
         Map<Integer, List<Chapter>> grouped = new LinkedHashMap<>();
         Set<String> seenUrls = new LinkedHashSet<>();

@@ -15,15 +15,20 @@ import com.bumptech.glide.Glide;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
-import id.shuyasal.kuromaku.data.NovelInfo;
+import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Volume;
 
 /**
- * Builds the library page: novel detail on top, then an accordion of volumes.
+ * Novel detail page: cover, verified metadata, synopsis, continue button and the
+ * volume list where every volume carries its own cover.
  *
- * <p>Kept separate from the activity so the layout can be measured in a
- * Robolectric test without a network fetch: cover ratio, synopsis toggle and
- * accordion behaviour are all verified against real view geometry.
+ * <p>Kept out of the activity so the layout can be measured in a Robolectric
+ * test: cover ratio, per-volume thumbnails, the accordion and the placeholder
+ * behaviour are all verified against real view geometry.
+ *
+ * <p>Every volume row shows that volume's own artwork. When the source page has
+ * no picture for a volume, a tidy placeholder is shown instead: borrowing Volume
+ * 1's cover for every volume is exactly the mistake this page must not make.
  */
 public final class LibraryPage {
 
@@ -36,28 +41,36 @@ public final class LibraryPage {
         void onToggleVolume(String volumeKey);
 
         void onOpenSource();
+
+        /** Cover tapped: open it full screen so it can be zoomed. */
+        void onOpenCover(String url, String caption);
     }
 
     private static final int COVER_WIDTH_DP = 210;
+    private static final int THUMB_WIDTH_DP = 62;
+    private static final float FALLBACK_COVER_RATIO = 0.70f;
+    private static final float THUMB_RATIO = 0.70f;
 
     private final Context context;
     private final Prefs prefs;
     private final Palette palette;
+    private final Novel novel;
     private final Catalog catalog;
     private final boolean synopsisOpen;
     private final Listener listener;
 
-    public LibraryPage(Context context, Prefs prefs, Palette palette, Catalog catalog,
-                       boolean synopsisOpen, Listener listener) {
+    public LibraryPage(Context context, Prefs prefs, Palette palette, Novel novel,
+                       Catalog catalog, boolean synopsisOpen, Listener listener) {
         this.context = context;
         this.prefs = prefs;
         this.palette = palette;
+        this.novel = novel;
         this.catalog = catalog;
         this.synopsisOpen = synopsisOpen;
         this.listener = listener;
     }
 
-    /** Builds the scrollable content column for the library screen. */
+    /** Builds the scrollable content column for the detail screen. */
     public LinearLayout build() {
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -73,16 +86,17 @@ public final class LibraryPage {
         return content;
     }
 
-    /** Cover inside a box that always keeps the artwork's real 2:3 ratio. */
+    /** Cover inside a box that always keeps the artwork's real ratio. */
     private void addCover(LinearLayout parent) {
         int available = context.getResources().getDisplayMetrics().widthPixels
                 - Ui.dp(context, 28);
         int width = Math.min(Ui.dp(context, COVER_WIDTH_DP), Math.max(0, available));
-        int height = NovelInfo.coverHeight(width);
+        float ratio = novel.coverRatio > 0 ? novel.coverRatio : FALLBACK_COVER_RATIO;
+        int height = Math.max(1, Math.round(width / ratio));
 
         RatioFrameLayout holder = new RatioFrameLayout(context);
         holder.setTag("cover");
-        holder.setRatio(NovelInfo.COVER_RATIO);
+        holder.setRatio(ratio);
         holder.setBackground(Ui.rounded(palette.surface, palette.divider, 10, context));
 
         // Drawn first, so a failed download leaves this tidy box visible
@@ -98,20 +112,22 @@ public final class LibraryPage {
 
         ImageView cover = new ImageView(context);
         cover.setTag("cover_image");
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        cover.setScaleType(ImageView.ScaleType.FIT_CENTER);
         holder.addView(cover, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // A failed download must never crash the library: the placeholder
+        // A failed download must never crash the page: the placeholder
         // behind the image stays visible instead.
         try {
             Glide.with(context)
-                    .load(NovelInfo.COVER_URL)
+                    .load(novel.coverUrl)
                     .centerCrop()
                     .into(cover);
         } catch (Exception ignored) {
             // Offline or no image loader available: keep the placeholder.
         }
+
+        holder.setOnClickListener(v -> listener.onOpenCover(novel.coverUrl, novel.title));
 
         LinearLayout row = new LinearLayout(context);
         row.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -122,13 +138,21 @@ public final class LibraryPage {
     }
 
     private void addTitle(LinearLayout parent) {
-        TextView title = Ui.label(context, NovelInfo.TITLE, 21, palette.text);
+        TextView title = Ui.label(context, novel.title, 21, palette.text);
         title.setTag("novel_title");
         title.setTypeface(null, Typeface.BOLD);
         title.setGravity(Gravity.CENTER_HORIZONTAL);
         parent.addView(title);
 
-        TextView japanese = Ui.label(context, NovelInfo.TITLE_JP, 12, palette.muted);
+        if (!novel.fullTitle.isEmpty() && !novel.fullTitle.equals(novel.title)) {
+            TextView full = Ui.label(context, novel.fullTitle, 12, palette.text);
+            full.setTag("novel_full_title");
+            full.setGravity(Gravity.CENTER_HORIZONTAL);
+            full.setPadding(0, Ui.dp(context, 6), 0, 0);
+            parent.addView(full);
+        }
+
+        TextView japanese = Ui.label(context, novel.titleJp, 12, palette.muted);
         japanese.setTag("novel_title_jp");
         japanese.setGravity(Gravity.CENTER_HORIZONTAL);
         japanese.setPadding(0, Ui.dp(context, 4), 0, Ui.dp(context, 12));
@@ -143,11 +167,11 @@ public final class LibraryPage {
         card.setPadding(Ui.dp(context, 14), Ui.dp(context, 6),
                 Ui.dp(context, 14), Ui.dp(context, 6));
 
-        addMetaRow(card, "Penulis", NovelInfo.AUTHOR);
-        addMetaRow(card, "Ilustrator", NovelInfo.ILLUSTRATOR);
-        addMetaRow(card, "Genre", NovelInfo.GENRES);
-        addMetaRow(card, "Status", NovelInfo.STATUS);
-        addMetaRow(card, "Terjemahan", NovelInfo.TRANSLATION);
+        addMetaRow(card, "Penulis", novel.author);
+        addMetaRow(card, "Ilustrator", novel.illustrator);
+        addMetaRow(card, "Genre", novel.genres);
+        addMetaRow(card, "Status", novel.status);
+        addMetaRow(card, "Terjemahan", novel.translation);
 
         parent.addView(card, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -174,10 +198,9 @@ public final class LibraryPage {
         heading.setPadding(0, Ui.dp(context, 16), 0, Ui.dp(context, 6));
         parent.addView(heading);
 
-        String[] paragraphs = NovelInfo.SYNOPSIS;
-        int visible = synopsisOpen
-                ? paragraphs.length
-                : Math.min(NovelInfo.SYNOPSIS_PREVIEW, paragraphs.length);
+        String[] paragraphs = novel.synopsis;
+        int preview = Math.max(1, novel.synopsisPreview);
+        int visible = synopsisOpen ? paragraphs.length : Math.min(preview, paragraphs.length);
 
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < visible; i++) {
@@ -193,7 +216,7 @@ public final class LibraryPage {
         body.setLineSpacing(0, 1.45f);
         parent.addView(body);
 
-        if (paragraphs.length > NovelInfo.SYNOPSIS_PREVIEW) {
+        if (paragraphs.length > preview) {
             Button toggle = Ui.chip(context,
                     synopsisOpen ? "Tutup sinopsis" : "Baca selengkapnya", palette);
             toggle.setTag("synopsis_toggle");
@@ -207,6 +230,7 @@ public final class LibraryPage {
     }
 
     private void addContinue(LinearLayout parent) {
+        if (catalog == null) return;
         Chapter resume = catalog.findByUrl(prefs.lastUrl());
         if (resume == null) return;
 
@@ -228,59 +252,129 @@ public final class LibraryPage {
     }
 
     private void addVolumes(LinearLayout parent) {
+        int chapterTotal = catalog == null ? 0 : catalog.size();
+        int volumeTotal = catalog == null ? 0 : catalog.volumes.size();
+
         TextView heading = Ui.label(context,
-                "Volume & chapter · " + catalog.size() + " chapter dalam "
-                        + catalog.volumes.size() + " volume", 15, palette.text);
+                "Volume & chapter · " + chapterTotal + " chapter dalam "
+                        + volumeTotal + " volume", 15, palette.text);
         heading.setTag("volume_heading");
         heading.setTypeface(null, Typeface.BOLD);
         heading.setPadding(0, Ui.dp(context, 18), 0, Ui.dp(context, 6));
         parent.addView(heading);
 
+        if (catalog == null) {
+            parent.addView(Ui.label(context, "Daftar volume belum dimuat.", 12, palette.muted));
+            return;
+        }
         for (Volume volume : catalog.volumes) {
             addVolume(parent, volume);
         }
     }
 
+    /**
+     * One volume row: its own cover thumbnail, its number and chapter count.
+     * A volume without artwork gets a placeholder with the same footprint so the
+     * list never collapses or borrows another volume's picture.
+     */
     private void addVolume(LinearLayout parent, Volume volume) {
         String key = String.valueOf(volume.number);
         boolean open = prefs.isExpanded(key);
 
-        LinearLayout header = new LinearLayout(context);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setTag("volume:" + key);
-        header.setBackground(Ui.rounded(palette.surface, palette.divider, 10, context));
-        header.setPadding(Ui.dp(context, 12), Ui.dp(context, 11),
-                Ui.dp(context, 12), Ui.dp(context, 11));
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setTag("volume:" + key);
+        row.setBackground(Ui.rounded(palette.surface, palette.divider, 10, context));
+        row.setPadding(Ui.dp(context, 10), Ui.dp(context, 9),
+                Ui.dp(context, 12), Ui.dp(context, 9));
 
-        TextView chevron = Ui.label(context, open ? "▾" : "▸", 13, palette.accent);
-        chevron.setPadding(0, 0, Ui.dp(context, 8), 0);
-        header.addView(chevron);
+        addVolumeThumb(row, volume);
+
+        LinearLayout texts = new LinearLayout(context);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        texts.setPadding(Ui.dp(context, 10), 0, Ui.dp(context, 8), 0);
+
+        LinearLayout nameRow = new LinearLayout(context);
+        nameRow.setOrientation(LinearLayout.HORIZONTAL);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
 
         TextView name = Ui.label(context, volume.title(), 15, palette.text);
         name.setTypeface(null, Typeface.BOLD);
-        header.addView(name, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        nameRow.addView(name);
 
-        header.addView(Ui.label(context, volume.chapters.size() + " chapter", 11, palette.muted));
+        TextView chevron = Ui.label(context, open ? "  ▾" : "  ▸", 13, palette.accent);
+        nameRow.addView(chevron);
+        texts.addView(nameRow);
+
+        String count = volume.chapterCount() == 0
+                ? "belum ada chapter"
+                : volume.chapterCount() + " chapter";
+        texts.addView(Ui.label(context, count, 11, palette.muted));
+        row.addView(texts, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         LinearLayout body = new LinearLayout(context);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setTag("chapters:" + key);
         body.setVisibility(open ? View.VISIBLE : View.GONE);
         if (open) {
+            if (volume.chapters.isEmpty()) {
+                TextView empty = Ui.label(context,
+                        "Volume ini belum punya tautan chapter di halaman sumber.",
+                        12, palette.muted);
+                empty.setPadding(Ui.dp(context, 14), Ui.dp(context, 10),
+                        Ui.dp(context, 14), Ui.dp(context, 10));
+                body.addView(empty);
+            }
             for (Chapter chapter : volume.chapters) {
                 addChapter(body, chapter);
             }
         }
 
-        header.setOnClickListener(v -> listener.onToggleVolume(key));
+        row.setOnClickListener(v -> listener.onToggleVolume(key));
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, Ui.dp(context, 4), 0, Ui.dp(context, 2));
-        parent.addView(header, params);
+        parent.addView(row, params);
         parent.addView(body);
+    }
+
+    /** Cover thumbnail for one volume, with placeholder and tap-to-enlarge. */
+    private void addVolumeThumb(LinearLayout row, Volume volume) {
+        int width = Ui.dp(context, THUMB_WIDTH_DP);
+        float ratio = volume.coverRatio() > 0 ? volume.coverRatio() : THUMB_RATIO;
+        int height = Math.max(1, Math.round(width / ratio));
+
+        RatioFrameLayout holder = new RatioFrameLayout(context);
+        holder.setTag("volume_cover:" + volume.number);
+        holder.setRatio(ratio);
+        holder.setBackground(Ui.rounded(palette.background, palette.divider, 6, context));
+
+        TextView placeholder = Ui.label(context, "Vol " + volume.number, 10, palette.muted);
+        placeholder.setTag("volume_cover_placeholder:" + volume.number);
+        placeholder.setGravity(Gravity.CENTER);
+        holder.addView(placeholder, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ImageView image = new ImageView(context);
+        image.setTag("volume_cover_image:" + volume.number);
+        image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        holder.addView(image, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        if (volume.hasCover()) {
+            try {
+                Glide.with(context).load(volume.coverUrl).centerCrop().into(image);
+            } catch (Exception ignored) {
+                // Keep the placeholder.
+            }
+            holder.setOnClickListener(v -> listener.onOpenCover(
+                    volume.coverUrl, volume.title()));
+        }
+
+        row.addView(holder, new LinearLayout.LayoutParams(width, height));
     }
 
     private void addChapter(LinearLayout parent, Chapter chapter) {

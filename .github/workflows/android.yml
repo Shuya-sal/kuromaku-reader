@@ -74,28 +74,30 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.3 (APK)
+          name: Kuromaku Reader 2.4 (APK)
           body: |
-            Reader Mode native untuk *Monogatari no Kuromaku* (Kaori Translation).
-            
-            * Versi: 2.3 (versionCode 23)
-            * **Sistem gambar diperbaiki (akar masalah)**: sel ilustrasi lama berupa
-              `ImageView` wrap_content tanpa isi, sehingga terukur **lebar 0** dan gambar
-              tidak pernah tampil meski unduhan sukses. Kini tinggi kotak dipesan dari
-              ukuran asli gambar (`data-original-width/height`), jadi gambar selalu punya
-              kotak nyata dengan rasio asli dan lebar responsif.
-            * Parser memilih `data-src` → `data-original` → `data-lazy-src` → `srcset` →
-              `src`, dan **tidak berhenti** pada placeholder `data:`/`file:`.
-            * Postingan "Illustrasi" diproses sebagai konten gambar, urutan asli dijaga:
-              ilu_v1 5, v2 5, v3 5, v4 8, v5 7, v6 7, v7 7 gambar.
-            * Gambar dapat diketuk untuk dibuka layar penuh, dengan cubit/zoom 1x–4x,
-              geser, dan ketuk dua kali.
-            * Bila gagal dimuat: pesan jelas + tahap kegagalan + tombol **Coba lagi**,
-              dan tinggi kotak dipertahankan agar tidak ada ruang kosong besar.
-            * Logging tahap gambar (`KuromakuImage`) dengan URL disamarkan (tanpa token).
-            * Bookmark, scroll panjang 300 paragraf, dan navigasi chapter tetap berfungsi.
-            * Tema terang / gelap / sepia, ukuran font, spasi baris, progres baca.
-            * Semua volume tetap tampil, termasuk Volume 1–4 (117 chapter).
+            Reader Mode native untuk dua novel dari Kaori Translation:
+            *Monogatari no Kuromaku* dan *Magical★Explorer*.
+
+            * Versi: 2.4 (versionCode 24)
+            * **Novel kedua**: Magical★Explorer Eroge no Yuujin Kyara ni Tensei
+              Shitakedo, Geemu Chishiki Tsukatte Jiyuu ni Ikiru.
+            * **Halaman perpustakaan** berisi kartu cover + judul untuk kedua novel.
+            * **Halaman detail** per novel: cover utama, judul lengkap, penulis,
+              ilustrator, genre, sinopsis, Lanjutkan Membaca, dan daftar volume.
+            * **Cover berbeda untuk setiap volume** (rasio asli, tidak terpotong,
+              tidak tertukar), dapat diketuk untuk diperbesar. Volume tanpa gambar
+              memakai placeholder rapi.
+            * **Parser katalog khusus Magical★Explorer**: halaman katalognya memuat
+              volume + tautan chapter langsung, tanpa label Blogger. Ejaan sumber
+              "Cahpter 2" dinormalkan dan tetap di posisi kedua. Teks tanpa tautan
+              tidak pernah menjadi chapter.
+            * **Progres baca, posisi gulir, dan accordion disimpan per novel**;
+              Sebelumnya/Berikutnya tidak dapat menyeberang ke novel lain.
+            * Reader Mode 2.3 dipertahankan: kotak gambar berasio tetap, zoom 1x–4x,
+              tombol Coba lagi, logging tanpa token.
+            * Tema terang / gelap / sepia, ukuran font, spasi baris.
+            * Monogatari no Kuromaku tetap lengkap: Volume 1–7, 117 chapter.
 
             APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
             Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.

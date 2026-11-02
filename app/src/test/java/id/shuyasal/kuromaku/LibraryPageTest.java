@@ -3,6 +3,7 @@ package id.shuyasal.kuromaku;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -29,19 +30,20 @@ import java.util.List;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
-import id.shuyasal.kuromaku.data.NovelInfo;
+import id.shuyasal.kuromaku.data.Novel;
+import id.shuyasal.kuromaku.data.Novels;
 import id.shuyasal.kuromaku.data.Volume;
-import id.shuyasal.kuromaku.parser.ChapterContent;
-import id.shuyasal.kuromaku.parser.ContentCache;
 import id.shuyasal.kuromaku.ui.LibraryPage;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 
 /**
- * Home screen (2.2): novel detail on top, then an accordion of volumes.
+ * Novel detail page: cover, verified metadata, synopsis, continue button and the
+ * volume list where each volume carries its own cover.
  *
  * <p>Measures real geometry on a small phone (320dp wide) so the cover ratio,
- * synopsis toggle and collapsed chapters are verified rather than assumed.
+ * the per-volume thumbnails and the collapsed chapters are verified rather than
+ * assumed.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33, qualifiers = "w320dp-h640dp-mdpi")
@@ -53,9 +55,12 @@ public class LibraryPageTest {
 
     private final List<String> opened = new ArrayList<>();
     private final List<String> toggled = new ArrayList<>();
+    private final List<String> covers = new ArrayList<>();
     private int synopsisToggles;
     private int sourceOpens;
     private boolean synopsisOpen;
+
+    private final Novel monogatari = Novels.byId(Novels.MONOGATARI);
 
     private Catalog catalog() {
         List<Chapter> v1 = new ArrayList<>(Arrays.asList(
@@ -66,7 +71,10 @@ public class LibraryPageTest {
         List<Chapter> v2 = new ArrayList<>(Arrays.asList(
                 new Chapter("Monogatari no Kuromaku Volume 2 Chapter 1", "Chapter 1",
                         CHAPTER_3, "2026-02-10", 21, 2)));
-        return new Catalog(new ArrayList<>(Arrays.asList(new Volume(1, v1), new Volume(2, v2))));
+        List<Volume> volumes = new ArrayList<>(Arrays.asList(
+                new Volume(1, v1).withCover("https://blogger.googleusercontent.com/c1.jpg", 1080, 1534),
+                new Volume(2, v2).withCover("https://blogger.googleusercontent.com/c2.jpg", 1080, 1537)));
+        return new Catalog(Novels.MONOGATARI, volumes);
     }
 
     private LibraryPage.Listener listener() {
@@ -91,13 +99,18 @@ public class LibraryPageTest {
             public void onOpenSource() {
                 sourceOpens++;
             }
+
+            @Override
+            public void onOpenCover(String url, String caption) {
+                covers.add(url);
+            }
         };
     }
 
     private LinearLayout build(Activity activity, Prefs prefs, Catalog catalog) {
         Palette palette = Palette.of(prefs.theme());
-        LibraryPage page = new LibraryPage(activity, prefs, palette, catalog, synopsisOpen,
-                listener());
+        LibraryPage page = new LibraryPage(activity, prefs, palette, monogatari, catalog,
+                synopsisOpen, listener());
         LinearLayout content = page.build();
         // Measure at the width of the hosting scroll view.
         int width = activity.getResources().getDisplayMetrics().widthPixels;
@@ -130,7 +143,7 @@ public class LibraryPageTest {
 
         float ratio = cover.getWidth() / (float) cover.getHeight();
         assertEquals("rasio sampul harus mengikuti artwork asli",
-                NovelInfo.COVER_RATIO, ratio, 0.02f);
+                monogatari.coverRatio, ratio, 0.02f);
 
         // A 2:3 novel cover is taller than it is wide.
         assertTrue("sampul harus lebih tinggi daripada lebar", cover.getHeight() > cover.getWidth());
@@ -161,14 +174,14 @@ public class LibraryPageTest {
         LinearLayout content = build(activity, new Prefs(activity), catalog());
 
         TextView title = (TextView) byTag(content, "novel_title");
-        assertEquals(NovelInfo.TITLE, title.getText().toString());
+        assertEquals(monogatari.title, title.getText().toString());
 
         View metadata = byTag(content, "metadata");
         String text = collectText(metadata);
-        assertTrue("penulis harus tampil", text.contains(NovelInfo.AUTHOR));
-        assertTrue("ilustrator harus tampil", text.contains(NovelInfo.ILLUSTRATOR));
+        assertTrue("penulis harus tampil", text.contains(monogatari.author));
+        assertTrue("ilustrator harus tampil", text.contains(monogatari.illustrator));
         assertTrue("genre harus tampil", text.contains("Fantasy"));
-        assertTrue("status tidak boleh dikarang", text.contains(NovelInfo.STATUS));
+        assertTrue("status tidak boleh dikarang", text.contains(monogatari.status));
         assertTrue("sumber terjemahan harus tampil", text.contains("Kaori Translation"));
     }
 
@@ -200,9 +213,9 @@ public class LibraryPageTest {
 
     private int fullSynopsisLength() {
         StringBuilder all = new StringBuilder();
-        for (int i = 0; i < NovelInfo.SYNOPSIS.length; i++) {
+        for (int i = 0; i < monogatari.synopsis.length; i++) {
             if (i > 0) all.append("\n\n");
-            all.append(NovelInfo.SYNOPSIS[i]);
+            all.append(monogatari.synopsis[i]);
         }
         return all.length();
     }
@@ -251,6 +264,71 @@ public class LibraryPageTest {
         assertEquals(View.VISIBLE, v2Body.getVisibility());
         assertNotNull("chapter volume 2 harus ikut tampil",
                 content.findViewWithTag("chapter:" + CHAPTER_3));
+    }
+
+    /**
+     * Every volume row shows its own cover, with a thumbnail box that keeps the
+     * artwork's ratio. This is the requirement that each volume differs.
+     */
+    @Test
+    public void everyVolumeShowsItsOwnCover() {
+        Activity activity = activity();
+        LinearLayout content = build(activity, new Prefs(activity), catalog());
+
+        View one = byTag(content, "volume_cover:1");
+        View two = byTag(content, "volume_cover:2");
+
+        assertTrue("thumbnail volume 1 harus punya lebar", one.getWidth() > 0);
+        assertTrue("thumbnail volume 1 harus punya tinggi", one.getHeight() > 0);
+        assertTrue("thumbnail volume 2 harus punya lebar", two.getWidth() > 0);
+
+        assertNotNull(byTag(content, "volume_cover_image:1"));
+        assertNotNull(byTag(content, "volume_cover_image:2"));
+    }
+
+    /** Tapping a volume cover opens it enlarged, and it is that volume's image. */
+    @Test
+    public void tappingAVolumeCoverOpensThatVolumeArtwork() {
+        Activity activity = activity();
+        LinearLayout content = build(activity, new Prefs(activity), catalog());
+
+        byTag(content, "volume_cover:2").performClick();
+        assertEquals(1, covers.size());
+        assertTrue("harus membuka cover volume 2, dapat " + covers.get(0),
+                covers.get(0).contains("c2.jpg"));
+    }
+
+    /** A volume the source has no picture for keeps a placeholder, never a copy. */
+    @Test
+    public void volumeWithoutCoverGetsAPlaceholder() {
+        Activity activity = activity();
+        List<Volume> volumes = new ArrayList<>();
+        volumes.add(new Volume(1, new ArrayList<Chapter>()));
+        LinearLayout content = build(activity, new Prefs(activity),
+                new Catalog(Novels.MONOGATARI, volumes));
+
+        View holder = byTag(content, "volume_cover:1");
+        assertNotNull("placeholder harus ada", byTag(holder, "volume_cover_placeholder:1"));
+        assertNotNull(holder);
+        assertTrue("kotak cover harus tetap punya ukuran", holder.getWidth() > 0);
+
+        holder.performClick();
+        assertTrue("volume tanpa cover tidak boleh membuka gambar apa pun", covers.isEmpty());
+    }
+
+    /** A volume with no chapter links says so instead of inventing chapters. */
+    @Test
+    public void emptyVolumeSaysItHasNoChapters() {
+        Activity activity = activity();
+        Prefs prefs = new Prefs(activity);
+        prefs.toggleExpanded("14");
+        List<Volume> volumes = new ArrayList<>();
+        volumes.add(new Volume(14, new ArrayList<Chapter>()));
+        LinearLayout content = build(activity, prefs, new Catalog(Novels.MONOGATARI, volumes));
+
+        String text = collectText(byTag(content, "chapters:14"));
+        assertTrue("harus menjelaskan volume belum punya chapter: " + text,
+                text.contains("belum punya tautan chapter"));
     }
 
     /** Continue-reading button appears only with a real bookmark. */
@@ -307,7 +385,7 @@ public class LibraryPageTest {
         assertNotNull(content.findViewWithTag("metadata"));
     }
 
-    /** Whole activity on a small screen: detail first, list below, no overlap. */
+    /** Whole activity on a small screen: the library list still fits. */
     @Test
     public void homeScreenFitsASmallPhone() {
         Intent intent = new Intent(

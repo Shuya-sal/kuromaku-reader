@@ -82,14 +82,17 @@ public class ReaderScrollRegressionTest {
 
     @Before
     public void setUp() {
+        ContentCache.clear();
         ContentCache.put(URL, longChapter());
         ContentCache.put(NEXT_URL, longChapter());
-        Session.setCatalog(catalog());
+        Session.setCatalog(catalog().withNovel(id.shuyasal.kuromaku.data.Novels.MONOGATARI));
         Intent intent = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ReaderActivity.class);
+        intent.putExtra(ReaderActivity.EXTRA_NOVEL, id.shuyasal.kuromaku.data.Novels.MONOGATARI);
         intent.putExtra(ReaderActivity.EXTRA_URL, URL);
         activity = Robolectric.buildActivity(ReaderActivity.class, intent).setup().get();
-        prefs = new Prefs(activity.getApplicationContext());
+        prefs = new Prefs(activity.getApplicationContext())
+                .scoped(id.shuyasal.kuromaku.data.Novels.MONOGATARI);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         layout();
     }
@@ -251,6 +254,7 @@ public class ReaderScrollRegressionTest {
 
         Intent intent = new Intent(
                 org.robolectric.RuntimeEnvironment.getApplication(), ReaderActivity.class);
+        intent.putExtra(ReaderActivity.EXTRA_NOVEL, id.shuyasal.kuromaku.data.Novels.MONOGATARI);
         intent.putExtra(ReaderActivity.EXTRA_URL, URL);
         ReaderActivity reopened = Robolectric.buildActivity(ReaderActivity.class, intent)
                 .setup().get();

@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.3
+# Kuromaku Reader 2.4
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -10,6 +10,11 @@ Versi 2.1 memperbaiki katalog yang hanya memuat Volume 5–7. Versi 2.2 memperba
 **akar** bug scroll yang masih tersisa, dan mendesain ulang halaman awal menjadi
 halaman detail novel. Versi 2.3 memperbaiki **sistem gambar**: ilustrasi di dalam
 chapter dan seluruh isi postingan "Illustrasi" kini benar-benar tampil.
+
+Versi 2.4 menambahkan **novel kedua**, *Magical★Explorer*, dan memperbaiki tampilan
+daftar volume: halaman perpustakaan berisi kartu cover kedua novel, halaman detail
+tiap novel menampilkan **cover berbeda untuk setiap volume**, progres baca disimpan
+terpisah per novel, dan navigasi chapter tidak pernah menyeberang ke novel lain.
 
 ## Fitur
 
@@ -51,6 +56,30 @@ chapter dan seluruh isi postingan "Illustrasi" kini benar-benar tampil.
 - Gagal dimuat → pesan jelas, tahap kegagalan, dan tombol **Coba lagi**.
 - Logging `KuromakuImage` mencatat tahap (`antrean`, `unduh`, `selesai`, `url`, `loader`)
   dengan URL disamarkan (tanpa token panjang).
+
+**Dua novel (baru di 2.4)**
+- Halaman perpustakaan: satu kartu per novel berisi cover, judul, judul Jepang, dan
+  ringkasan `N volume · M chapter` dari katalog novel itu sendiri.
+- Halaman detail per novel: cover utama, judul lengkap, penulis, ilustrator, genre,
+  status, terjemahan, sinopsis, **Lanjutkan Membaca**, lalu daftar volume.
+- **Setiap volume punya cover sendiri** (720–1160 px, rasio asli terjaga, tidak
+  terpotong). Cover yang diketuk membuka penampil zoom penuh.
+- Volume tanpa gambar di halaman sumber memakai placeholder rapi — tidak pernah
+  meminjam cover Volume 1.
+- Volume yang belum punya tautan chapter (mis. Volume 14 Magical★Explorer) tetap
+  ditampilkan dengan keterangan "belum ada chapter", bukan chapter palsu.
+- Progres baca, posisi gulir, dan status accordion disimpan **per novel** dengan
+  prefiks `<novel>:`. Tema, ukuran huruf, dan spasi baris tetap berlaku aplikasi.
+- Tombol Sebelumnya/Berikutnya memakai katalog novel yang sedang dibuka, jadi tidak
+  bisa berpindah ke chapter novel lain.
+
+**Dua bentuk katalog**
+- **Monogatari no Kuromaku** → feed JSON label Blogger, dikelompokkan per volume dari
+  judul postingan.
+- **Magical★Explorer** → halaman katalognya memuat daftar volume dan tautan chapter
+  langsung, tanpa label Blogger tunggal. `LandingCatalogParser` membaca judul
+  `Volume N` lalu tautan di bawahnya, dan setiap chapter mewarisi volume di atasnya.
+  Ejaan sumber yang salah seperti **"Cahpter 2"** tetap diurutkan di posisi kedua.
 
 **Kenyamanan baca**
 - Tema Terang / Gelap / Sepia.
@@ -192,7 +221,7 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **79 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **117 pengujian**, semuanya lulus:
 
 - **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
   `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
@@ -211,11 +240,27 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
   terakhir bersih dari panel navigasi; bookmark tidak tertimpa layout pass; persen hanya
   100% di akhir; tombol Berikutnya tetap berpindah chapter. Chapter uji berisi **300 paragraf
   + ilustrasi**.
-- **LibraryPageTest** (10, Robolectric, layar kecil 320×640dp) — rasio sampul sesuai artwork
+- **LibraryPageTest** (14, Robolectric, layar kecil 320×640dp) — rasio sampul sesuai artwork
   (toleransi 0.02), placeholder berada di belakang gambar, judul & metadata tampil apa adanya,
   sinopsis mengembang lewat "Baca selengkapnya", volume tertutup menyembunyikan chapter,
   Volume 1 dan 2 keduanya terdaftar, tombol Lanjutkan Membaca memakai progres nyata,
-  atribusi + tautan sumber tetap ada, tema gelap memakai struktur yang sama.
+  atribusi + tautan sumber tetap ada, tema gelap memakai struktur yang sama, **setiap volume
+  menampilkan cover-nya sendiri**, ketuk cover membuka artwork volume itu, volume tanpa cover
+  memakai placeholder, volume kosong menyatakan belum ada chapter.
+- **LandingCatalogParserTest** (13) — halaman katalog Magical★Explorer asli: 14 volume
+  terdeteksi (V1..V14 berurutan), jumlah tautan per volume `12,9,11,13,11,9,11,11,11,11,10,10,12,0`,
+  semua chapter milik novel ini, "Cahpter 2" dinormalkan dan diurutkan di posisi kedua,
+  Chapter 0 sebelum Chapter 1, Prolog sebelum Chapter 1, Illustrasi setelah chapter terakhir,
+  teks tanpa tautan tidak menjadi chapter, tautan novel lain ditolak, `Volume&nbsp;2` dikenali.
+- **VolumeCoverParserTest** (7) — cover per volume dari kedua halaman sumber asli, tidak ada
+  cover yang dipakai dua kali, ukuran dinaikkan ke `s1600`, hanya gambar pertama setelah judul
+  volume yang dianggap cover, volume tanpa gambar tidak diberi cover.
+- **VolumeCoversTableTest** (4) — tabel cover statis di aplikasi dibandingkan ulang dengan hasil
+  parse halaman sumber, jadi tabel tidak bisa melenceng dari sumber; tidak ada cover ganda;
+  semua rasio berada di rentang buku (0,55–0,85).
+- **TwoNovelTest** (10) — dua novel di perpustakaan, satu kartu per novel, ketuk kartu membuka
+  novel yang benar, progres & accordion tidak bocor antar novel, tema/huruf tetap bersama,
+  `Session` memisahkan katalog, dan reader tidak bisa menyeberang ke novel lain.
 - **ReaderLayoutTest** (7, Robolectric) — geometri panel navigasi, tinggi area baca, progres.
 - **FeedPaginationTest** (11) — halaman pendek tidak menghentikan crawl, Volume 1–7 bertahan
   pada ukuran halaman tidak beraturan (25/22/25/20/12/13), dedupe, peringatan crawl tidak lengkap.
@@ -224,7 +269,7 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
 ```bash
-gradle testDebugUnitTest      # 79 tes
+gradle testDebugUnitTest      # 117 tes
 ```
 
 Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
@@ -243,18 +288,25 @@ app/src/main/java/id/shuyasal/kuromaku/
 ├── Session.java               # katalog in-memory untuk navigasi chapter
 ├── data/
 │   ├── FeedEntry, Chapter, Volume, Catalog
-│   ├── NovelInfo.java         # cover + metadata terverifikasi + sinopsis
+│   ├── Novel.java             # satu novel: metadata, cover, cara katalog dibaca
+│   ├── Novels.java            # daftar dua novel (teks dari halaman sumber)
+│   ├── VolumeCovers.java      # tabel cover per volume (diverifikasi tes)
+│   ├── NovelInfo.java         # metadata Monogatari (dipakai tes lama)
 │   └── LibraryBuilder.java    # parsing judul → volume, label, urutan baca
 ├── net/
 │   ├── Http.java              # OkHttp, hanya dokumen teks
+│   ├── CatalogLoader.java     # pilih feed vs halaman katalog, pasang cover
 │   ├── FeedClient.java        # feed JSON label, paginasi penuh
 │   └── FeedException.java     # kegagalan per halaman
 ├── parser/
 │   ├── ChapterParser.java     # Jsoup: scrub situs → blok teks/gambar berurutan
+│   ├── LandingCatalogParser.java # katalog dari tautan di halaman landing
+│   ├── VolumeCoverParser.java # cover per volume dari halaman landing
 │   ├── ChapterContent.java    # judul + daftar blok + URL sumber
 │   └── ContentCache.java      # cache LRU 6 chapter
 └── ui/
-    ├── LibraryPage.java       # halaman detail novel + accordion volume
+    ├── NovelListPage.java     # halaman perpustakaan: kartu per novel
+    ├── LibraryPage.java       # halaman detail novel + accordion volume + cover volume
     ├── RatioFrameLayout.java  # kotak rasio tetap untuk sampul
     ├── ImageCell.java         # sel ilustrasi: kotak berasio, error + coba lagi
     ├── ZoomableImageView.java # cubit/geser/ketuk dua kali
@@ -298,3 +350,11 @@ gradle testDebugUnitTest assembleDebug
 - Verifikasi gambar dilakukan lewat pengukuran layout Robolectric dan unduhan URL asli;
   Glide tidak benar-benar mengunduh di unit test, jadi tampilan akhir, kecepatan cache,
   dan zoom multi-touch tetap perlu dicoba di perangkat Android.
+- Parser katalog Magical★Explorer bergantung pada bentuk halaman katalognya (judul
+  `Volume N` diikuti tautan chapter). Bila Kaori Translation mengubah tata letaknya,
+  `LandingCatalogParser` perlu disesuaikan.
+- Cover volume berasal dari URL yang tercantum di halaman sumber. Bila sumber mengganti
+  gambarnya, `VolumeCovers` dan fixture di `app/src/test/resources/catalog/` harus
+  diperbarui bersama; `VolumeCoversTableTest` akan gagal bila hanya salah satunya diubah.
+- Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
+  tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
