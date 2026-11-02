@@ -64,6 +64,10 @@ public final class ChapterParser {
 
     private static final String FULL_SIZE = "s1600";
 
+    /** Attribute order for illustrations: lazy-load sources win over placeholders. */
+    private static final String[] IMAGE_ATTRIBUTES =
+            {"data-src", "data-original", "data-lazy-src", "src"};
+
     private static final int MAX_BLOCKS = 4000;
 
     private ChapterParser() {
@@ -170,7 +174,13 @@ public final class ChapterParser {
                 flush(buffer, out);
                 String url = resolveImage(element);
                 if (url != null) {
-                    out.add(Block.image(url, clean(element.attr("alt"))));
+                    // The source declares the printed pixel size; carrying it
+                    // through lets the reader reserve a correctly shaped box
+                    // before the bitmap arrives (otherwise the ImageView can
+                    // measure to zero width and the illustration never shows).
+                    out.add(Block.image(url, clean(element.attr("alt")),
+                            dimension(element, "data-original-width", "width"),
+                            dimension(element, "data-original-height", "height")));
                 }
                 continue;
             }
@@ -240,24 +250,16 @@ public final class ChapterParser {
 
     /** Picks the best available image URL and upgrades Blogger thumbnails. */
     static String resolveImage(Element img) {
-        String[] attributes = {"data-src", "data-original", "data-lazy-src", "src"};
         String url = null;
-        for (String attribute : attributes) {
-            String value = img.attr(attribute).trim();
-            if (!value.isEmpty()) {
-                url = value;
-                break;
-            }
+        for (String attribute : IMAGE_ATTRIBUTES) {
+            url = usable(img.attr(attribute));
+            if (url != null) break;
         }
-        if (url == null) {
-            url = fromSrcSet(img.attr("srcset"));
-        }
-        if (url == null || url.isEmpty()) return null;
-
-        url = url.trim();
-        if (url.startsWith("//")) url = "https:" + url;
-        if (url.startsWith("file:") || url.startsWith("data:")) return null;
-        if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+        // Lazy-loader posts keep a base64 placeholder in src and the real file in
+        // srcset. A placeholder must never end the search, otherwise the whole
+        // illustration is dropped and the reader shows an empty gap.
+        if (url == null) url = usable(fromSrcSet(img.attr("srcset")));
+        if (url == null) return null;
 
         url = url.replace("http://", "https://");
         if (url.contains("googleusercontent.com")) {
@@ -272,6 +274,21 @@ public final class ChapterParser {
             }
         }
         return url;
+    }
+
+    /**
+     * Normalises one candidate URL, or returns null when it cannot be fetched.
+     * {@code data:} and {@code file:} values are placeholders, not pictures, so
+     * the caller is expected to keep looking rather than stop here.
+     */
+    private static String usable(String raw) {
+        if (raw == null) return null;
+        String value = raw.trim();
+        if (value.isEmpty()) return null;
+        if (value.startsWith("data:") || value.startsWith("file:")) return null;
+        if (value.startsWith("//")) return "https:" + value;
+        if (!value.startsWith("http://") && !value.startsWith("https://")) return null;
+        return value;
     }
 
     private static String fromSrcSet(String srcset) {
@@ -295,6 +312,24 @@ public final class ChapterParser {
             }
         }
         return best;
+    }
+
+    /**
+     * Reads a pixel dimension, preferring the untouched original size over the
+     * rendered {@code width}/{@code height} attributes, which Blogger shrinks.
+     */
+    static int dimension(Element img, String primary, String fallback) {
+        for (String attribute : new String[]{primary, fallback}) {
+            String raw = img.attr(attribute).trim();
+            if (raw.isEmpty()) continue;
+            try {
+                int value = Integer.parseInt(raw.replaceAll("[^0-9]", ""));
+                if (value > 0) return value;
+            } catch (NumberFormatException ignored) {
+                // try the next attribute
+            }
+        }
+        return 0;
     }
 
     /** Drops duplicate images and repeated paragraphs, then trims the tail. */

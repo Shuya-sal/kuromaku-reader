@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.2
+# Kuromaku Reader 2.3
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -8,7 +8,8 @@ menu Blogspot ikut tampil. Versi 2.0 membuang WebView sepenuhnya: isi chapter
 diambil lewat HTTP, diparse dengan Jsoup, lalu dirender sebagai tampilan baca native.
 Versi 2.1 memperbaiki katalog yang hanya memuat Volume 5–7. Versi 2.2 memperbaiki
 **akar** bug scroll yang masih tersisa, dan mendesain ulang halaman awal menjadi
-halaman detail novel.
+halaman detail novel. Versi 2.3 memperbaiki **sistem gambar**: ilustrasi di dalam
+chapter dan seluruh isi postingan "Illustrasi" kini benar-benar tampil.
 
 ## Fitur
 
@@ -40,6 +41,16 @@ halaman detail novel.
 - Urutan paragraf dan gambar dipertahankan; URL gambar asli dipakai (varian `=s1600` agar tidak buram).
 - Script, `<ins class="adsbygoogle">`, iframe, share widget, komentar, sidebar, dan footer situs dibuang sebelum render.
 - Tidak ada JavaScript yang dijalankan di aplikasi — konten diolah sebagai teks, bukan halaman web.
+
+**Ilustrasi (baru di 2.3)**
+- Gambar tampil dengan **kotak yang dipesan sejak layout pertama**, ukurannya diambil dari
+  `data-original-width` / `data-original-height` milik sumber, jadi rasio asli terjaga
+  dan tidak ada ruang kosong besar ketika gambar gagal dimuat.
+- Lebar responsif mengikuti kolom baca; tinggi mengikuti rasio gambar.
+- Ketuk gambar → penampil layar penuh dengan cubit/zoom **1x–4x**, geser, dan ketuk dua kali.
+- Gagal dimuat → pesan jelas, tahap kegagalan, dan tombol **Coba lagi**.
+- Logging `KuromakuImage` mencatat tahap (`antrean`, `unduh`, `selesai`, `url`, `loader`)
+  dengan URL disamarkan (tanpa token panjang).
 
 **Kenyamanan baca**
 - Tema Terang / Gelap / Sepia.
@@ -124,10 +135,77 @@ ReaderScrollRegressionTest > readingAreaScrollsAndErrorPaneDoesNotBlockIt FAILED
 
 Setelah perbaikan dipulihkan, **8/8 lulus**. Jadi tes ini menangkap persis bug yang dilaporkan.
 
+### BUG 3 (2.3) — Seluruh gambar tidak muncul
+
+**Akar masalah ditemukan dengan mengukur view, bukan menebak.**
+
+Diagnostik Robolectric mencatat sel gambar di dalam reader:
+
+```
+IMAGE VIEW measured=0x240   wrapper=80x240
+```
+
+`ImageView` di `BlockAdapter` dibuat dengan `wrap_content` dan **tanpa isi** saat
+layout pertama. Tanpa drawable dan tanpa tinggi minimum yang benar, ia terukur
+**lebar 0**; wrapper-nya hanya menyisakan padding samping. Bitmap yang berhasil
+diunduh pun tidak punya tempat untuk digambar, sehingga teks tampil tetapi semua
+ilustrasi hilang — termasuk isi postingan "Illustrasi".
+
+Yang **bukan** penyebabnya, sudah diuji dan disingkirkan:
+- **URL hasil parser**: 46 URL dari 7 volume diunduh langsung → **46/46 HTTP 200**,
+  `Content-Type: image/*`, hasil decode JPEG/PNG valid.
+- **Akses gambar**: tanpa User-Agent khusus tetap `200`; tidak ada redirect aneh,
+  tidak ada blokir.
+- **Dependency Glide**: `glide:4.16.0` ada di `debugRuntimeClasspath` dan kelasnya
+  masuk ke APK.
+
+Perbaikan:
+- `ImageCell` baru: kotaknya **selalu** `MATCH_PARENT` lebar dan tinggi dihitung dari
+  rasio gambar (`width / ratio`), diukur `EXACTLY`, jadi tidak pernah 0 selama kolom
+  baca punya lebar.
+- Ukuran asli dibaca parser dari `data-original-width`/`data-original-height`
+  (fallback ke `width`/`height`), dibawa di `Block.imageWidth/imageHeight`.
+  Tanpa ukuran, dipakai rasio cadangan 0,72 (halaman buku).
+- Parser tidak lagi berhenti pada placeholder: `data-src` → `data-original` →
+  `data-lazy-src` → `srcset` (varian terlebar) → `src`, dan nilai `data:`/`file:`
+  **dilewati**, bukan dijadikan hasil akhir.
+- Kegagalan tidak lagi senyap: pesan + tahap + tombol **Coba lagi**, tinggi kotak
+  tetap dipesan agar tidak muncul ruang kosong besar.
+- Ketuk gambar membuka `ImageViewerActivity` (zoom 1x–4x, geser, ketuk dua kali).
+
+### Bukti tes menangkap BUG 3
+
+Bug lama dikembalikan sementara: `ImageCell.onMeasure` tidak memesan kotak, dan parser
+berhenti pada placeholder `data:`. Hasilnya **6 tes gagal**:
+
+```
+ChapterImageParserTest > lazyLoadedAttributesAreResolved FAILED
+ReaderImageTest > imageCellsOccupyARealBox FAILED
+ReaderImageTest > imageBoxKeepsSourceRatio FAILED
+ReaderImageTest > imageWidthIsResponsive FAILED
+ReaderImageTest > imageWithoutSizeStillGetsABox FAILED
+ReaderImageTest > scrollingAndNavigationStillWork FAILED
+22 tests completed, 6 failed
+```
+
+Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
+
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **57 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **79 pengujian**, semuanya lulus:
 
+- **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
+  `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
+  5/5/5/8/7/7/7 gambar sesuai sumber, urutan gambar sama dengan HTML asli,
+  teks & gambar tetap berselang-seling, ukuran asli (`1080x1534`) terbaca,
+  thumbnail `s320`/`w400-h600` dinaikkan ke `s1600`, `data-src`/`srcset` dipakai,
+  placeholder `data:`/`file:` tidak dianggap gambar, chapter tanpa ilustrasi → 0 gambar.
+- **ReaderImageTest** (11, Robolectric) — sel gambar punya lebar & tinggi nyata,
+  rasio potret 1080×1534 dan lanskap 1523×1080 dipertahankan, lebar responsif,
+  gambar tanpa ukuran tetap dapat kotak, ketuk gambar membuka penampil,
+  zoom dibatasi 1x–4x, kegagalan menampilkan pesan + tombol Coba lagi,
+  retry mereset status, logging menyebut tahap tanpa membocorkan token,
+  posisi gambar di antara paragraf, scroll + navigasi tetap jalan.
 - **ReaderScrollRegressionTest** (8, Robolectric) — tidak ada view yang menutupi `RecyclerView`;
   panel error mulai `GONE`; area baca bisa tergulir; paragraf ke-300 tercapai; paragraf
   terakhir bersih dari panel navigasi; bookmark tidak tertimpa layout pass; persen hanya
@@ -146,11 +224,14 @@ Setelah perbaikan dipulihkan, **8/8 lulus**. Jadi tes ini menangkap persis bug y
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
 ```bash
-gradle testDebugUnitTest      # 57 tes
+gradle testDebugUnitTest      # 79 tes
 ```
 
 Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
 6 halaman, **117/117 postingan**, Volume 1–7 lengkap.
+
+Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
+**46/46 URL hasil parser** dari 7 volume diunduh → HTTP 200, `image/*`, decode valid.
 
 ## Arsitektur
 
@@ -158,6 +239,7 @@ Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
 app/src/main/java/id/shuyasal/kuromaku/
 ├── MainActivity.java          # shell perpustakaan: bar, insets, muat katalog
 ├── ReaderActivity.java        # Reader Mode + panel pengaturan + insets
+├── ImageViewerActivity.java   # penampil ilustrasi layar penuh (zoom 1x–4x)
 ├── Session.java               # katalog in-memory untuk navigasi chapter
 ├── data/
 │   ├── FeedEntry, Chapter, Volume, Catalog
@@ -174,6 +256,9 @@ app/src/main/java/id/shuyasal/kuromaku/
 └── ui/
     ├── LibraryPage.java       # halaman detail novel + accordion volume
     ├── RatioFrameLayout.java  # kotak rasio tetap untuk sampul
+    ├── ImageCell.java         # sel ilustrasi: kotak berasio, error + coba lagi
+    ├── ZoomableImageView.java # cubit/geser/ketuk dua kali
+    ├── ImageLoadLog.java      # logging tahap gambar, URL disamarkan
     ├── BlockAdapter.java      # render blok jadi view native
     ├── ScrollMath.java        # progres, restore posisi, padding footer
     └── Palette.java, Prefs.java, Ui.java
@@ -210,3 +295,6 @@ gradle testDebugUnitTest assembleDebug
 - Status terbit tidak tersedia di halaman sumber, jadi aplikasi menyatakan demikian.
 - Verifikasi scroll dilakukan lewat pengukuran layout Robolectric; perilaku pada perangkat
   dengan notch/gesture bar berbeda tetap perlu konfirmasi saat dipakai.
+- Verifikasi gambar dilakukan lewat pengukuran layout Robolectric dan unduhan URL asli;
+  Glide tidak benar-benar mengunduh di unit test, jadi tampilan akhir, kecepatan cache,
+  dan zoom multi-touch tetap perlu dicoba di perangkat Android.

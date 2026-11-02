@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
+import id.shuyasal.kuromaku.data.Block;
 import id.shuyasal.kuromaku.net.Http;
 import id.shuyasal.kuromaku.parser.ChapterContent;
 import id.shuyasal.kuromaku.parser.ChapterParser;
@@ -141,6 +142,7 @@ public class ReaderActivity extends AppCompatActivity {
         adaptInsets();
         adapter = new BlockAdapter(this, prefs, palette);
         adapter.setOnOpenSource(this::openSource);
+        adapter.setOnImageTap(this::openIllustration);
         list.setAdapter(adapter);
         list.setVisibility(View.GONE);
         host.addView(list, new FrameLayout.LayoutParams(
@@ -703,6 +705,21 @@ public class ReaderActivity extends AppCompatActivity {
             openUrl(content.sourceUrl());
         } else {
             openUrl(chapterUrl);
+        }
+    }
+
+    /** Opens an illustration full screen, where it can be pinched to zoom. */
+    private void openIllustration(Block block) {
+        if (block == null || block.imageUrl == null || block.imageUrl.isEmpty()) return;
+        Intent intent = new Intent(this, ImageViewerActivity.class);
+        intent.putExtra(ImageViewerActivity.EXTRA_URL, block.imageUrl);
+        String caption = content != null && content.title() != null
+                ? content.title() : "Ilustrasi";
+        intent.putExtra(ImageViewerActivity.EXTRA_CAPTION, caption);
+        try {
+            startActivity(intent);
+        } catch (Exception error) {
+            Toast.makeText(this, "Penampil gambar tidak tersedia", Toast.LENGTH_SHORT).show();
         }
     }
 

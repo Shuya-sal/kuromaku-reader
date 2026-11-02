@@ -7,14 +7,11 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-
-import com.bumptech.glide.Glide;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +37,13 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private String title = "";
     private String sourceUrl = "";
     private Runnable onOpenSource;
+    private ImageTapListener onImageTap;
     private int bottomPadding;
+
+    /** Called when the reader taps an illustration. */
+    public interface ImageTapListener {
+        void onImageTap(Block block);
+    }
 
     public BlockAdapter(Context context, Prefs prefs, Palette palette) {
         this.context = context;
@@ -62,6 +65,10 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     public void setOnOpenSource(Runnable listener) {
         this.onOpenSource = listener;
+    }
+
+    public void setOnImageTap(ImageTapListener listener) {
+        this.onImageTap = listener;
     }
 
     /** Extra space under the last block so the final paragraph clears the bars. */
@@ -92,16 +99,12 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         int side = Ui.dp(context, 20);
         if (viewType == TYPE_IMAGE) {
-            ImageView image = new ImageView(context);
-            image.setAdjustViewBounds(true);
-            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            image.setPadding(0, Ui.dp(context, 6), 0, Ui.dp(context, 6));
-            image.setLayoutParams(new RecyclerView.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             LinearLayout wrap = new LinearLayout(context);
             wrap.setPadding(side, 0, side, 0);
-            wrap.addView(image);
-            return new ImageHolder(wrap, image);
+            ImageCell cell = new ImageCell(context);
+            wrap.addView(cell, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            return new ImageHolder(wrap, cell);
         }
         if (viewType == TYPE_DIVIDER) {
             View line = new View(context);
@@ -132,11 +135,13 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
         if (holder instanceof ImageHolder) {
             ImageHolder imageHolder = (ImageHolder) holder;
-            imageHolder.image.setMinimumHeight(Ui.dp(context, 120));
-            Glide.with(context)
-                    .load(block.imageUrl)
-                    .placeholder(null)
-                    .into(imageHolder.image);
+            // A real reserved box, sized from the source's own pixel dimensions,
+            // so the illustration is laid out whether or not the bitmap arrived.
+            imageHolder.cell.setRatio(block.hasImageSize() ? block.imageRatio() : 0f);
+            imageHolder.cell.bind(block.imageUrl, palette);
+            imageHolder.cell.setOnClickListener(v -> {
+                if (onImageTap != null) onImageTap.onImageTap(block);
+            });
             return;
         }
         if (holder instanceof SimpleHolder) return;
@@ -233,11 +238,11 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     }
 
     static final class ImageHolder extends RecyclerView.ViewHolder {
-        final ImageView image;
+        final ImageCell cell;
 
-        ImageHolder(View view, ImageView image) {
+        ImageHolder(View view, ImageCell cell) {
             super(view);
-            this.image = image;
+            this.cell = cell;
         }
     }
 

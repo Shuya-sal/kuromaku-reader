@@ -28,5 +28,11 @@
             android:exported="false"
             android:parentActivityName=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
+            android:name=".ImageViewerActivity"
+            android:exported="false"
+            android:parentActivityName=".ReaderActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
     </application>
 </manifest>
