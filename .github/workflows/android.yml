@@ -76,28 +76,46 @@ jobs:
           tag_name: latest-apk
           name: Kuromaku Reader 2.5 (APK)
           body: |
-            Reader Mode native untuk dua novel dari Kaori Translation:
+            Pembaca native untuk dua novel dari Kaori Translation:
             *Monogatari no Kuromaku* dan *Magical★Explorer*.
 
-            * Versi: 2.4 (versionCode 24)
+            * Versi: **2.5** (versionCode 25)
+            * **Header ringkas di seluruh halaman**: toolbar satu baris 58 dp
+              (56 dp di Reader Mode) di luar system inset, status bar inset
+              diterapkan sebagai padding di atas toolbar sehingga judul tidak
+              bertabrakan dengan jam/baterai. Judul selalu satu baris dan
+              memakai ellipsize, jadi tidak pernah membungkus dan meninggikan
+              toolbar.
+            * Halaman detail memakai judul singkat **Detail Novel**; judul
+              lengkap novel tetap di bagian konten bersama cover, metadata,
+              sinopsis, dan daftar volume. Nama aplikasi hanya muncul sekali.
+            * **Tombol Kembali** baru: rounded rectangle berikon panah kiri +
+              teks "Kembali", 48 dp, lebar ≥ 92 dp, dengan ripple sesuai tema.
+              Konsisten di detail novel, daftar chapter, Reader Mode, dan
+              penampil ilustrasi. Tombol Back Android tetap bekerja.
+            * **Muat ulang** dan **Gelap/Terang** menjadi ikon refresh dan
+              bulan/matahari berukuran 48 dp dengan contentDescription.
+            * **Animasi navigasi 180–250 ms**: fade-in + slide ringan dari kanan
+              untuk maju, slide ke kanan + fade-out untuk kembali, accordion
+              volume expand/collapse 200 ms, dan ripple pada kartu serta tombol.
+              Semuanya menghormati pengaturan Android **Remove animations**.
             * **Novel kedua**: Magical★Explorer Eroge no Yuujin Kyara ni Tensei
               Shitakedo, Geemu Chishiki Tsukatte Jiyuu ni Ikiru.
-            * **Halaman perpustakaan** berisi kartu cover + judul untuk kedua novel.
-            * **Halaman detail** per novel: cover utama, judul lengkap, penulis,
-              ilustrator, genre, sinopsis, Lanjutkan Membaca, dan daftar volume.
             * **Cover berbeda untuk setiap volume** (rasio asli, tidak terpotong,
-              tidak tertukar), dapat diketuk untuk diperbesar. Volume tanpa gambar
-              memakai placeholder rapi.
-            * **Parser katalog khusus Magical★Explorer**: halaman katalognya memuat
-              volume + tautan chapter langsung, tanpa label Blogger. Ejaan sumber
-              "Cahpter 2" dinormalkan dan tetap di posisi kedua. Teks tanpa tautan
-              tidak pernah menjadi chapter.
+              tidak tertukar, dapat diketuk untuk diperbesar). Volume tanpa
+              gambar memakai placeholder rapi.
+            * **Parser katalog khusus Magical★Explorer**: halaman katalognya
+              memuat volume + tautan chapter langsung, tanpa label Blogger.
+              Ejaan sumber "Cahpter 2" dinormalkan dan tetap di posisi kedua.
+              Teks tanpa tautan tidak pernah menjadi chapter.
             * **Progres baca, posisi gulir, dan accordion disimpan per novel**;
               Sebelumnya/Berikutnya tidak dapat menyeberang ke novel lain.
-            * Reader Mode 2.3 dipertahankan: kotak gambar berasio tetap, zoom 1x–4x,
+            * Reader Mode dipertahankan: kotak gambar berasio tetap, zoom 1x–4x,
               tombol Coba lagi, logging tanpa token.
             * Tema terang / gelap / sepia, ukuran font, spasi baris.
             * Monogatari no Kuromaku tetap lengkap: Volume 1–7, 117 chapter.
+            * 135 unit test lulus, termasuk 18 tes header & animasi baru yang
+              diukur di layar 320×640 dp dan 411×891 dp.
 
             APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
             Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.
