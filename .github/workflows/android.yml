@@ -39,7 +39,7 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-      - name: Unit tests (parser + library)
+      - name: Unit tests (feed pagination, parser, reader layout)
         run: gradle --no-daemon --stacktrace testDebugUnitTest
 
       - name: Upload test report
@@ -74,13 +74,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.0 (APK)
+          name: Kuromaku Reader 2.1 (APK)
           body: |
             Reader Mode native untuk *Monogatari no Kuromaku* (Kaori Translation).
 
-            * Versi: 2.0 (versionCode 20)
-            * Daftar volume & chapter native, tanpa WebView website
-            * Teks dan ilustrasi diekstrak dengan Jsoup, urutan asli dipertahankan
+            * Versi: 2.1 (versionCode 21)
+            * **BUG 1 diperbaiki**: seluruh halaman feed dibaca, Volume 1–7 lengkap (117 chapter).
+              Sebelumnya crawl berhenti di halaman pendek sehingga hanya Volume 5–7 yang muncul.
+            * **BUG 2 diperbaiki**: teks chapter panjang bisa digulir sampai paragraf terakhir,
+              panel navigasi tidak lagi menutupi teks, window insets ditangani.
+            * Tombol Muat ulang untuk memperbarui katalog.
+            * Posisi baca per blok disimpan dan dipulihkan.
             * Tema terang / gelap / sepia, ukuran font, spasi baris, progres baca
             * Navigasi chapter sebelumnya / berikutnya / kembali ke perpustakaan
 

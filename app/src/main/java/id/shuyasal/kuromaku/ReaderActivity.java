@@ -3,12 +3,11 @@ package id.shuyasal.kuromaku;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -16,10 +15,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
-import java.util.List;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
@@ -31,12 +32,17 @@ import id.shuyasal.kuromaku.parser.ParseException;
 import id.shuyasal.kuromaku.ui.BlockAdapter;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.ScrollMath;
 import id.shuyasal.kuromaku.ui.Ui;
 
 /**
- * Reader Mode: shows only the extracted article. If extraction fails the screen
- * explains the problem and offers the original link instead of falling back to
- * a full website view.
+ * Reader Mode: shows only the extracted article.
+ *
+ * <p>Layout note (BUG 2): the reading list and the navigation panel are siblings
+ * in a vertical LinearLayout, so the panel never overlays the text. The list
+ * takes weight 1 and is clipped to its own bounds, and the last block carries
+ * extra bottom padding plus the system navigation inset so the final paragraph
+ * can always be scrolled above the panel.
  */
 public class ReaderActivity extends AppCompatActivity {
 
@@ -64,9 +70,12 @@ public class ReaderActivity extends AppCompatActivity {
     private String chapterUrl;
     private ChapterContent content;
     private int panel = PANEL_NONE;
-    private boolean restoring;
 
-    private final Handler main = new Handler(Looper.getMainLooper());
+    private int insetTop;
+    private int insetBottom;
+    private int pendingRestorePosition = -1;
+    private int pendingRestoreOffset;
+    private boolean progressSaved;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +90,8 @@ public class ReaderActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         buildUi();
         ChapterContent cached = ContentCache.get(chapterUrl);
@@ -99,26 +110,31 @@ public class ReaderActivity extends AppCompatActivity {
         root.addView(buildTopBar(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        FrameHost host = new FrameHost();
-        host.frame = new android.widget.FrameLayout(this);
-        host.frame.setBackgroundColor(palette.background);
+        FrameLayout host = new FrameLayout(this);
+        host.setBackgroundColor(palette.background);
 
         spinner = new ProgressBar(this);
         spinner.setIndeterminate(true);
-        android.widget.FrameLayout.LayoutParams spinnerParams =
-                new android.widget.FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.WRAP_CONTENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
-        host.frame.addView(spinner, spinnerParams);
+        host.addView(spinner, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
 
         list = new RecyclerView(this);
-        list.setLayoutManager(new LinearLayoutManager(this));
+        LinearLayoutManager manager = new LinearLayoutManager(this);
+        manager.setStackFromEnd(false);
+        list.setLayoutManager(manager);
         list.setBackgroundColor(palette.background);
+        list.setVerticalScrollBarEnabled(true);
+        // The extra padding belongs to the scrollable area, not the stack bottom,
+        // so the last paragraph can travel past the navigation panel.
+        list.setClipToPadding(false);
+        list.setPadding(0, 0, 0, Ui.dp(this, 12));
+        adaptInsets();
         adapter = new BlockAdapter(this, prefs, palette);
         adapter.setOnOpenSource(this::openSource);
         list.setAdapter(adapter);
         list.setVisibility(View.GONE);
-        host.frame.addView(list, new android.widget.FrameLayout.LayoutParams(
+        host.addView(list, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         errorBox = new LinearLayout(this);
@@ -126,11 +142,13 @@ public class ReaderActivity extends AppCompatActivity {
         errorBox.setPadding(Ui.dp(this, 24), Ui.dp(this, 32), Ui.dp(this, 24), Ui.dp(this, 24));
         errorBox.setVisibility(View.GONE);
         ScrollView errorScroll = new ScrollView(this);
+        errorScroll.setClipToPadding(false);
         errorScroll.addView(errorBox);
-        host.frame.addView(errorScroll, new android.widget.FrameLayout.LayoutParams(
+        host.addView(errorScroll, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        root.addView(host.frame, new LinearLayout.LayoutParams(
+        // Weight 1: the reading area keeps whatever height the bars do not use.
+        root.addView(host, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         panelBox = new LinearLayout(this);
@@ -144,13 +162,56 @@ public class ReaderActivity extends AppCompatActivity {
 
         setContentView(root);
         applySystemBars();
+        applyInsetsListener();
 
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
                 saveProgress();
+                updateProgressLabel();
             }
         });
+    }
+
+    /**
+     * Edge-to-edge is mandatory from targetSdk 35, so the bars must inset
+     * themselves instead of being covered by the status bar and gesture bar.
+     */
+    private void applyInsetsListener() {
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
+            Insets systemBars = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            if (systemBars.top != insetTop || systemBars.bottom != insetBottom) {
+                insetTop = systemBars.top;
+                insetBottom = systemBars.bottom;
+                adaptInsets();
+            }
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(root);
+    }
+
+    /** Applies the current insets to bars, list and footer padding. */
+    private void adaptInsets() {
+        if (topBar != null) {
+            topBar.setPadding(0, insetTop, 0, 0);
+        }
+        if (bottomBar != null) {
+            bottomBar.setPadding(0, 0, 0, insetBottom);
+        }
+        if (panelBox != null) {
+            panelBox.setPadding(0, 0, 0, 0);
+        }
+        if (list != null) {
+            list.setPadding(0, 0, 0, Ui.dp(this, 12));
+        }
+        if (adapter != null) {
+            // Space the last block must clear: panel height is not an overlay,
+            // but the gesture bar plus a comfortable gap is.
+            adapter.setBottomPadding(Math.max(Ui.dp(this, 28),
+                    ScrollMath.footerPadding(Ui.dp(this, 28), insetBottom)));
+            adapter.notifyDataSetChanged();
+        }
     }
 
     private View buildTopBar() {
@@ -195,33 +256,50 @@ public class ReaderActivity extends AppCompatActivity {
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
         bottomBar.setGravity(Gravity.CENTER_VERTICAL);
         bottomBar.setBackgroundColor(palette.surface);
+
+        LinearLayout inner = new LinearLayout(this);
+        inner.setOrientation(LinearLayout.HORIZONTAL);
+        inner.setGravity(Gravity.CENTER_VERTICAL);
         int pad = Ui.dp(this, 10);
-        bottomBar.setPadding(pad, Ui.dp(this, 8), pad, Ui.dp(this, 8));
+        inner.setPadding(pad, Ui.dp(this, 8), pad, Ui.dp(this, 8));
+        inner.setTag("inner");
 
         Button previous = Ui.chip(this, "‹ Sebelumnya", palette);
         previous.setTextSize(12);
+        previous.setTag("previous");
         previous.setOnClickListener(v -> navigate(-1));
-        bottomBar.addView(previous, new LinearLayout.LayoutParams(
+        inner.addView(previous, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         bottomMeta = Ui.label(this, "", 11, palette.muted);
         bottomMeta.setGravity(Gravity.CENTER);
-        bottomBar.addView(bottomMeta, new LinearLayout.LayoutParams(
+        inner.addView(bottomMeta, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         Button next = Ui.chip(this, "Berikutnya ›", palette);
         next.setTextSize(12);
+        next.setTag("next");
         next.setOnClickListener(v -> navigate(1));
-        bottomBar.addView(next, new LinearLayout.LayoutParams(
+        inner.addView(next, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        bottomBar.addView(inner, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return bottomBar;
     }
 
+    private LinearLayout bottomInner() {
+        View found = bottomBar.findViewWithTag("inner");
+        return found instanceof LinearLayout ? (LinearLayout) found : bottomBar;
+    }
+
     private void applySystemBars() {
-        getWindow().setStatusBarColor(palette.surface);
-        getWindow().setNavigationBarColor(palette.surface);
-        View decor = getWindow().getDecorView();
-        decor.setSystemUiVisibility(palette.darkIcons ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightStatusBars(!palette.darkIcons);
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightNavigationBars(!palette.darkIcons);
     }
 
     private void load(final String url) {
@@ -236,9 +314,9 @@ public class ReaderActivity extends AppCompatActivity {
                 String html = Http.get(url);
                 ChapterContent parsed = ChapterParser.parse(html, url);
                 ContentCache.put(url, parsed);
-                main.post(() -> show(parsed));
+                runOnUiThread(() -> show(parsed));
             } catch (Exception error) {
-                main.post(() -> showError(url, error));
+                runOnUiThread(() -> showError(url, error));
             }
         }).start();
     }
@@ -252,6 +330,7 @@ public class ReaderActivity extends AppCompatActivity {
 
     private void show(ChapterContent parsed) {
         content = parsed;
+        progressSaved = false;
         spinner.setVisibility(View.GONE);
         errorBox.setVisibility(View.GONE);
         list.setVisibility(View.VISIBLE);
@@ -264,13 +343,65 @@ public class ReaderActivity extends AppCompatActivity {
         prefs.setLastUrl(chapterUrl);
         updateNavigationLabels();
 
-        int saved = prefs.progress(chapterUrl);
-        restoring = saved > 0;
-        if (saved > 0 && adapter.blockCount() > 0) {
-            int target = Math.round(adapter.blockCount() * (saved / 100f));
-            if (target > 0) list.scrollToPosition(Math.min(target, adapter.blockCount() - 1));
-            Toast.makeText(this, "Melanjutkan dari " + saved + "%", Toast.LENGTH_SHORT).show();
+        restorePosition();
+        updateProgressLabel();
+    }
+
+    /**
+     * Restores the exact block and pixel offset saved for this chapter. Falls
+     * back to the percentage for chapters saved by an older app version.
+     */
+    private void restorePosition() {
+        int total = adapter.blockCount();
+        if (total <= 0) return;
+
+        int position;
+        int offset;
+        if (prefs.hasScroll(chapterUrl)) {
+            position = prefs.scrollPosition(chapterUrl);
+            offset = prefs.scrollOffset(chapterUrl);
+        } else {
+            int percent = prefs.progress(chapterUrl);
+            if (percent <= 0) return;
+            position = ScrollMath.restoreIndex(percent, total);
+            offset = 0;
         }
+
+        if (position <= 0 && offset <= 0) return;
+        position = Math.min(position, total - 1);
+        pendingRestorePosition = position;
+        pendingRestoreOffset = offset;
+
+        list.post(() -> {
+            RecyclerView.LayoutManager manager = list.getLayoutManager();
+            if (manager instanceof LinearLayoutManager && pendingRestorePosition >= 0) {
+                ((LinearLayoutManager) manager)
+                        .scrollToPositionWithOffset(pendingRestorePosition, -pendingRestoreOffset);
+            }
+            pendingRestorePosition = -1;
+        });
+
+        int percent = prefs.progress(chapterUrl);
+        if (percent > 0) {
+            Toast.makeText(this, "Melanjutkan dari " + percent + "%", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Updates the percentage chip in the bottom bar as the user scrolls. */
+    private void updateProgressLabel() {
+        if (bottomMeta == null || content == null) return;
+        int total = adapter.blockCount();
+        if (total <= 0) return;
+        RecyclerView.LayoutManager manager = list.getLayoutManager();
+        if (!(manager instanceof LinearLayoutManager)) return;
+        int last = ((LinearLayoutManager) manager).findLastVisibleItemPosition();
+        int percent = ScrollMath.percent(last, total);
+        String position = "";
+        if (catalog != null) {
+            int index = catalog.indexOf(chapterUrl);
+            if (index >= 0) position = (index + 1) + "/" + catalog.size() + " · ";
+        }
+        bottomMeta.setText(position + percent + "%");
     }
 
     private void showError(final String url, Exception error) {
@@ -309,6 +440,8 @@ public class ReaderActivity extends AppCompatActivity {
         link.setPadding(0, Ui.dp(this, 14), 0, 0);
         link.setTextIsSelectable(true);
         errorBox.addView(link);
+
+        if (bottomMeta != null) bottomMeta.setText("");
     }
 
     private void togglePanel() {
@@ -404,9 +537,38 @@ public class ReaderActivity extends AppCompatActivity {
         return label;
     }
 
+    /**
+     * Typography changes alter item heights, so keep the reader near the block
+     * it was showing instead of jumping back to the top.
+     */
     private void applyTypography() {
+        int anchor = currentFirstPosition();
+        int offset = currentTopOffset();
         adapter.notifyDataSetChanged();
+        if (anchor >= 0) {
+            list.post(() -> {
+                RecyclerView.LayoutManager manager = list.getLayoutManager();
+                if (manager instanceof LinearLayoutManager) {
+                    ((LinearLayoutManager) manager).scrollToPositionWithOffset(anchor, offset);
+                }
+            });
+        }
         renderPanel();
+    }
+
+    private int currentFirstPosition() {
+        RecyclerView.LayoutManager manager = list.getLayoutManager();
+        if (manager instanceof LinearLayoutManager) {
+            return ((LinearLayoutManager) manager).findFirstVisibleItemPosition();
+        }
+        return -1;
+    }
+
+    private int currentTopOffset() {
+        int position = currentFirstPosition();
+        if (position < 0) return 0;
+        View child = list.getLayoutManager().findViewByPosition(position);
+        return child == null ? 0 : child.getTop() - list.getPaddingTop();
     }
 
     private void repaint() {
@@ -420,8 +582,9 @@ public class ReaderActivity extends AppCompatActivity {
         bottomMeta.setTextColor(palette.muted);
         adapter.setPalette(palette);
         if (panel != PANEL_NONE) renderPanel();
-        if (content == null) showError(chapterUrl,
-                new ParseException("Isi chapter tidak dapat diekstrak."));
+        if (content == null) {
+            showError(chapterUrl, new ParseException("Isi chapter tidak dapat diekstrak."));
+        }
     }
 
     private void updateNavigationLabels() {
@@ -430,21 +593,21 @@ public class ReaderActivity extends AppCompatActivity {
             return;
         }
         int index = catalog.indexOf(chapterUrl);
-        Chapter current = catalog.chapterAt(index);
-        int position = index + 1;
-        bottomMeta.setText(position + "/" + catalog.size());
-        if (current == null) return;
+        bottomMeta.setText((index + 1) + "/" + catalog.size());
+
+        View previousButton = bottomInner().findViewWithTag("previous");
+        View nextButton = bottomInner().findViewWithTag("next");
+        if (previousButton == null || nextButton == null) return;
 
         Chapter previous = catalog.chapterAt(index - 1);
         Chapter next = catalog.chapterAt(index + 1);
-
-        Button previousButton = (Button) bottomBar.getChildAt(0);
-        Button nextButton = (Button) bottomBar.getChildAt(2);
         previousButton.setEnabled(previous != null);
         previousButton.setAlpha(previous == null ? 0.4f : 1f);
         nextButton.setEnabled(next != null);
         nextButton.setAlpha(next == null ? 0.4f : 1f);
-        nextButton.setText(next == null ? "Selesai" : "Berikutnya ›");
+        if (nextButton instanceof Button) {
+            ((Button) nextButton).setText(next == null ? "Selesai" : "Berikutnya ›");
+        }
     }
 
     private void navigate(int direction) {
@@ -459,30 +622,35 @@ public class ReaderActivity extends AppCompatActivity {
         saveProgress();
         chapterUrl = target.url;
         content = null;
+        progressSaved = false;
         getIntent().putExtra(EXTRA_URL, chapterUrl);
+
         ChapterContent cached = ContentCache.get(chapterUrl);
         if (cached != null) {
             show(cached);
         } else {
+            list.scrollToPosition(0);
             load(chapterUrl);
         }
-        list.scrollToPosition(0);
     }
 
+    /** Stores the exact visible block and offset, plus a coarse percentage. */
     private void saveProgress() {
         if (content == null) return;
         RecyclerView.LayoutManager manager = list.getLayoutManager();
         if (!(manager instanceof LinearLayoutManager)) return;
+
+        LinearLayoutManager linear = (LinearLayoutManager) manager;
         int total = adapter.blockCount();
         if (total <= 0) return;
-        int first = ((LinearLayoutManager) manager).findFirstVisibleItemPosition();
-        int visible = ((LinearLayoutManager) manager).findLastVisibleItemPosition();
-        int percent = Math.min(100, Math.round((visible + 1) * 100f / total));
+
+        int first = linear.findFirstVisibleItemPosition();
+        int last = linear.findLastVisibleItemPosition();
         if (first < 0) return;
-        if (!restoring || percent > prefs.progress(chapterUrl)) {
-            prefs.setProgress(chapterUrl, percent);
-        }
-        restoring = false;
+
+        prefs.setScroll(chapterUrl, first, Math.max(0, currentTopOffset()));
+        prefs.setProgress(chapterUrl, ScrollMath.percent(last, total));
+        progressSaved = true;
     }
 
     private void openSource() {
@@ -508,6 +676,12 @@ public class ReaderActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onStop() {
+        saveProgress();
+        super.onStop();
+    }
+
+    @Override
     public void onBackPressed() {
         if (panel != PANEL_NONE) {
             panel = PANEL_NONE;
@@ -515,9 +689,5 @@ public class ReaderActivity extends AppCompatActivity {
             return;
         }
         super.onBackPressed();
-    }
-
-    private static final class FrameHost {
-        android.widget.FrameLayout frame;
     }
 }

@@ -15,15 +15,19 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import java.util.List;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
-import id.shuyasal.kuromaku.data.FeedEntry;
 import id.shuyasal.kuromaku.data.LibraryBuilder;
 import id.shuyasal.kuromaku.data.Volume;
 import id.shuyasal.kuromaku.net.FeedClient;
+import id.shuyasal.kuromaku.net.FeedException;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.Ui;
@@ -36,12 +40,15 @@ public class MainActivity extends AppCompatActivity {
 
     private Prefs prefs;
     private Palette palette;
+    private LinearLayout root;
     private LinearLayout content;
     private LinearLayout barBox;
     private LinearLayout spinnerRow;
     private TextView status;
     private Catalog catalog;
     private boolean loading;
+    private int insetTop;
+    private int insetBottom;
 
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -50,12 +57,13 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         prefs = new Prefs(this);
         palette = Palette.of(prefs.theme());
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         buildShell();
-        loadLibrary();
+        loadLibrary(false);
     }
 
     private void buildShell() {
-        LinearLayout root = new LinearLayout(this);
+        root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(palette.background);
 
@@ -74,6 +82,14 @@ public class MainActivity extends AppCompatActivity {
         titles.addView(Ui.label(this, "Monogatari no Kuromaku", 12, palette.muted));
         barBox.addView(titles, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        Button refresh = Ui.chip(this, "Muat ulang", palette);
+        refresh.setTextSize(12);
+        refresh.setOnClickListener(v -> loadLibrary(true));
+        LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        refreshParams.setMargins(0, 0, Ui.dp(this, 6), 0);
+        barBox.addView(refresh, refreshParams);
 
         Button themeButton = Ui.chip(this, palette.label, palette);
         themeButton.setOnClickListener(v -> {
@@ -100,6 +116,7 @@ public class MainActivity extends AppCompatActivity {
         root.addView(status);
 
         ScrollView scroller = new ScrollView(this);
+        scroller.setClipToPadding(false);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(pad, Ui.dp(this, 4), pad, Ui.dp(this, 32));
@@ -109,43 +126,81 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(root);
         applySystemBars();
+        applyInsetsListener();
+    }
+
+    private void applyInsetsListener() {
+        ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
+            Insets bars = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            if (bars.top != insetTop || bars.bottom != insetBottom) {
+                insetTop = bars.top;
+                insetBottom = bars.bottom;
+                applyInsets();
+            }
+            return windowInsets;
+        });
+        ViewCompat.requestApplyInsets(root);
+    }
+
+    private void applyInsets() {
+        if (barBox != null) barBox.setPadding(Ui.dp(this, 14), insetTop + Ui.dp(this, 12),
+                Ui.dp(this, 14), Ui.dp(this, 12));
+        if (content != null) {
+            content.setPadding(Ui.dp(this, 14), Ui.dp(this, 4), Ui.dp(this, 14),
+                    Ui.dp(this, 32) + insetBottom);
+        }
     }
 
     private void rebuildShell() {
         buildShell();
         if (catalog == null) {
-            loadLibrary();
+            loadLibrary(false);
         } else {
             render();
         }
     }
 
     private void applySystemBars() {
-        getWindow().setStatusBarColor(palette.surface);
-        getWindow().setNavigationBarColor(palette.background);
-        View decor = getWindow().getDecorView();
-        decor.setSystemUiVisibility(palette.darkIcons ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightStatusBars(!palette.darkIcons);
+        WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightNavigationBars(!palette.darkIcons);
     }
 
-    private void loadLibrary() {
+    private void loadLibrary(boolean manual) {
         if (loading) return;
         loading = true;
         spinnerRow.setVisibility(View.VISIBLE);
         status.setVisibility(View.VISIBLE);
-        status.setText("Memuat katalog dari Kaori Translation…");
+        status.setText(manual ? "Memuat ulang katalog lengkap…"
+                : "Memuat katalog dari Kaori Translation…");
 
         new Thread(() -> {
             try {
-                List<FeedEntry> entries = FeedClient.fetchEntries();
-                Catalog built = LibraryBuilder.build(entries);
+                FeedClient.Result result = FeedClient.fetchEntries();
+                Catalog built = LibraryBuilder.build(result.entries);
                 if (built.size() == 0) {
-                    throw new IllegalStateException("Tidak ada chapter yang ditemukan pada feed.");
+                    throw new IllegalStateException(
+                            "Tidak ada chapter yang ditemukan pada feed.");
                 }
+                final String warning = result.warning;
+                final String summary = "Dibaca " + result.pagesRead + " halaman feed · "
+                        + result.entries.size() + "/"
+                        + (result.expectedTotal > 0 ? result.expectedTotal : result.entries.size())
+                        + " postingan";
                 main.post(() -> {
                     loading = false;
                     catalog = built;
                     Session.setCatalog(built);
                     render();
+                    if (warning != null && result.entries.size() > 0) {
+                        showWarning(warning);
+                    } else if (manual) {
+                        Toast.makeText(this, summary, Toast.LENGTH_SHORT).show();
+                    }
                 });
             } catch (Exception error) {
                 main.post(() -> {
@@ -154,6 +209,13 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         }).start();
+    }
+
+    /** Partial crawl: keep the list but say plainly what is missing. */
+    private void showWarning(String message) {
+        TextView warning = Ui.label(this, "⚠ " + message, 12, palette.accent);
+        warning.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 10));
+        content.addView(warning, 0);
     }
 
     private void showFailure(Exception error) {
@@ -166,15 +228,21 @@ public class MainActivity extends AppCompatActivity {
         heading.setPadding(0, Ui.dp(this, 16), 0, Ui.dp(this, 8));
         content.addView(heading);
 
-        String reason = error.getMessage();
+        String reason;
+        if (error instanceof FeedException && error.getCause() != null) {
+            reason = error.getMessage() + " Sebab: " + error.getCause().getMessage();
+        } else {
+            reason = error.getMessage();
+        }
         if (reason == null || reason.isEmpty()) reason = error.getClass().getSimpleName();
+
         TextView detail = Ui.label(this, reason
-                + "\n\nPeriksa koneksi internet, lalu coba lagi.", 13, palette.muted);
+                + "\n\nPeriksa koneksi internet, lalu tekan Muat ulang.", 13, palette.muted);
         detail.setPadding(0, 0, 0, Ui.dp(this, 16));
         content.addView(detail);
 
         Button retry = Ui.chip(this, "Coba lagi", palette);
-        retry.setOnClickListener(v -> loadLibrary());
+        retry.setOnClickListener(v -> loadLibrary(true));
         content.addView(retry);
 
         Button source = Ui.chip(this, "Buka sumber di browser", palette);

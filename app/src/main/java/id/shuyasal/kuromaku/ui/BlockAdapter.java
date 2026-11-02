@@ -40,6 +40,7 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private String title = "";
     private String sourceUrl = "";
     private Runnable onOpenSource;
+    private int bottomPadding;
 
     public BlockAdapter(Context context, Prefs prefs, Palette palette) {
         this.context = context;
@@ -61,6 +62,11 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
 
     public void setOnOpenSource(Runnable listener) {
         this.onOpenSource = listener;
+    }
+
+    /** Extra space under the last block so the final paragraph clears the bars. */
+    public void setBottomPadding(int paddingPx) {
+        this.bottomPadding = Math.max(0, paddingPx);
     }
 
     public int blockCount() {
@@ -186,6 +192,10 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
     private void bindFooter(FooterHolder holder) {
         LinearLayout box = (LinearLayout) holder.itemView;
         box.removeAllViews();
+        // Guarantees the last paragraph can scroll clear of the navigation panel
+        // and the system gesture bar (BUG 2).
+        box.setPadding(Ui.dp(context, 20), Ui.dp(context, 28),
+                Ui.dp(context, 20), Ui.dp(context, 40) + bottomPadding);
 
         TextView titleView = Ui.label(context, title, 15, palette.text);
         titleView.setTypeface(Typeface.DEFAULT_BOLD);

@@ -17,6 +17,8 @@ public final class Prefs {
     private static final String KEY_LINE = "line_spacing";
     private static final String KEY_LAST_URL = "last_url";
     private static final String KEY_PROGRESS = "progress:";
+    private static final String KEY_SCROLL_POS = "scroll_pos:";
+    private static final String KEY_SCROLL_OFF = "scroll_off:";
     private static final String KEY_JUSTIFY = "justify";
 
     private final SharedPreferences prefs;
@@ -64,6 +66,32 @@ public final class Prefs {
 
     public void setLastUrl(String url) {
         prefs.edit().putString(KEY_LAST_URL, url == null ? "" : url).apply();
+    }
+
+    /**
+     * Exact scroll position (first visible item + pixel offset) so reopening a
+     * chapter lands on the same line instead of an approximation.
+     */
+    public void setScroll(String url, int position, int offset) {
+        if (url == null) return;
+        prefs.edit()
+                .putInt(KEY_SCROLL_POS + url, Math.max(0, position))
+                .putInt(KEY_SCROLL_OFF + url, Math.max(0, offset))
+                .apply();
+    }
+
+    public int scrollPosition(String url) {
+        if (url == null) return 0;
+        return prefs.getInt(KEY_SCROLL_POS + url, 0);
+    }
+
+    public int scrollOffset(String url) {
+        if (url == null) return 0;
+        return prefs.getInt(KEY_SCROLL_OFF + url, 0);
+    }
+
+    public boolean hasScroll(String url) {
+        return url != null && prefs.contains(KEY_SCROLL_POS + url);
     }
 
     public int progress(String url) {
