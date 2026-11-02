@@ -63,6 +63,7 @@ public class ReaderActivity extends AppCompatActivity {
     private BlockAdapter adapter;
     private ProgressBar spinner;
     private LinearLayout errorBox;
+    private ScrollView errorScroll;
     private TextView headerTitle;
     private TextView headerMeta;
     private TextView bottomMeta;
@@ -76,6 +77,14 @@ public class ReaderActivity extends AppCompatActivity {
     private int pendingRestorePosition = -1;
     private int pendingRestoreOffset;
     private boolean progressSaved;
+
+    // Captured before the adapter is filled, so the layout pass triggered by
+    // setContent cannot overwrite the saved position with 0.
+    private boolean restoring;
+    private boolean restoreHasScroll;
+    private int restorePosition;
+    private int restoreOffset;
+    private int restorePercent;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -141,9 +150,12 @@ public class ReaderActivity extends AppCompatActivity {
         errorBox.setOrientation(LinearLayout.VERTICAL);
         errorBox.setPadding(Ui.dp(this, 24), Ui.dp(this, 32), Ui.dp(this, 24), Ui.dp(this, 24));
         errorBox.setVisibility(View.GONE);
-        ScrollView errorScroll = new ScrollView(this);
+        // BUG 2 root cause: this ScrollView used to be added full size and left
+        // VISIBLE, so it sat on top of the RecyclerView and swallowed every drag.
+        errorScroll = new ScrollView(this);
         errorScroll.setClipToPadding(false);
         errorScroll.addView(errorBox);
+        errorScroll.setVisibility(View.GONE);
         host.addView(errorScroll, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -305,7 +317,7 @@ public class ReaderActivity extends AppCompatActivity {
     private void load(final String url) {
         spinner.setVisibility(View.VISIBLE);
         list.setVisibility(View.GONE);
-        errorBox.setVisibility(View.GONE);
+        errorScroll.setVisibility(View.GONE);
         headerTitle.setText("Memuat…");
         headerMeta.setText(describeChapter(url));
 
@@ -332,9 +344,14 @@ public class ReaderActivity extends AppCompatActivity {
         content = parsed;
         progressSaved = false;
         spinner.setVisibility(View.GONE);
-        errorBox.setVisibility(View.GONE);
+        // Hiding the error pane restores the reader as the topmost view.
+        errorScroll.setVisibility(View.GONE);
         list.setVisibility(View.VISIBLE);
 
+        // Read the saved position BEFORE the adapter is filled: filling it
+        // triggers a layout pass, and the scroll listener would otherwise write
+        // the temporary position 0 over the reader's real bookmark.
+        captureSavedPosition();
         adapter.setContent(parsed);
         headerTitle.setText(parsed.title());
         headerMeta.setText(describeChapter(chapterUrl)
@@ -347,27 +364,51 @@ public class ReaderActivity extends AppCompatActivity {
         updateProgressLabel();
     }
 
+    /** Snapshots the bookmark so later layout passes cannot overwrite it. */
+    private void captureSavedPosition() {
+        if (prefs.hasScroll(chapterUrl)) {
+            restoring = true;
+            restoreHasScroll = true;
+            restorePosition = prefs.scrollPosition(chapterUrl);
+            restoreOffset = prefs.scrollOffset(chapterUrl);
+            restorePercent = prefs.progress(chapterUrl);
+        } else {
+            int percent = prefs.progress(chapterUrl);
+            restoring = percent > 0;
+            restoreHasScroll = false;
+            restorePosition = 0;
+            restoreOffset = 0;
+            restorePercent = percent;
+        }
+    }
+
     /**
      * Restores the exact block and pixel offset saved for this chapter. Falls
      * back to the percentage for chapters saved by an older app version.
      */
     private void restorePosition() {
         int total = adapter.blockCount();
-        if (total <= 0) return;
+        if (total <= 0) {
+            restoring = false;
+            return;
+        }
 
         int position;
         int offset;
-        if (prefs.hasScroll(chapterUrl)) {
-            position = prefs.scrollPosition(chapterUrl);
-            offset = prefs.scrollOffset(chapterUrl);
+        if (restoreHasScroll) {
+            position = restorePosition;
+            offset = restoreOffset;
         } else {
-            int percent = prefs.progress(chapterUrl);
+            int percent = restorePercent;
             if (percent <= 0) return;
             position = ScrollMath.restoreIndex(percent, total);
             offset = 0;
         }
 
-        if (position <= 0 && offset <= 0) return;
+        if (position <= 0 && offset <= 0) {
+            restoring = false;
+            return;
+        }
         position = Math.min(position, total - 1);
         pendingRestorePosition = position;
         pendingRestoreOffset = offset;
@@ -379,9 +420,10 @@ public class ReaderActivity extends AppCompatActivity {
                         .scrollToPositionWithOffset(pendingRestorePosition, -pendingRestoreOffset);
             }
             pendingRestorePosition = -1;
+            restoring = false;
         });
 
-        int percent = prefs.progress(chapterUrl);
+        int percent = restorePercent;
         if (percent > 0) {
             Toast.makeText(this, "Melanjutkan dari " + percent + "%", Toast.LENGTH_SHORT).show();
         }
@@ -408,6 +450,7 @@ public class ReaderActivity extends AppCompatActivity {
         content = null;
         spinner.setVisibility(View.GONE);
         list.setVisibility(View.GONE);
+        errorScroll.setVisibility(View.VISIBLE);
         errorBox.setVisibility(View.VISIBLE);
         errorBox.removeAllViews();
         headerTitle.setText("Gagal memuat chapter");
@@ -636,7 +679,9 @@ public class ReaderActivity extends AppCompatActivity {
 
     /** Stores the exact visible block and offset, plus a coarse percentage. */
     private void saveProgress() {
-        if (content == null) return;
+        // While a bookmark is being restored the list is still laying out, so the
+        // reported position is not the reader's real position yet.
+        if (content == null || restoring) return;
         RecyclerView.LayoutManager manager = list.getLayoutManager();
         if (!(manager instanceof LinearLayoutManager)) return;
 

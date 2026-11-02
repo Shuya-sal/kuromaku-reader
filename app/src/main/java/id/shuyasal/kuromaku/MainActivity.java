@@ -1,6 +1,7 @@
 package id.shuyasal.kuromaku;
 
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -8,6 +9,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -20,21 +22,24 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import java.util.List;
-
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
 import id.shuyasal.kuromaku.data.LibraryBuilder;
-import id.shuyasal.kuromaku.data.Volume;
 import id.shuyasal.kuromaku.net.FeedClient;
 import id.shuyasal.kuromaku.net.FeedException;
+import id.shuyasal.kuromaku.ui.LibraryPage;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.Ui;
 
 /**
- * Library screen: a native list of volumes and chapters built from the label
- * feed. No website is loaded here, so there is no Blogspot chrome or advertising.
+ * Library screen: novel detail (cover, title, verified metadata, synopsis)
+ * followed by an accordion of volumes and chapters.
+ *
+ * <p>The page body is built by {@link LibraryPage} so its geometry can be
+ * measured in tests. Nothing here loads the source website: the catalogue comes
+ * from the label feed and chapters are extracted by {@code ChapterParser}, so
+ * there is no Blogspot chrome and no advertising.
  */
 public class MainActivity extends AppCompatActivity {
 
@@ -45,10 +50,13 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout barBox;
     private LinearLayout spinnerRow;
     private TextView status;
+    private ScrollView scroller;
     private Catalog catalog;
     private boolean loading;
+    private boolean synopsisOpen;
     private int insetTop;
     private int insetBottom;
+    private int pendingScrollY;
 
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -77,7 +85,8 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
         TextView title = Ui.label(this, "Kuromaku Reader", 19, palette.text);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTag("app_title");
+        title.setTypeface(null, Typeface.BOLD);
         titles.addView(title);
         titles.addView(Ui.label(this, "Monogatari no Kuromaku", 12, palette.muted));
         barBox.addView(titles, new LinearLayout.LayoutParams(
@@ -85,6 +94,7 @@ public class MainActivity extends AppCompatActivity {
 
         Button refresh = Ui.chip(this, "Muat ulang", palette);
         refresh.setTextSize(12);
+        refresh.setTag("refresh");
         refresh.setOnClickListener(v -> loadLibrary(true));
         LinearLayout.LayoutParams refreshParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -92,6 +102,7 @@ public class MainActivity extends AppCompatActivity {
         barBox.addView(refresh, refreshParams);
 
         Button themeButton = Ui.chip(this, palette.label, palette);
+        themeButton.setTag("theme");
         themeButton.setOnClickListener(v -> {
             prefs.setTheme((prefs.theme() + 1) % 3);
             palette = Palette.of(prefs.theme());
@@ -104,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
 
         spinnerRow = new LinearLayout(this);
         spinnerRow.setGravity(Gravity.CENTER);
-        spinnerRow.setPadding(0, Ui.dp(this, 30), 0, Ui.dp(this, 10));
+        spinnerRow.setPadding(0, Ui.dp(this, 24), 0, Ui.dp(this, 8));
         ProgressBar spinner = new ProgressBar(this);
         spinner.setIndeterminate(true);
         spinnerRow.addView(spinner);
@@ -115,12 +126,15 @@ public class MainActivity extends AppCompatActivity {
         status.setPadding(pad, 0, pad, Ui.dp(this, 10));
         root.addView(status);
 
-        ScrollView scroller = new ScrollView(this);
+        scroller = new ScrollView(this);
+        scroller.setTag("library_scroller");
         scroller.setClipToPadding(false);
+        scroller.setFillViewport(true);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(pad, Ui.dp(this, 4), pad, Ui.dp(this, 32));
-        scroller.addView(content);
+        scroller.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(scroller, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
@@ -152,7 +166,9 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** Rebuilds the shell for a theme change without losing the reading spot. */
     private void rebuildShell() {
+        keepScrollHere();
         buildShell();
         if (catalog == null) {
             loadLibrary(false);
@@ -224,7 +240,7 @@ public class MainActivity extends AppCompatActivity {
         status.setVisibility(View.GONE);
 
         TextView heading = Ui.label(this, "Katalog gagal dimuat", 17, palette.text);
-        heading.setTypeface(null, android.graphics.Typeface.BOLD);
+        heading.setTypeface(null, Typeface.BOLD);
         heading.setPadding(0, Ui.dp(this, 16), 0, Ui.dp(this, 8));
         content.addView(heading);
 
@@ -250,9 +266,12 @@ public class MainActivity extends AppCompatActivity {
         content.addView(source);
     }
 
+    /** Draws the whole library page: detail block first, then the volumes. */
     private void render() {
         spinnerRow.setVisibility(View.GONE);
         status.setVisibility(View.GONE);
+
+        int keepScroll = pendingScrollY > 0 ? pendingScrollY : scroller.getScrollY();
         content.removeAllViews();
 
         if (catalog == null || catalog.size() == 0) {
@@ -260,95 +279,44 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        TextView count = Ui.label(this, catalog.size() + " chapter · "
-                + catalog.volumes.size() + " volume", 12, palette.muted);
-        count.setPadding(0, 0, 0, Ui.dp(this, 6));
-        content.addView(count);
+        LibraryPage page = new LibraryPage(this, prefs, palette, catalog, synopsisOpen,
+                new LibraryPage.Listener() {
+                    @Override
+                    public void onOpenChapter(Chapter chapter) {
+                        openChapter(chapter);
+                    }
 
-        Chapter resume = catalog.findByUrl(prefs.lastUrl());
-        if (resume != null) {
-            Button continueButton = Ui.chip(this, "Lanjutkan membaca: " + resume.label, palette);
-            continueButton.setTextColor(palette.accent);
-            continueButton.setOnClickListener(v -> openChapter(resume));
-            content.addView(continueButton, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            addSpacer(Ui.dp(this, 12));
-        }
+                    @Override
+                    public void onToggleSynopsis() {
+                        keepScrollHere();
+                        synopsisOpen = !synopsisOpen;
+                        render();
+                    }
 
-        for (Volume volume : catalog.volumes) {
-            addVolumeHeader(volume);
-            for (Chapter chapter : volume.chapters) {
-                addChapterRow(chapter);
-            }
-            addSpacer(Ui.dp(this, 16));
-        }
+                    @Override
+                    public void onToggleVolume(String volumeKey) {
+                        keepScrollHere();
+                        prefs.toggleExpanded(volumeKey);
+                        render();
+                    }
 
-        TextView attribution = Ui.label(this,
-                "Sumber: Kaori Translation · kaoritranslation.blogspot.com\n"
-                        + "Aplikasi ini hanya membuka isi publik dan tidak menyimpan salinan novel.",
-                11, palette.muted);
-        attribution.setPadding(0, Ui.dp(this, 12), 0, Ui.dp(this, 10));
-        content.addView(attribution);
+                    @Override
+                    public void onOpenSource() {
+                        openExternal(FeedClient.LABEL_URL);
+                    }
+                });
 
-        Button openSource = Ui.chip(this, "Kunjungi sumber asli", palette);
-        openSource.setOnClickListener(v -> openExternal(FeedClient.LABEL_URL));
-        content.addView(openSource);
-    }
-
-    private void addVolumeHeader(Volume volume) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 6));
-
-        TextView label = Ui.label(this, volume.title(), 16, palette.text);
-        label.setTypeface(null, android.graphics.Typeface.BOLD);
-        row.addView(label, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        row.addView(Ui.label(this, String.valueOf(volume.chapters.size()), 12, palette.muted));
-        content.addView(row);
-
-        View line = new View(this);
-        line.setBackgroundColor(palette.divider);
-        content.addView(line, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Ui.dp(this, 1))));
-    }
-
-    private void addChapterRow(Chapter chapter) {
-        int progress = prefs.progress(chapter.url);
-        boolean finished = progress > 95;
-        boolean started = progress > 0 && !finished;
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(Ui.dp(this, 2), Ui.dp(this, 13), Ui.dp(this, 2), Ui.dp(this, 13));
-
-        TextView label = Ui.label(this, chapter.label, 15,
-                finished ? palette.muted : palette.text);
-        row.addView(label, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-
-        if (finished) {
-            row.addView(Ui.label(this, "selesai", 11, palette.muted));
-        } else if (started) {
-            row.addView(Ui.label(this, progress + "%", 11, palette.accent));
-        }
-
-        row.setOnClickListener(v -> openChapter(chapter));
-        content.addView(row, new LinearLayout.LayoutParams(
+        content.addView(page.build(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        View line = new View(this);
-        line.setBackgroundColor(palette.divider);
-        content.addView(line, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Ui.dp(this, 1))));
+        if (keepScroll > 0) {
+            pendingScrollY = 0;
+            scroller.post(() -> scroller.scrollTo(0, keepScroll));
+        }
     }
 
-    private void addSpacer(int height) {
-        View spacer = new View(this);
-        content.addView(spacer, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, height));
+    private void keepScrollHere() {
+        if (scroller != null) pendingScrollY = scroller.getScrollY();
     }
 
     private void openChapter(Chapter chapter) {
@@ -370,8 +338,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (catalog != null) {
-            palette = Palette.of(prefs.theme());
-            rebuildShell();
+            // Reading progress may have changed in the reader; repaint in place
+            // so the library keeps its scroll position.
+            Palette current = Palette.of(prefs.theme());
+            if (current.label.equals(palette.label)) {
+                keepScrollHere();
+                render();
+            } else {
+                palette = current;
+                rebuildShell();
+            }
         }
     }
 }

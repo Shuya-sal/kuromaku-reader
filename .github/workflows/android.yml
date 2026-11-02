@@ -39,7 +39,7 @@ jobs:
       - name: Accept Android SDK licenses
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
-      - name: Unit tests (feed pagination, parser, reader layout)
+      - name: Unit tests (feed pagination, parser, reader scroll, library page)
         run: gradle --no-daemon --stacktrace testDebugUnitTest
 
       - name: Upload test report
@@ -74,17 +74,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.1 (APK)
+          name: Kuromaku Reader 2.2 (APK)
           body: |
             Reader Mode native untuk *Monogatari no Kuromaku* (Kaori Translation).
 
-            * Versi: 2.1 (versionCode 21)
-            * **BUG 1 diperbaiki**: seluruh halaman feed dibaca, Volume 1–7 lengkap (117 chapter).
-              Sebelumnya crawl berhenti di halaman pendek sehingga hanya Volume 5–7 yang muncul.
-            * **BUG 2 diperbaiki**: teks chapter panjang bisa digulir sampai paragraf terakhir,
-              panel navigasi tidak lagi menutupi teks, window insets ditangani.
-            * Tombol Muat ulang untuk memperbarui katalog.
-            * Posisi baca per blok disimpan dan dipulihkan.
+            * Versi: 2.2 (versionCode 22)
+            * **BUG scroll (akar masalah) diperbaiki**: panel error berukuran penuh
+              (`ScrollView` MATCH_PARENT) duduk di atas RecyclerView dan menelan semua
+              gesture gulir. Visibilitasnya kini dikelola, sehingga daftar menerima sentuhan.
+              Dibuktikan dengan tes yang gagal bila bug dikembalikan.
+            * **Halaman awal didesain ulang**: sampul rasio 2:3, judul lengkap, metadata
+              terverifikasi (penulis, ilustrator, genre, status, sumber terjemahan),
+              sinopsis dengan "Baca selengkapnya", tombol Lanjutkan Membaca,
+              dan daftar volume berbentuk accordion.
+            * Placeholder rapi bila gambar sampul gagal dimuat.
+            * Bookmark tidak lagi tertimpa layout pass saat chapter dibuka kembali.
+            * Semua volume yang ditemukan tetap tampil, termasuk Volume 1–4 (117 chapter).
             * Tema terang / gelap / sepia, ukuran font, spasi baris, progres baca
             * Navigasi chapter sebelumnya / berikutnya / kembali ke perpustakaan
 

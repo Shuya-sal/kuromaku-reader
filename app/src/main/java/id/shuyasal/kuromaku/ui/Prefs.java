@@ -20,6 +20,7 @@ public final class Prefs {
     private static final String KEY_SCROLL_POS = "scroll_pos:";
     private static final String KEY_SCROLL_OFF = "scroll_off:";
     private static final String KEY_JUSTIFY = "justify";
+    private static final String KEY_EXPANDED = "expanded_volumes";
 
     private final SharedPreferences prefs;
 
@@ -106,5 +107,32 @@ public final class Prefs {
 
     public boolean isRead(String url) {
         return progress(url) > 95;
+    }
+
+    /** Volume keys whose chapter list is open on the library screen. */
+    public java.util.Set<String> expandedVolumes() {
+        java.util.Set<String> stored = prefs.getStringSet(KEY_EXPANDED, null);
+        return stored == null
+                ? new java.util.HashSet<String>()
+                : new java.util.HashSet<String>(stored);
+    }
+
+    public boolean isExpanded(String volumeKey) {
+        return volumeKey != null && expandedVolumes().contains(volumeKey);
+    }
+
+    /** Opens a closed volume and closes an open one; returns the new state. */
+    public boolean toggleExpanded(String volumeKey) {
+        if (volumeKey == null) return false;
+        java.util.Set<String> expanded = expandedVolumes();
+        boolean nowOpen;
+        if (expanded.remove(volumeKey)) {
+            nowOpen = false;
+        } else {
+            expanded.add(volumeKey);
+            nowOpen = true;
+        }
+        prefs.edit().putStringSet(KEY_EXPANDED, expanded).apply();
+        return nowOpen;
     }
 }
