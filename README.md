@@ -900,13 +900,21 @@ kosong, picker yang dibatalkan tidak menyentuh progres, dan berkas yang tidak bi
 dibuka dilaporkan sebagai `Gagal: …`.
 
 Uji mutasi 2.20: **18/18 tertangkap** pada berkas hidup dengan `md5` dipulihkan
-sesudah setiap mutasi — 14 mutasi fitur (backup, drawer, label progres) dan 4
-mutasi animasi drawer. Mutasi animasi dijalankan **dua kali**: run pertama hanya
-2 dari 3 tertangkap, karena tes membaca posisi setelah looper dikuras sehingga
-animasi yang seharusnya berjalan sudah selesai lebih dulu. Tesnya diubah membaca
-posisi **sebelum** looper berjalan, dan bentuk kode animasi ditulis eksplisit
-(`slide ? -lebar : 0f`) supaya "animasi mati" tidak bisa tertukar dengan "animasi
-tidak pernah jalan".
+sesudah setiap mutasi — 14 mutasi fitur (backup, drawer, label progres) lulus
+14/14 dalam satu run, sedangkan 4 mutasi animasi drawer butuh **empat run**:
+
+| Run | Hasil | Sebab |
+|---|---|---|
+| 1 | **1/3** | dua mutasi lolos: tes membaca posisi *sesudah* looper dikuras, sehingga animasi yang seharusnya berjalan sudah selesai lebih dulu |
+| 2 | **0/3 — tidak sah** | `#1` dan `#2` `SKIP` karena anchor basi, `#3` `SURVIVED` — celah tes nyata, bukan sekadar target hilang |
+| 3 | **3/4** | mutasi durasi lolos: `HeaderAndMotionTest` hanya menguji konstanta `Motion.DURATION_MS`, bukan angka yang dipakai call site |
+| 4 | **4/4** | tes membaca posisi **sebelum** looper berjalan dan `decor.animate().getDuration()` |
+
+Bentuk kode animasi ditulis eksplisit (`slide ? -lebar : 0f`) supaya "animasi
+mati" tidak bisa tertukar dengan "animasi tidak pernah jalan". Run 2 tidak sah
+karena dua dari tiga targetnya sudah tidak ada (`SKIP`), tetapi mutasi ketiga
+benar-benar `SURVIVED` — jadi run itu bukan bukti apa pun, sekaligus bukan alasan
+untuk mengabaikan celah yang ditunjukkannya.
 
 **Batasan:** pertukaran berkas lewat pemilih dokumen **belum** dicoba di perangkat
 sungguhan — verifikasi masih Robolectric dengan `ContentResolver` dan `Dialog`

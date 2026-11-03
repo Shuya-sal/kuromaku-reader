@@ -183,11 +183,15 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   diganti `true` (animasi berjalan walau *Remove animations* aktif),
   posisi awal dibuat 0 (drawer tidak pernah bergeser), posisi diam dibuat
   di luar layar (drawer tak terlihat dan tak bisa ditekan), dan durasi
-  diganti 40 ms (di bawah jendela 180–250 ms). Run animasi pertama hanya
-  **3/4**: mutasi durasi lolos karena `HeaderAndMotionTest` hanya menguji
+  diganti 40 ms (di bawah jendela 180–250 ms). Empat mutasi animasi ini butuh
+  **empat run**, dan yang pertama tidak lulus: run 1 hanya **1/3** karena tes
+  membaca posisi *sesudah* looper dikuras, run 2 **0/3** karena semua anchor
+  basi (`SKIP`, bukan tertangkap — angka itu tidak membuktikan apa pun), run 3
+  **3/4** karena mutasi durasi lolos: `HeaderAndMotionTest` hanya menguji
   **konstanta** `Motion.DURATION_MS`, bukan angka yang dipakai call site.
-  Tes diperbaiki membaca `decor.animate().getDuration()` — animator yang
-  benar-benar dijalankan — lalu run diulang **4/4**.
+  Tes diperbaiki membaca posisi **sebelum** looper berjalan dan
+  `decor.animate().getDuration()` — animator yang benar-benar dijalankan —
+  lalu run diulang **4/4**.
   Setiap mutasi membuat tes bernama gagal — bukan sekadar build rusak.
 * **Fitur Cover Volume & Indikator Unduhan (2.18).** Dua keluhan dari
   laporan: volume novel yang ditambahkan lewat URL (Yarikon) hanya
