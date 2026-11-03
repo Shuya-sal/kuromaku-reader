@@ -232,6 +232,10 @@ jobs:
             * **306 unit test lulus**, 0 gagal (29 kelas). `VolumeCoversAndDownloadStateTest`
               (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
               memicu laporan — dan mengukur UI pada layar 320 dp.
+              `RingProgressMotionTest` (5 tes) menguji cincin progres langsung:
+              nilainya tampil seketika saat "Remove animations" aktif, animasi
+              berakhir tepat pada angka yang diberikan, spinner tanpa total tidak
+              pernah melaporkan persen, dan fraksi di luar 0–100 dijepit.
             * Uji mutasi 2.18: **15 mutasi pada berkas hidup** (cover tidak ditempel,
               semua volume memakai cover pertama, tabel menimpa hasil parse, novel
               asing meminjam tabel Magical, persentase volume dipalsukan, "Tersimpan
