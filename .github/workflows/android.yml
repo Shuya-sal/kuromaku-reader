@@ -42,6 +42,24 @@ jobs:
       - name: Unit tests (feed, parser, images, reader scroll, library page, header & motion)
         run: gradle --no-daemon --stacktrace testDebugUnitTest
 
+      - name: Name every failing test
+        if: failure()
+        run: |
+          echo "## Failing tests" >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, re
+          rows = []
+          for path in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
+              text = open(path, encoding="utf-8", errors="replace").read()
+              for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"(.*?)(?:/>|</testcase>)',
+                                   text, re.S):
+                  if "<failure" in m.group(3) or "<error" in m.group(3):
+                      message = re.search(r'message="([^"]{0,200})', m.group(3))
+                      rows.append(f"- `{m.group(2)}.{m.group(1)}` — "
+                                  f"{(message.group(1) if message else 'failed').replace('&quot;', chr(34))}")
+          print("\n".join(rows) if rows else "No failing test case was recorded.")
+          PY
+
       - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v4

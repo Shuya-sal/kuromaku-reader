@@ -84,9 +84,15 @@ public class RingProgressMotionTest {
         RingProgress view = ring();
         view.setProgress(67);
 
-        org.robolectric.shadows.ShadowLooper.idleMainLooper();
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
-                .idleFor(java.time.Duration.ofMillis(400));
+        // Drive the clock in small steps instead of assuming the whole 180 ms
+        // elapses within one idle. A CI runner schedules frames differently from a
+        // laptop, so one large jump can leave the animation mid-flight and turn
+        // this into a flaky test that says nothing about the ring.
+        org.robolectric.shadows.ShadowLooper looper =
+                org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper());
+        for (int step = 0; step < 40 && view.percentShown() != 67; step++) {
+            looper.idleFor(java.time.Duration.ofMillis(20));
+        }
 
         assertEquals("setelah animasi selesai nilainya harus 67", 67, view.percentShown());
     }
