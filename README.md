@@ -1580,7 +1580,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **345 pengujian** di 32 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **348 pengujian** di 32 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1590,7 +1590,7 @@ semuanya lulus:
   hanya tautan yang mungkin chapter yang ditawarkan, centang/batal centang menentukan
   isi pilihan, dan tidak ada yang dikirim sebelum tombol ditekan. Tiga mutasi
   terbukti tertangkap.
-- **YarikoAndLabelTest** (28) — dua kegagalan dari laporan, dibuktikan lewat fixture
+- **YarikoAndLabelTest** (31) — dua kegagalan dari laporan, dibuktikan lewat fixture
   HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
   dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
   label apa pun (tidak di-hardcode); katalog label dibaca dari **dua halaman feed**
@@ -1603,6 +1603,26 @@ semuanya lulus:
   katalog tanpa kata "chapter" ditawarkan untuk dipilih manual, dan tautan di luar
   halaman tidak bisa dipilih; Magical★Explorer (141 chapter / 14 volume) dan
   Monogatari (111 chapter / 7 volume) tidak berubah.
+  Tiga tes 2.20 menutup celah **alasan penolakan**. Diukur langsung dari sumber:
+  parser dapat mencetak **12 kalimat** `ditolak: …` berbeda. Sebelum putaran ini
+  **nol** di antaranya dituntut utuh oleh tes; tiga disebut sebagai potongan kata
+  (`potongan judul`, `tautan gambar`, `sendiri di grup volume`) dan sisanya hanya
+  tercakup `startsWith("ditolak")` — awalan yang dipenuhi cabang mana pun, sehingga
+  sebuah cabang bisa dihapus dengan suite tetap hijau. Sekarang **8 dari 12** dituntut
+  utuh: `tautan tanpa alamat`, `bukan tautan halaman` (untuk `javascript:` dan
+  `mailto:`), `menunjuk halaman ini sendiri`, `tautan volume, bukan chapter`,
+  `bukan tautan postingan`, `milik novel lain (nama URL berbeda)`,
+  `halaman label/feed/statis, bukan chapter` (dari `/p/`, `/search/`, dan `/feeds/`
+  sekaligus), dan `sendiri di grup volume, bukan daftar`. Sisi sebaliknya ikut
+  dijaga: tautan bertanggal yang teksnya tidak menyebut chapter tetap **bisa
+  dipilih**, sedangkan tautan yang bukan postingan tidak pernah bisa.
+  Dua kalimat masih hanya dijaga potongan katanya (`potongan judul`, `tautan gambar`)
+  dan dua belum disebut tes sama sekali (`potongan judul chapter, bukan tautan
+  tersendiri`, `teks tidak berpola chapter`) — itu batas yang tersisa, bukan klaim.
+  Bukti: **8/8 mutasi tertangkap** — tujuh cabang alasan dihapus/dikaburkan, ditambah
+  mutasi terpisah untuk kemunculan **kedua** `milik novel lain` (yang pertama
+  ditangkap tes lama, jadi cabang baru itu dibuktikan sendiri); `md5` sumber
+  dipulihkan sesudah tiap mutasi.
 - **DynamicCatalogueTest** (9, parser generik + normalisasi URL) — sepuluh bentuk URL
   yang tidak layak ditolak dengan pesan yang bisa dibaca; satu halaman menghasilkan
   satu identitas untuk sembilan penulisan berbeda (`?m=1`, garis miring di akhir,

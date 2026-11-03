@@ -1013,11 +1013,129 @@ public class YarikoAndLabelTest {
         return out.toString();
     }
 
+    // None of these may ever be offered to the picker, whatever the reason says.
+    @Test
+    public void onlyLinksThatCannotBeAPostAreKeptOutOfThePicker() throws Exception {
+        NovelDiscovery.Result result = NovelDiscovery.parse(rejectionPage(), REJECTION_PAGE);
+
+        String[] never = {
+                "Tanpa alamat", "Bagikan", "Email", "Halaman ini", "Volume 1",
+                "Halaman", "Situs lain", "Daftar Novel", "Cari", "Feed",
+        };
+        for (String text : never) {
+            NovelDiscovery.Candidate candidate = candidateOf(result, text);
+            assertFalse("tidak boleh bisa dipilih: " + text + " (" + candidate.reason + ")",
+                    candidate.selectable);
+        }
+
+        // The opposite half: a post of this series whose text simply does not say
+        // "chapter" is exactly what the picker exists for, so it stays pickable.
+        NovelDiscovery.Candidate vague = candidateOf(result, "Catatan");
+        assertTrue("tautan tanpa label chapter harus tetap bisa dipilih: " + vague.reason,
+                vague.selectable);
+        assertEquals("alasan harus menyebut kenapa ia ragu",
+                "ditolak: sendiri di grup volume, bukan daftar", vague.reason);
+    }
+
     /** Nothing here may leave a fetch source behind for the next test class. */
     @Test
     public void aFreshSourceIsUsedAfterReset() {
         Fetcher.reset();
         assertNotNull(Fetcher.get());
         assertNull(null);
+    }
+
+    // ------------------------------ every rejection reason the parser can print
+
+    /**
+     * Each impossible link is named by its own reason, not by a shared prefix.
+     *
+     * <p>The parser can print twelve different {@code "ditolak: …"} sentences. Before
+     * this test, <em>none</em> of them was asserted verbatim; three were matched as
+     * loose fragments ({@code potongan judul}, {@code tautan gambar}, {@code sendiri di
+     * grup volume}) and the rest were covered only by a {@code startsWith("ditolak")}
+     * check that any branch could satisfy. Deleting a branch therefore left the suite
+     * green, which is precisely the failure mode the diagnostics panel was added to
+     * fix: the user must learn <em>why</em> a link was dropped, not that it was.
+     */
+    @Test
+    public void eachImpossibleLinkIsNamedByItsOwnReason() throws Exception {
+        NovelDiscovery.Result result = NovelDiscovery.parse(rejectionPage(), REJECTION_PAGE);
+
+        assertEquals("dua chapter asli tetap terbaca", 2, result.chapterCount());
+
+        assertEquals("ditolak: tautan tanpa alamat", reasonOf(result, "Tanpa alamat"));
+        assertEquals("ditolak: bukan tautan halaman", reasonOf(result, "Bagikan"));
+        assertEquals("ditolak: bukan tautan halaman", reasonOf(result, "Email"));
+        assertEquals("ditolak: menunjuk halaman ini sendiri", reasonOf(result, "Halaman ini"));
+        assertEquals("ditolak: tautan volume, bukan chapter", reasonOf(result, "Volume 1"));
+        assertEquals("ditolak: bukan tautan postingan", reasonOf(result, "Halaman"));
+        assertEquals("ditolak: milik novel lain (nama URL berbeda)",
+                reasonOf(result, "Situs lain"));
+    }
+
+    /**
+     * A label page, a feed and a static page are one kind of mistake, so they share
+     * one sentence — and all three paths have to reach it.
+     *
+     * <p>Three of the four entries in {@code NON_CHAPTER_PATHS} are exercised here.
+     * Before this the only thing asserted was that <em>something</em> starting with
+     * "ditolak" came back, so a branch could be narrowed to {@code /p/} alone and
+     * still pass.
+     */
+    @Test
+    public void labelFeedAndStaticPagesAllPrintTheSameReason() throws Exception {
+        NovelDiscovery.Result result = NovelDiscovery.parse(rejectionPage(), REJECTION_PAGE);
+
+        for (String text : Arrays.asList("Daftar Novel", "Cari", "Feed")) {
+            assertEquals("situs chrome harus disebut apa adanya: " + text,
+                    "ditolak: halaman label/feed/statis, bukan chapter", reasonOf(result, text));
+        }
+    }
+
+    /** One link per rejection reason the article-level parser is able to print. */
+    private static final String REJECTION_PAGE =
+            "https://kaoritranslation.blogspot.com/2026/02/novel-x.html";
+
+    private static String rejectionPage() {
+        return "<html><body><div class='post-body entry-content'>"
+                + "<p><b>Author :</b> Uji</p>"
+                + "<h3>Volume 1</h3>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_1.html'>Chapter 1</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_2.html'>Chapter 2</a></p>"
+                // an anchor with no usable address at all
+                + "<p><a>Tanpa alamat</a></p>"
+                // share widget and mail link: not page addresses
+                + "<p><a href='javascript:void(0)'>Bagikan</a></p>"
+                + "<p><a href='mailto:orang@contoh.com'>Email</a></p>"
+                // the catalogue pointing at itself
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x.html'>Halaman ini</a></p>"
+                + "<p>Catatan penerjemah soal jadwal rilis mingguan yang berubah.</p>"
+                // volume heading written as a link
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_7.html'>Volume 1</a></p>"
+                // a dated post of this series whose text says nothing about chapters
+                + "<p>Keterangan tambahan dari penerjemah.</p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_8.html'>Catatan</a></p>"
+                // site chrome Blogger serves as real pages: static, label, feed
+                + "<p><a href='https://kaoritranslation.blogspot.com/p/daftar-novel.html'>Daftar Novel</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/search/label/Novel'>Cari</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/feeds/posts/default'>Feed</a></p>"
+                // no /20xx/xx/ shape: not a Blogger post at all
+                + "<p><a href='https://kaoritranslation.blogspot.com/halaman-lain.html'>Halaman</a></p>"
+                // another series on another host
+                + "<p><a href='https://contoh.com/2026/02/bab.html'>Situs lain</a></p>"
+                + "</div></body></html>";
+    }
+
+    private static NovelDiscovery.Candidate candidateOf(NovelDiscovery.Result result, String text) {
+        for (NovelDiscovery.Candidate candidate : result.candidates) {
+            if (text.equals(candidate.text)) return candidate;
+        }
+        fail("kandidat bertajuk '" + text + "' tidak muncul di diagnostik");
+        return null;
+    }
+
+    private static String reasonOf(NovelDiscovery.Result result, String text) {
+        return candidateOf(result, text).reason;
     }
 }
