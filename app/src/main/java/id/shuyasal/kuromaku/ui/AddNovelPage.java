@@ -472,8 +472,13 @@ public final class AddNovelPage {
         heading.setTypeface(null, Typeface.BOLD);
         column.addView(heading);
 
+        // Where the links were found depends on the address: an article carries them
+        // inside the post body, a label carries them in its feed. Saying "di artikel"
+        // for a label address describes a page the app never read.
+        boolean label = id.shuyasal.kuromaku.net.NovelUrl.isLabel(preview.sourceUrl);
         TextView found = Ui.label(context,
-                "Tautan ditemukan di artikel: " + preview.linksFound, 11, palette.muted);
+                "Tautan ditemukan " + (label ? "di feed label: " : "di artikel: ")
+                        + preview.linksFound, 11, palette.muted);
         found.setTag("add_novel_links_found");
         found.setPadding(0, Ui.dp(context, 3), 0, 0);
         column.addView(found);
