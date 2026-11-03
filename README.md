@@ -1856,34 +1856,68 @@ app/src/main/java/id/shuyasal/kuromaku/
 ├── MainActivity.java          # shell perpustakaan: bar, insets, muat katalog
 ├── ReaderActivity.java        # Reader Mode + panel pengaturan + insets
 ├── ImageViewerActivity.java   # penampil ilustrasi layar penuh (zoom 1x–4x)
+├── MangaActivity.java         # layar Manga: WebView, hanya voratoon.id / voratoon.com
 ├── Session.java               # katalog in-memory untuk navigasi chapter
 ├── data/
-│   ├── FeedEntry, Chapter, Volume, Catalog
+│   ├── Block.java             # satu unit render (teks/heading/gambar), urutan dokumen
+│   ├── Catalog.java           # katalog satu novel: volume + helper navigasi
+│   ├── CatalogueMerge.java    # isi celah artikel katalog dari entri feed label
+│   ├── Chapter.java           # satu entri chapter dari feed
+│   ├── FeedEntry.java         # catatan feed minimal
+│   ├── Library.java           # rak milik user, disimpan di database
+│   ├── LibraryBuilder.java    # parsing judul → volume, label, urutan baca
 │   ├── Novel.java             # satu novel: metadata, cover, cara katalog dibaca
-│   ├── Novels.java            # daftar dua novel (teks dari halaman sumber)
-│   ├── VolumeCovers.java      # tabel cover per volume (diverifikasi tes)
 │   ├── NovelInfo.java         # metadata Monogatari (dipakai tes lama)
-│   └── LibraryBuilder.java    # parsing judul → volume, label, urutan baca
+│   ├── NovelMapper.java       # baris database ↔ Novel
+│   ├── Novels.java            # daftar dua novel bawaan (teks dari halaman sumber)
+│   ├── ReadingBackup.java     # backup/restore progres baca sebagai berkas milik user
+│   ├── Volume.java            # satu volume: nomor, chapter, cover sendiri
+│   └── VolumeCovers.java      # tabel cover per volume (diverifikasi tes)
+├── db/
+│   ├── NovelDatabase.java     # skema perpustakaan: satu baris per URL katalog
+│   ├── NovelDao.java          # akses tabel perpustakaan
+│   ├── NovelRecord.java       # satu baris novel, dikunci URL ternormalisasi
+│   ├── VolumeCoverDao.java    # cover per volume tersimpan
+│   └── VolumeCoverRecord.java # satu cover volume (tabel sendiri, bukan kolom)
 ├── net/
 │   ├── Http.java              # OkHttp, hanya dokumen teks
 │   ├── CatalogLoader.java     # pilih feed vs halaman katalog, pasang cover
 │   ├── FeedClient.java        # feed JSON label, paginasi penuh
-│   └── FeedException.java     # kegagalan per halaman
+│   ├── FeedException.java     # kegagalan per halaman
+│   ├── Fetcher.java           # sumber byte; tes mengganti dengan fixture
+│   └── NovelUrl.java          # normalisasi URL novel yang diketik user
+├── offline/
+│   ├── OfflineStore.java      # chapter di disk, tulisan atomik (.tmp → rename)
+│   ├── ChapterDownloader.java # unduh satu chapter: teks + ilustrasi
+│   ├── DownloadQueue.java     # pintu tunggal UI: unduh, ulang, batal, periksa
+│   ├── DownloadWorker.java    # WorkManager: satu chapter atau satu volume
+│   ├── VolumeJob.java         # loop berurutan satu volume
+│   ├── DownloadStatusStore.java # antrean/unduh/tersimpan/gagal untuk UI
+│   ├── DownloadNotifier.java  # notifikasi progres unduhan volume
+│   └── ImageValidator.java    # pastikan byte benar-benar gambar
 ├── parser/
 │   ├── ChapterParser.java     # Jsoup: scrub situs → blok teks/gambar berurutan
+│   ├── ChapterNaming.java     # baca tautan chapter: label + posisi volume
 │   ├── LandingCatalogParser.java # katalog dari tautan di halaman landing
 │   ├── VolumeCoverParser.java # cover per volume dari halaman landing
+│   ├── NovelDiscovery.java    # baca novel apa pun langsung dari halaman sumber
 │   ├── ChapterContent.java    # judul + daftar blok + URL sumber
-│   └── ContentCache.java      # cache LRU 6 chapter
+│   ├── ContentCache.java      # cache LRU 6 chapter
+│   └── ParseException.java    # isi artikel tidak ditemukan
 └── ui/
     ├── NovelListPage.java     # halaman perpustakaan: kartu per novel
     ├── LibraryPage.java       # halaman detail novel + accordion volume + cover volume
+    ├── AddNovelPage.java      # "Tambah Novel": tempel URL, pratinjau, simpan
+    ├── DownloadsPage.java     # "Unduhan": yang tersimpan + job yang berjalan
     ├── RatioFrameLayout.java  # kotak rasio tetap untuk sampul
     ├── ImageCell.java         # sel ilustrasi: kotak berasio, error + coba lagi
     ├── ZoomableImageView.java # cubit/geser/ketuk dua kali
     ├── ImageLoadLog.java      # logging tahap gambar, URL disamarkan
     ├── BlockAdapter.java      # render blok jadi view native
     ├── ScrollMath.java        # progres, restore posisi, padding footer
+    ├── SystemBarInsets.java   # insets per layar, diterapkan walau dispatch kosong
+    ├── Motion.java            # animasi pendek yang menghormati "Remove animations"
+    ├── RingProgress.java      # cincin progres unduhan, hanya angka yang diukur
     └── Palette.java, Prefs.java, Ui.java
 ```
 
