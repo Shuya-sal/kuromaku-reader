@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.10
+# Kuromaku Reader 2.11
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -46,12 +46,12 @@ perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beser
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
 
-Versi 2.10 memperbaiki **parser Tambah Novel** pada dua kegagalan yang dilaporkan:
+Versi 2.11 memperbaiki **parser Tambah Novel** pada dua kegagalan yang dilaporkan:
 URL Blogger `/search/label/...` ditolak sebelum diunduh, dan artikel katalog
 `/2026/03/yariko...` ditolak dengan "Tidak ada tautan chapter yang dikenali"
 padahal artikel itu berisi 43 chapter. Keduanya bukan soal parser "terlalu ketat":
 yang pertama fitur yang belum ada, yang kedua artikelnya dihapus oleh pembersih
-boilerplate sebelum dibaca. Detail akar masalah di bagian **BUG 7 (2.10)**.
+boilerplate sebelum dibaca. Detail akar masalah di bagian **BUG 7 (2.11)**.
 
 ## Fitur (baru di 2.5)
 
@@ -427,7 +427,7 @@ memang ingin "novel mana saja" memakai `first()`.
 Setelah dipulihkan, suite penuh **239 tes, 0 gagal**, dan penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
-## BUG 7 (2.10) — Dua URL dilaporkan gagal, dan keduanya bukan soal "terlalu ketat"
+## BUG 7 (2.11) — Dua URL dilaporkan gagal, dan keduanya bukan soal "terlalu ketat"
 
 Dua alamat dari laporan dicoba apa adanya:
 
@@ -523,23 +523,44 @@ ditampilkan dengan kotak centang, dan novel baru disimpan setelah Tuan menekan
   preview). Cover dan metadata sengaja kosong: halaman label tidak memuatnya.
 - **Magical★Explorer** — tetap **141 chapter, 14 volume**, tidak berubah.
 
-### Bukti tes menangkap bug — uji mutasi 2.10
+### Bukti tes menangkap bug — uji mutasi 2.11
+
+Sepuluh mutasi, dikembalikan satu per satu. Setiap kali ada tes bernama yang gagal.
+
+Kegagalan yang dilaporkan:
 
 1. Pembersihan `div.widget` dikembalikan ke urutan lama (sebelum artikel dicari) →
    `everyRejectedLinkCarriesItsReason` gagal.
 2. `/search/label/` ditolak lagi sebagai "bukan halaman artikel" →
    `aLabelCatalogueComesFromThePagedFeed` gagal.
-3. Setiap tautan yang ditolak dibuat bisa dipilih (tiga variasi mutasi) →
-   `aLinkThatWasNotOnThePageCannotBeSelected` gagal pada ketiganya.
+3. Setiap tautan yang ditolak dibuat bisa dipilih (tiga variasi: alasan lunak
+   dikembalikan `true`, hanya "dalam grup volume", dan field `selectable` dipaksa
+   `true`) → `aLinkThatWasNotOnThePageCannotBeSelected` gagal pada ketiganya.
 4. Semua postingan feed dihitung sebagai chapter →
    `aFeedPostThatDescribesTheNovelIsNotAChapter` gagal.
+
+Cacat yang ditemukan saat menguji dengan HTML asli:
+
 5. Angka "Interlude" dibuang lagi → `aFeedPostThatDescribesTheNovelIsNotAChapter`
    gagal (jumlah chapter berubah).
+6. Alasan `"ditolak: tautan gambar"` dihapus → `everyRejectionSaysWhatTheLinkActuallyIs`
+   gagal.
+7. Alasan `"ditolak: potongan judul"` dihapus → `aStrayNumeralIsNamedAsAFragment`
+   gagal. **Mutasi ini sempat lolos** pada percobaan pertama, karena di halaman
+   Yariko labelnya sudah digabung lebih dulu sehingga cabang itu tidak pernah
+   tercapai; tes dengan angka liar yang berdiri sendiri ditambahkan supaya cabangnya
+   benar-benar dieksekusi.
+8. Penggabungan potongan judul dimatikan → `aNumeralTornIntoItsOwnAnchorIsPutBack`
+   gagal.
+9. Alasan spesifik ditimpa lagi oleh alasan generik grup volume →
+   `everyRejectionSaysWhatTheLinkActuallyIs` gagal.
+10. Label interlude kembali memakai angka apa adanya (tanpa normalisasi Romawi) →
+    `anInterludeIsLabelledTheSameFromDigitsOrRoman` gagal.
 
-Setelah semua dipulihkan: suite penuh **261 tes, 0 gagal**, penanda `MUTATION` di
+Setelah semua dipulihkan: suite penuh **265 tes, 0 gagal**, penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
-### Batasan yang masih berlaku untuk 2.10
+### Batasan yang masih berlaku untuk 2.11
 
 - Semua pengujian memakai HTML dan feed yang **disimpan sebagai fixture**, ditambah
   satu kali pembacaan jaringan nyata untuk memastikan angkanya. Novel lain dengan
@@ -763,10 +784,10 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **261 pengujian** di 24 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **265 pengujian** di 24 kelas,
 semuanya lulus:
 
-- **YarikoAndLabelTest** (21) — dua kegagalan dari laporan, dibuktikan lewat fixture
+- **YarikoAndLabelTest** (25) — dua kegagalan dari laporan, dibuktikan lewat fixture
   HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
   dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
   label apa pun (tidak di-hardcode); katalog label dibaca dari **dua halaman feed**
@@ -1069,7 +1090,7 @@ gradle testDebugUnitTest assembleDebug
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
 
-### Batasan parser generik (2.10) — diukur, bukan diperkirakan
+### Batasan parser generik (2.11) — diukur, bukan diperkirakan
 
 Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
 diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan

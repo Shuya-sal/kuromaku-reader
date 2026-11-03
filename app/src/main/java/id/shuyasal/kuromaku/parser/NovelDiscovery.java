@@ -256,6 +256,22 @@ public final class NovelDiscovery {
     /** Path shapes that are never a chapter of the novel being read. */
     private static final String[] NON_CHAPTER_PATHS = {"/search/", "/feeds/", "/p/", "/label/"};
 
+    /** Hrefs that point at a bitmap rather than at a page. */
+    private static final Pattern IMAGE_HREF = Pattern.compile(
+            "\\.(jpg|jpeg|png|gif|webp|avif|svg)(\\?|$)|googleusercontent\\.com/img/");
+
+    /**
+     * Text that is only a number: "2" torn away from "Interlude 2" because the source
+     * wrote the numeral as its own anchor. Such an anchor is half a label, not a link.
+     */
+    private static final Pattern FRAGMENT_TEXT = Pattern.compile(
+            "^[0-9]{1,3}$|^[ivxlcdm]{1,6}$", Pattern.CASE_INSENSITIVE);
+
+    /** Link text that a following bare numeral would continue: "Interlude", "Bab 3". */
+    private static final Pattern DESCRIPTOR_TAIL = Pattern.compile(
+            "(interlude|chapter|chap|bab|vol|volume|epilog|prolog|ilustrasi|illustrasi"
+                    + "|part|bagian)\\s*$", Pattern.CASE_INSENSITIVE);
+
     private static final Pattern LABEL_LINE = Pattern.compile(
             "^([A-Za-z][A-Za-z .]{2,24})\\s*[:：]\\s*(.+)$");
 
@@ -415,6 +431,8 @@ public final class NovelDiscovery {
                     pendingVolume, i));
         }
 
+        mergeSplitLabels(links, nodes);
+
         // Pass 2: decide which of them are chapters.
         String dominant = dominantStem(links, pageStem);
         List<Candidate> candidates = new ArrayList<>();
@@ -471,9 +489,16 @@ public final class NovelDiscovery {
                 int volume = Math.max(0, Math.min(31, candidate.volume));
                 take = perVolume[volume] >= 3;
             }
+            // The generic "one link alone in a volume group" verdict may only replace
+            // the *group* reason. An image wrapper and a torn-off numeral already have
+            // a precise reason of their own, and overwriting it made the diagnostics
+            // panel say "sendiri di grup volume" about a picture.
+            String kept = candidate.reason;
+            if (!take && "dalam grup volume".equals(kept)) {
+                kept = "ditolak: sendiri di grup volume, bukan daftar";
+            }
             confirmed.add(new Candidate(candidate.url, candidate.text, candidate.volume, take,
-                    take ? candidate.reason : "ditolak: sendiri di grup volume, bukan daftar",
-                    candidate.index, take || candidate.selectable));
+                    kept, candidate.index, take || candidate.selectable));
             if (take) {
                 groupCount++;
                 finalChapters.add(new Chapter(candidate.text, ChapterNaming.label(
@@ -629,15 +654,54 @@ public final class NovelDiscovery {
     /** One anchor inside the catalogue area. */
     private static final class Link {
         final String url;
-        final String text;
+        String text;
         final int volume;
         final int index;
+        /**
+         * True when this anchor is only a fragment of the previous one's label.
+         *
+         * <p>The source sometimes writes {@code <a>Interlude </a><a>2</a>}: the numeral
+         * lives in its own anchor pointing at a different post. Treated separately, the
+         * chapter is labelled "Interlude" and a stray "2" becomes a candidate. The
+         * numeral is folded back into the label, and this anchor is reported as merged
+         * rather than as a chapter of its own.
+         */
+        boolean merged;
 
         Link(String url, String text, int volume, int index) {
             this.url = url;
             this.text = text;
             this.volume = volume;
             this.index = index;
+        }
+    }
+
+    /**
+     * Folds a bare-numeral anchor back into the label it belongs to.
+     *
+     * <p>Only anchors that are adjacent — nothing but blank text between them — and that
+     * follow a link whose text ends with a descriptor are merged. "Chapter" + "4" is one
+     * chapter; "Chapter 3" and an unrelated "2" two paragraphs later are not.
+     */
+    private static void mergeSplitLabels(List<Link> links, List<Node> nodes) {
+        for (int i = 1; i < links.size(); i++) {
+            Link current = links.get(i);
+            Link previous = links.get(i - 1);
+            if (previous.merged) continue;
+            String fragment = current.text.trim();
+            if (!FRAGMENT_TEXT.matcher(fragment).matches()) continue;
+            if (!DESCRIPTOR_TAIL.matcher(previous.text.trim()).find()) continue;
+            boolean adjacent = true;
+            for (int n = previous.index + 1; n < current.index; n++) {
+                Node between = nodes.get(n);
+                if (between instanceof TextNode && !((TextNode) between).text().trim().isEmpty()) {
+                    adjacent = false;
+                    break;
+                }
+            }
+            if (!adjacent) continue;
+            previous.text = previous.text.trim() + " " + fragment;
+            current.merged = true;
         }
     }
 
@@ -649,11 +713,19 @@ public final class NovelDiscovery {
         String href = link.url;
         if (href == null || href.isEmpty()) return "ditolak: tautan tanpa alamat";
         String lower = href.toLowerCase(Locale.ROOT);
+        if (link.merged) return "ditolak: potongan judul, sudah digabung ke tautan sebelumnya";
         if (lower.startsWith("javascript:") || lower.startsWith("mailto:")
                 || lower.startsWith("#") || lower.startsWith("data:")) {
             return "ditolak: bukan tautan halaman";
         }
         if (isSamePage(href, pageUrl)) return "ditolak: menunjuk halaman ini sendiri";
+        // Plenty of posts wrap a cover or an illustration in <a>, so the anchor's href
+        // is the image itself. It is a link on the page and the count has to include it,
+        // but calling it "sendiri di grup volume" explained nothing.
+        if (IMAGE_HREF.matcher(lower).find()) return "ditolak: tautan gambar, bukan chapter";
+        if (FRAGMENT_TEXT.matcher(link.text.trim()).matches()) {
+            return "ditolak: potongan judul chapter, bukan tautan tersendiri";
+        }
         for (String path : NON_CHAPTER_PATHS) {
             if (lower.contains(path)) return "ditolak: halaman label/feed/statis, bukan chapter";
         }

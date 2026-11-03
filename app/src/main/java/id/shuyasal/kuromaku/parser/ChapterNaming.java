@@ -29,6 +29,11 @@ public final class ChapterNaming {
     public static final int ORDER_AFTERWORD = 520;
     public static final int ORDER_UNKNOWN = 300;
 
+    /** One numeral per index, 1..20; index 0 is unused. */
+    private static final String[] ROMAN = {"", "I", "II", "III", "IV", "V", "VI", "VII",
+            "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII",
+            "XIX", "XX"};
+
     /** "Volume 7" / "Vol. 7" heading → 7; anything else → 0. */
     private static final Pattern VOLUME_HEADING = Pattern.compile(
             "^\\s*(?:volume|vol)\\.?\\s*(\\d{1,2})\\s*$", Pattern.CASE_INSENSITIVE);
@@ -119,6 +124,19 @@ public final class ChapterNaming {
      * Short label shown in the library; every spelling is normalised here so the
      * list never shows "CH. 3" next to "Bab 4" next to "Chapter 5".
      */
+    /** 1–20 written as a Roman numeral; anything else returned as typed, upper case. */
+    private static String romanLabel(String numeral) {
+        String upper = numeral.toUpperCase(Locale.ROOT);
+        int value;
+        try {
+            value = Integer.parseInt(upper);
+        } catch (NumberFormatException alreadyRoman) {
+            return upper;
+        }
+        if (value < 1 || value > 20) return String.valueOf(value);
+        return ROMAN[value];
+    }
+
     public static String label(String raw) {
         if (raw == null) return "Bab";
         String text = tidy(raw);
@@ -140,7 +158,11 @@ public final class ChapterNaming {
         Matcher interlude = INTERLUDE.matcher(text);
         if (interlude.find()) {
             String numeral = tidy(interlude.group(1));
-            return numeral.isEmpty() ? "Interlude" : "Interlude " + numeral.toUpperCase(Locale.ROOT);
+            if (numeral.isEmpty()) return "Interlude";
+            // The source writes "Interlude II" in one volume and splits it into
+            // "Interlude" + "2" in another; both are the same chapter, so the label is
+            // normalised to Roman numerals instead of depending on how it was typed.
+            return "Interlude " + romanLabel(numeral);
         }
         if (lower.contains("prolog")) return "Prolog";
         if (lower.contains("ilustrasi") || lower.contains("illustrasi")

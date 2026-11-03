@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.10 (APK)
+          name: Kuromaku Reader 2.11 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.10** (versionCode 30)
+            * Versi: **2.11** (versionCode 31)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -129,7 +129,7 @@ jobs:
               novel berdasarkan id punya fallback "novel pertama", sehingga novel
               yang baru dihapus bisa muncul kembali sebagai novel lain sambil
               membawa progres dan unduhannya.
-            * **261 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
+            * **265 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
               ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
               URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
               berformat berbeda (entry-content, heading h4, ordered list, label
@@ -141,7 +141,7 @@ jobs:
             * Uji mutasi: lima bug di atas dikembalikan satu per satu dan setiap
               kali ada tes yang gagal — tes ini terbukti menangkap bug, bukan
               sekadar hijau.
-            * **Bug 2.10 yang diperbaiki** — dua URL dari laporan:
+            * **Bug 2.11 yang diperbaiki** — dua URL dari laporan:
               (1) URL label `/search/label/...` ditolak sebelum diunduh karena jenis
               alamat ketiga memang belum ada; sekarang label dibaca lewat feed JSON
               per-label dengan pagination (feed Yariko: 44 postingan / 2 halaman),
@@ -156,17 +156,28 @@ jobs:
               runtuh jadi satu chapter. (5) Postingan deskripsi novel tidak dihitung
               sebagai chapter.
             * **Diagnostik tautan di preview**: jumlah tautan ditemukan, jumlah yang
-              dikenali sebagai chapter, dan alasan setiap tautan ditolak. Bila belum
-              ada yang bisa dipastikan, daftar tautan yang bisa dipakai ditampilkan
-              dengan kotak centang; novel disimpan setelah **Pakai pilihan ini**.
+              dikenali sebagai chapter, dan alasan setiap tautan ditolak. Setiap alasan
+              menyebut apa tautan itu sebenarnya — "tautan gambar, bukan chapter",
+              "potongan judul, sudah digabung ke tautan sebelumnya", "milik novel lain",
+              "halaman label/feed". Bila belum ada yang bisa dipastikan, daftar tautan
+              yang bisa dipakai ditampilkan dengan kotak centang; novel disimpan
+              setelah **Pakai pilihan ini**, dan tautan yang sudah ditolak tidak pernah
+              muncul di daftar itu.
             * **Hasil parse terukur**: artikel Yariko 43 chapter / 3 volume; label
               Yariko 42 chapter / 3 volume; Magical★Explorer tetap 141 chapter /
               14 volume; Monogatari tetap 111 chapter / 7 volume.
-            * **Uji mutasi 2.10**: kelima bug di atas dikembalikan satu per satu dan
-              setiap kali ada tes bernama yang gagal (`everyRejectedLinkCarriesItsReason`,
-              `aLabelCatalogueComesFromThePagedFeed`,
-              `aLinkThatWasNotOnThePageCannotBeSelected`, tiga variasi,
-              `aFeedPostThatDescribesTheNovelIsNotAChapter`).
+            * **Dua cacat lagi yang hanya muncul saat diuji dengan HTML asli**: tiga
+              pembungkus gambar di halaman laporan dilaporkan dengan alasan generik
+              "sendiri di grup volume" padahal itu tautan gambar, dan sumber memecah
+              "Interlude 2" menjadi `<a>Interlude </a><a>2</a>` sehingga chapter itu
+              berlabel "Interlude" tanpa angka. Keduanya sekarang dinamai benar, dan
+              angka Romawi/arab dinormalkan supaya `Interlude II` dan `Interlude 2`
+              adalah chapter yang sama.
+            * **Uji mutasi 2.11**: sepuluh mutasi dijalankan satu per satu dan setiap
+              kali ada tes bernama yang gagal. Satu mutasi sempat lolos — cabang
+              "potongan judul" tidak pernah dieksekusi karena label di halaman laporan
+              sudah digabung lebih dulu — sehingga tes dengan angka liar yang berdiri
+              sendiri ditambahkan untuk menutup celah itu.
             * Seluruh fitur 2.8 dipertahankan: download offline per chapter/volume,
               WorkManager, penulisan atomik, halaman Unduhan dengan status
               Belum/Mengunduh/Tersimpan/Gagal, header dengan WindowInsets yang

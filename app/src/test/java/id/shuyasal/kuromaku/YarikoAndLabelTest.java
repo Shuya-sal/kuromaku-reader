@@ -566,6 +566,116 @@ public class YarikoAndLabelTest {
         assertFalse(result.needsConfirmation);
     }
 
+    // --------------------------------------- diagnostics must name the real reason
+
+    /**
+     * The four rejected links on Yariko's page each get their own reason.
+     *
+     * <p>Three of them are {@code <a>} wrappers around the illustration bitmaps — the
+     * count has to include them, because they are anchors on the page, but calling a
+     * picture "sendiri di grup volume" told the user nothing. The fourth is the numeral
+     * "2" that the source tore out of "Interlude 2" and made into its own anchor.
+     */
+    @Test
+    public void everyRejectionSaysWhatTheLinkActuallyIs() throws Exception {
+        NovelDiscovery.Result result = NovelDiscovery.parse(fixture("yariko_toc.html"), YARIKO_TOC);
+        List<NovelDiscovery.Candidate> rejected = result.rejected();
+        assertEquals("4 tautan ditolak", 4, rejected.size());
+
+        int images = 0;
+        int fragments = 0;
+        for (NovelDiscovery.Candidate candidate : rejected) {
+            assertFalse("tautan yang ditolak tidak boleh bisa dipilih: " + candidate.url,
+                    candidate.selectable);
+            if (candidate.reason.contains("tautan gambar")) images++;
+            else if (candidate.reason.contains("potongan judul")) fragments++;
+            else fail("alasan tidak spesifik untuk " + candidate.url + ": " + candidate.reason);
+        }
+        assertEquals("tiga pembungkus gambar", 3, images);
+        assertEquals("satu potongan judul", 1, fragments);
+    }
+
+    /**
+     * "Interlude" + "2" written as two anchors is one chapter, not a chapter and a stray.
+     *
+     * <p>The source does this in Volume 1 only: {@code <a>Interlude </a><a>2</a>}, the
+     * numeral pointing at a different post. Left alone, the chapter was labelled
+     * "Interlude" and "2" became a pickable candidate. The numeral is folded back into
+     * the label and normalised, so all three volumes read "Interlude I/II/III".
+     */
+    @Test
+    public void aNumeralTornIntoItsOwnAnchorIsPutBack() throws Exception {
+        NovelDiscovery.Result result = NovelDiscovery.parse(fixture("yariko_toc.html"), YARIKO_TOC);
+
+        List<String> volumeOne = new ArrayList<>();
+        for (Chapter chapter : volume(result.volumes, 1).chapters) volumeOne.add(chapter.label);
+        assertTrue("Volume 1 harus punya Interlude II: " + volumeOne,
+                volumeOne.contains("Interlude II"));
+        // After the merge there is no bare "Interlude" left in Volume 1: the numeral
+        // was folded in. Before the fix this count was 1 and Volume 1 read "Interlude".
+        assertEquals("tidak boleh ada label tanpa angka", 0,
+                countOf(volumeOne, "Interlude"));
+
+        // The numeral's own URL is not a chapter of its own.
+        for (Volume v : result.volumes) {
+            for (Chapter chapter : v.chapters) {
+                assertNotEquals("potongan judul tidak boleh jadi chapter", "2", chapter.label);
+            }
+        }
+        assertEquals("43 chapter tetap 43", 43, result.chapterCount());
+        for (Volume v : result.volumes) {
+            List<String> labels = new ArrayList<>();
+            for (Chapter chapter : v.chapters) labels.add(chapter.label);
+            assertEquals("Interlude I", 1, countOf(labels, "Interlude I"));
+            assertEquals("Interlude II", 1, countOf(labels, "Interlude II"));
+            assertEquals("Interlude III", 1, countOf(labels, "Interlude III"));
+        }
+    }
+
+    /**
+     * A bare numeral that is <em>not</em> attached to a label still gets its own reason.
+     *
+     * <p>The Yariko page covers the merge case: {@code Interlude} + {@code 2} next to
+     * each other. This covers the other half — a stray "2" somewhere else in the list,
+     * which cannot be merged into anything, must be named as a fragment instead of
+     * falling through to a vague rejection. Without this, deleting that branch left
+     * every test green.
+     */
+    @Test
+    public void aStrayNumeralIsNamedAsAFragment() throws Exception {
+        String html = "<html><body><div class='post-body entry-content'>"
+                + "<p><b>Author :</b> Uji</p>"
+                + "<h3>Volume 1</h3>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_1.html'>Chapter 1</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_2.html'>Chapter 2</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_3.html'>Chapter 3</a></p>"
+                + "<p>Catatan penerjemah soal jadwal rilis mingguan yang berubah.</p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_9.html'>2</a></p>"
+                + "</div></body></html>";
+
+        NovelDiscovery.Result result = NovelDiscovery.parse(html,
+                "https://kaoritranslation.blogspot.com/2026/02/novel-x.html");
+
+        assertEquals("3 chapter", 3, result.chapterCount());
+        NovelDiscovery.Candidate stray = null;
+        for (NovelDiscovery.Candidate candidate : result.rejected()) {
+            if ("2".equals(candidate.text)) stray = candidate;
+        }
+        assertNotNull("angka liar harus muncul di diagnostik", stray);
+        assertTrue("alasan harus menyebut potongan judul: " + stray.reason,
+                stray.reason.contains("potongan judul"));
+        assertFalse("potongan judul tidak boleh bisa dipilih", stray.selectable);
+    }
+
+    /** Whichever way the source writes the numeral, the label reads the same. */
+    @Test
+    public void anInterludeIsLabelledTheSameFromDigitsOrRoman() {
+        assertEquals("Interlude II", id.shuyasal.kuromaku.parser.ChapterNaming.label("Interlude 2"));
+        assertEquals("Interlude II", id.shuyasal.kuromaku.parser.ChapterNaming.label("Interlude II"));
+        assertEquals("Interlude I", id.shuyasal.kuromaku.parser.ChapterNaming.label("interlude 1"));
+        assertEquals("Interlude III", id.shuyasal.kuromaku.parser.ChapterNaming.label("Interlude 3"));
+    }
+
     // -------------------------------------------- a label feed is not a chapter list
 
     /**
@@ -737,6 +847,12 @@ public class YarikoAndLabelTest {
         } catch (Exception error) {
             throw new IllegalStateException(error);
         }
+    }
+
+    private static int countOf(List<String> values, String wanted) {
+        int found = 0;
+        for (String value : values) if (wanted.equals(value)) found++;
+        return found;
     }
 
     private static String warningsJoin(NovelDiscovery.Result result) {
