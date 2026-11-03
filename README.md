@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.11
+# Kuromaku Reader 2.12
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -45,6 +45,11 @@ Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
 perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
+
+Versi 2.12 memperbaiki jalur **Muat Ulang** untuk novel yang disimpan lewat URL
+label: jalur itu masih memakai aturan lama, sehingga postingan deskripsi novel
+ikut menjadi chapter di "Volume 0" setelah novel dimuat ulang — daftar yang sama
+dengan hasil tambah, tapi dua jawaban berbeda. Detail di bagian **BUG 8 (2.12)**.
 
 Versi 2.11 memperbaiki **parser Tambah Novel** pada dua kegagalan yang dilaporkan:
 URL Blogger `/search/label/...` ditolak sebelum diunduh, dan artikel katalog
@@ -557,10 +562,10 @@ Cacat yang ditemukan saat menguji dengan HTML asli:
 10. Label interlude kembali memakai angka apa adanya (tanpa normalisasi Romawi) →
     `anInterludeIsLabelledTheSameFromDigitsOrRoman` gagal.
 
-Setelah semua dipulihkan: suite penuh **265 tes, 0 gagal**, penanda `MUTATION` di
+Setelah semua dipulihkan: suite penuh **267 tes, 0 gagal**, penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
-### Batasan yang masih berlaku untuk 2.11
+### Batasan yang masih berlaku untuk 2.12
 
 - Semua pengujian memakai HTML dan feed yang **disimpan sebagai fixture**, ditambah
   satu kali pembacaan jaringan nyata untuk memastikan angkanya. Novel lain dengan
@@ -571,6 +576,63 @@ Setelah semua dipulihkan: suite penuh **265 tes, 0 gagal**, penanda `MUTATION` d
   Untuk cover, tambahkan novel lewat URL artikelnya.
 - Belum diuji di perangkat: panel diagnostik, pemilih tautan, dan kotak centang hanya
   diverifikasi lewat Robolectric.
+
+## BUG 8 (2.12) — Daftar chapter berubah sendiri setelah "Muat Ulang"
+
+Ini bukan keluhan yang dilaporkan Master Lupi; Shuvi menemukannya saat memeriksa
+jalur kode label sesudah 2.11 terbit. Tetap dicatat karena akibatnya membingungkan:
+novel yang **baru ditambahkan** terlihat benar, lalu setelah **Muat Ulang** daftarnya
+bertambah satu chapter palsu.
+
+### Akar masalah: dua jalur, dua aturan
+
+Ada dua fungsi berbeda yang membaca feed label yang sama:
+
+| Jalur | Fungsi | Menyaring postingan deskripsi? |
+| --- | --- | --- |
+| Tambah Novel (preview) | `CatalogLoader.inspectLabel` | Ya (ditambahkan di 2.11) |
+| Muat Ulang (novel tersimpan) | `CatalogLoader.fromLabel` | **Tidak** |
+
+`fromLabel` dibaca lebih dulu, saat menambahkan dukungan label. Penyaringan
+postingan deskripsi ditambahkan belakangan, dan hanya di jalur preview. Jadi:
+
+- Tambah Novel → 42 chapter, 3 volume.
+- Muat Ulang → 44 chapter, dan postingan deskripsi muncul sebagai chapter terakhir
+  di **"Volume 0"** — volume yang tidak pernah ada di sumber.
+
+Selain itu `fromLabel` memanggil `FeedClient.fetchLabel(label)` yang memakai
+`Http.get` langsung, bukan seam `Fetcher`. Akibatnya jalur itu **tidak bisa diuji
+tanpa jaringan** — itulah sebabnya cacat ini tidak tertangkap sebelumnya: tidak ada
+tes yang bisa menjalankannya secara deterministik.
+
+### Perbaikan
+
+1. Penyaringan `LibraryBuilder.isChapterPost` dipindah ke **kedua** jalur. Kalau feed
+   hanya berisi postingan deskripsi, Muat Ulang sekarang **melempar pesan kesalahan**
+   alih-alih menyimpan novel tanpa chapter.
+2. `fromLabel` memakai seam `Fetcher.get()` seperti jalur preview, sehingga bisa
+   diuji tanpa jaringan.
+3. Ringkasan status di layar perpustakaan sekarang **menyebut alasannya**: "1
+   postingan deskripsi novel tidak dihitung sebagai chapter." Sebelumnya `null`,
+   sehingga selisih jumlah terlihat seperti chapter yang hilang tanpa sebab.
+
+### Bukti tes menangkap bug
+
+Dua tes baru, keduanya memakai feed buatan sendiri:
+
+- `reloadingALabelNovelKeepsTheDescriptionOutOfTheChapters` — memuat novel label
+  tersimpan, memastikan 3 chapter (bukan 4), Volume 0 tidak ada, dan ringkasan
+  menyebut postingan deskripsi.
+- `aLabelWithOnlyADescriptionPostIsRefusedOnReload` — label tanpa chapter ditolak
+  dengan pesan, bukan disimpan kosong.
+
+Uji mutasi:
+
+1. Semua entri feed dimasukkan kembali ke daftar chapter → **dua** tes gagal.
+2. Penjelasan "postingan deskripsi tidak dihitung" dihapus dari ringkasan →
+   `reloadingALabelNovelKeepsTheDescriptionOutOfTheChapters` gagal.
+
+Setelah dipulihkan: **267 tes, 0 gagal**, penanda `MUTATION` nol.
 
 ## Perbaikan bug
 
@@ -784,10 +846,10 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **265 pengujian** di 24 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **267 pengujian** di 24 kelas,
 semuanya lulus:
 
-- **YarikoAndLabelTest** (25) — dua kegagalan dari laporan, dibuktikan lewat fixture
+- **YarikoAndLabelTest** (27) — dua kegagalan dari laporan, dibuktikan lewat fixture
   HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
   dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
   label apa pun (tidak di-hardcode); katalog label dibaca dari **dua halaman feed**
@@ -1090,7 +1152,7 @@ gradle testDebugUnitTest assembleDebug
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
 
-### Batasan parser generik (2.11) — diukur, bukan diperkirakan
+### Batasan parser generik (2.12) — diukur, bukan diperkirakan
 
 Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
 diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan

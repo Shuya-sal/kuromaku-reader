@@ -134,19 +134,68 @@ public final class CatalogLoader {
         } catch (NovelUrl.Invalid error) {
             throw new IOException(error.getMessage(), error);
         }
-        FeedClient.Result feed = FeedClient.fetchLabel(label);
+        // Goes through the Fetcher seam, not Http directly: the reload path has to be
+        // exercisable without a network, exactly like the add-novel preview is.
+        FeedClient.Result feed = FeedClient.fetchLabel(label, url -> {
+            try {
+                return Fetcher.get().page(url);
+            } catch (IOException error) {
+                throw error;
+            } catch (Exception error) {
+                throw new IOException(error.getMessage() == null
+                        ? error.getClass().getSimpleName() : error.getMessage(), error);
+            }
+        });
         if (feed.entries.isEmpty()) {
             throw new IOException("Label “" + label + "” tidak memiliki postingan. "
                     + "Pastikan nama labelnya benar dan masih dipakai di blog sumber.");
         }
-        Catalog catalog = LibraryBuilder.build(novel.id, feed.entries);
+        // A label feed lists every post carrying the label, and the series
+        // description post carries it too. It is not a chapter. The add-novel path
+        // already filtered it; this path did not, so a reload quietly turned the
+        // description into a chapter at the end of Volume 0.
+        List<FeedEntry> chapterEntries = new ArrayList<>();
+        int descriptionPosts = 0;
+        for (FeedEntry entry : feed.entries) {
+            if (LibraryBuilder.isChapterPost(entry.title)) chapterEntries.add(entry);
+            else descriptionPosts++;
+        }
+        if (chapterEntries.isEmpty()) {
+            throw new IOException("Label “" + label + "” hanya berisi " + descriptionPosts
+                    + " postingan deskripsi dan tidak satu pun chapter. Pakai URL artikel novelnya.");
+        }
+        Catalog catalog = LibraryBuilder.build(novel.id, chapterEntries);
 
         List<String> warnings = new ArrayList<>();
-        warnings.add(feed.entries.size() + " chapter diambil dari feed label “" + label + "”.");
+        warnings.add(chapterEntries.size() + " chapter diambil dari feed label “" + label + "”.");
+        if (descriptionPosts > 0) {
+            warnings.add(descriptionPosts + " postingan deskripsi novel tidak dihitung sebagai "
+                    + "chapter, karena isinya bukan bagian dari cerita.");
+        }
         if (feed.pagesRead > 1) {
             warnings.add("Feed dibaca " + feed.pagesRead + " halaman; daftar chapter lengkap.");
         }
-        String extra = feed.isComplete() ? null : feed.warning;
+        // What the user is told on the library screen. A complete feed used to leave
+        // this null, so a reload that dropped the description post said nothing at
+        // all and looked like a chapter had gone missing.
+        StringBuilder extraText = new StringBuilder();
+        int catalogued = 0;
+        for (Volume volume : catalog.volumes) catalogued += volume.chapterCount();
+        int merged = chapterEntries.size() - catalogued;
+        if (descriptionPosts > 0) {
+            extraText.append(descriptionPosts).append(" postingan deskripsi novel tidak "
+                    + "dihitung sebagai chapter.");
+        }
+        if (merged > 0) {
+            if (extraText.length() > 0) extraText.append(' ');
+            extraText.append(merged).append(" judul chapter terbit lebih dari sekali dan "
+                    + "digabung.");
+        }
+        if (feed.warning != null) {
+            if (extraText.length() > 0) extraText.append(' ');
+            extraText.append(feed.warning);
+        }
+        String extra = extraText.length() == 0 ? null : extraText.toString();
         if (feed.warning != null) warnings.add(feed.warning);
 
         NovelDiscovery.Result page = null;

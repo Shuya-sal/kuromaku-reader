@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.11 (APK)
+          name: Kuromaku Reader 2.12 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.11** (versionCode 31)
+            * Versi: **2.12** (versionCode 32)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -129,7 +129,7 @@ jobs:
               novel berdasarkan id punya fallback "novel pertama", sehingga novel
               yang baru dihapus bisa muncul kembali sebagai novel lain sambil
               membawa progres dan unduhannya.
-            * **265 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
+            * **267 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
               ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
               URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
               berformat berbeda (entry-content, heading h4, ordered list, label
@@ -141,6 +141,18 @@ jobs:
             * Uji mutasi: lima bug di atas dikembalikan satu per satu dan setiap
               kali ada tes yang gagal — tes ini terbukti menangkap bug, bukan
               sekadar hijau.
+            * **Bug 2.12 yang diperbaiki** — daftar chapter berubah setelah Muat
+              Ulang. Novel yang disimpan lewat URL label dibaca oleh dua fungsi
+              berbeda: jalur Tambah Novel menyaring postingan deskripsi novel,
+              jalur Muat Ulang tidak. Hasilnya, novel yang baru ditambahkan terlihat
+              benar (42 chapter) lalu bertambah satu chapter palsu di "Volume 0"
+              setelah dimuat ulang. Jalur Muat Ulang juga memakai `Http` langsung
+              alih-alih seam `Fetcher`, sehingga tidak bisa diuji tanpa jaringan —
+              itulah sebabnya cacat ini lolos. Sekarang kedua jalur memakai
+              penyaringan yang sama, ringkasan status menyebut alasan selisih
+              jumlahnya, dan label yang hanya berisi postingan deskripsi ditolak
+              dengan pesan, bukan disimpan tanpa chapter. Dua mutasi dijalankan dan
+              keduanya tertangkap.
             * **Bug 2.11 yang diperbaiki** — dua URL dari laporan:
               (1) URL label `/search/label/...` ditolak sebelum diunduh karena jenis
               alamat ketiga memang belum ada; sekarang label dibaca lewat feed JSON

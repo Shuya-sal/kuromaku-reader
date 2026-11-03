@@ -20,7 +20,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
+import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
+import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Volume;
 import id.shuyasal.kuromaku.net.CatalogLoader;
 import id.shuyasal.kuromaku.net.FeedClient;
@@ -846,6 +848,107 @@ public class YarikoAndLabelTest {
             return root.toString();
         } catch (Exception error) {
             throw new IllegalStateException(error);
+        }
+    }
+
+    // --------------------------------------------------- reload of a stored label
+
+    /**
+     * Reloading a novel that was saved by label address must give the same list the
+     * preview gave.
+     *
+     * <p>It did not. The preview filtered the series description post out of the
+     * feed, and the reload path — a different function, written earlier — built the
+     * catalogue straight from every feed entry. So the novel looked right when it
+     * was added and grew a phantom chapter at the end of Volume 0 after a reload.
+     * Same address, same feed, two answers.
+     */
+    @Test
+    public void reloadingALabelNovelKeepsTheDescriptionOutOfTheChapters() throws Exception {
+        final String labelHtml = fixture("label_yarikonde.html");
+        final List<String> titles = new ArrayList<>();
+        titles.add("Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita");
+        titles.add("Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 1 Bab 1");
+        titles.add("Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 1 Bab 2");
+        titles.add("Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 2 Bab 1");
+
+        Fetcher.use(new Fetcher.Source() {
+            @Override
+            public String page(String url) throws Exception {
+                if (url.contains("/feeds/posts/summary/-/")) {
+                    return feedPageRaw(url, titles);
+                }
+                return labelHtml;
+            }
+
+            @Override
+            public byte[] image(String url) {
+                return new byte[0];
+            }
+        });
+
+        String address = NovelUrl.normalize(YARIKO_LABEL);
+        Novel stored = new Novel("yariko", "Yarikonde", "", "", "", "", "", "",
+                "Kaori Translation", "", address, "", 0.70f, new String[0], 1,
+                Novel.CATALOG_DISCOVERED, "", "");
+
+        CatalogLoader.Loaded loaded = CatalogLoader.load(stored);
+
+        assertEquals("tiga chapter sungguhan, bukan empat", 3, loaded.catalog.size());
+        assertEquals("Volume 0 tidak boleh ada", 0,
+                loaded.catalog.volumes.isEmpty() ? 0
+                        : volumeOrNull(loaded.catalog.volumes, 0) == null ? 0
+                        : volumeOrNull(loaded.catalog.volumes, 0).chapterCount());
+        assertEquals("Volume 1", 2, volume(loaded.catalog.volumes, 1).chapterCount());
+        assertEquals("Volume 2", 1, volume(loaded.catalog.volumes, 2).chapterCount());
+
+        // The user is told why the count differs from the raw feed size.
+        assertTrue("harus ada penjelasan postingan deskripsi: " + loaded.warning,
+                loaded.warning != null && loaded.warning.contains("deskripsi"));
+    }
+
+    /** Volume 0 is the absence of a volume number, not a volume. */
+    private static Volume volumeOrNull(List<Volume> volumes, int number) {
+        for (Volume volume : volumes) if (volume.number == number) return volume;
+        return null;
+    }
+
+    /**
+     * A label holding only the description post is refused, not saved as a novel
+     * with one chapter.
+     */
+    @Test
+    public void aLabelWithOnlyADescriptionPostIsRefusedOnReload() throws Exception {
+        final String labelHtml = fixture("label_yarikonde.html");
+        final List<String> titles = new ArrayList<>();
+        titles.add("Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita");
+
+        Fetcher.use(new Fetcher.Source() {
+            @Override
+            public String page(String url) throws Exception {
+                if (url.contains("/feeds/posts/summary/-/")) {
+                    return feedPageRaw(url, titles);
+                }
+                return labelHtml;
+            }
+
+            @Override
+            public byte[] image(String url) {
+                return new byte[0];
+            }
+        });
+
+        String address = NovelUrl.normalize(YARIKO_LABEL);
+        Novel stored = new Novel("yariko", "Yarikonde", "", "", "", "", "", "",
+                "Kaori Translation", "", address, "", 0.70f, new String[0], 1,
+                Novel.CATALOG_DISCOVERED, "", "");
+
+        try {
+            CatalogLoader.load(stored);
+            fail("label tanpa chapter harus ditolak, bukan disimpan kosong");
+        } catch (java.io.IOException expected) {
+            assertTrue("pesan harus menyebut chapter: " + expected.getMessage(),
+                    expected.getMessage().toLowerCase().contains("chapter"));
         }
     }
 
