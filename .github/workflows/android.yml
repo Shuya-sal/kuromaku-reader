@@ -85,10 +85,30 @@ jobs:
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
           OUT="kuromaku-reader-${VERSION}-source.zip"
           rm -f "$OUT"
-          zip -qr "$OUT" app/src app/build.gradle.kts app/proguard-rules.pro \
-            build.gradle.kts settings.gradle.kts gradle.properties README.md .github \
-            -x "*/build/*"
+          # This list is the contract with whoever builds from the zip. `zip` skips
+          # a named path that does not exist and still exits 0, so a stale entry
+          # here survives silently -- .gitignore was missing from the zip for
+          # several releases and nothing ever failed, because the old list also
+          # named app/proguard-rules.pro, a file this repo does not have.
+          # Keep only paths that exist, and verify each one landed in the archive.
+          # tools/ stays out on purpose: tools/icon_master.png alone is 2 MB, which
+          # would grow the source zip from 1.4 MB to 3.3 MB for a dev-only asset.
+          FILES="app/src app/build.gradle.kts build.gradle.kts settings.gradle.kts
+                 gradle.properties .gitignore README.md .github"
+          for f in $FILES; do
+            if [ ! -e "$f" ]; then
+              echo "::error::berkas sumber tidak ada: $f"
+              exit 1
+            fi
+          done
+          zip -qr "$OUT" $FILES -x "*/build/*"
           unzip -t "$OUT" > /dev/null
+          for f in $FILES; do
+            if ! unzip -l "$OUT" | grep -qE "[ /]$f(/|\$)"; then
+              echo "::error::$f tidak masuk ke $OUT"
+              exit 1
+            fi
+          done
           echo "sumber: $OUT ($(stat -c%s "$OUT") byte, $(unzip -l "$OUT" | grep -c '\.java$') berkas Java)"
 
       - name: Render release notes
