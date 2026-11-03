@@ -40,24 +40,54 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
       - name: Unit tests (feed, parser, images, reader scroll, library page, header & motion)
-        run: gradle --no-daemon --stacktrace testDebugUnitTest
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace testDebugUnitTest 2>&1 | tee gradle-test.log
 
       - name: Name every failing test
         if: failure()
         run: |
-          echo "## Failing tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Why the tests step failed" >> "$GITHUB_STEP_SUMMARY"
           python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-          import glob, re
+          import glob, re, os
+
+          paths = sorted(glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"))
+          cases = 0
           rows = []
-          for path in glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml"):
+          for path in paths:
               text = open(path, encoding="utf-8", errors="replace").read()
               for m in re.finditer(r'<testcase name="([^"]+)" classname="([^"]+)"(.*?)(?:/>|</testcase>)',
                                    text, re.S):
+                  cases += 1
                   if "<failure" in m.group(3) or "<error" in m.group(3):
                       message = re.search(r'message="([^"]{0,200})', m.group(3))
                       rows.append(f"- `{m.group(2)}.{m.group(1)}` — "
                                   f"{(message.group(1) if message else 'failed').replace('&quot;', chr(34))}")
-          print("\n".join(rows) if rows else "No failing test case was recorded.")
+
+          print(f"- berkas hasil tes: {len(paths)}, testcase tercatat: {cases}")
+
+          # A failing step with no failing testcase is NOT "all tests passed".
+          # It means the run stopped before the suite finished -- compilation,
+          # a missing dependency, or the daemon dying. Saying "no failing test
+          # was recorded" here once hid exactly that on run 46, whose test step
+          # died after 30s against 60s on a passing run.
+          if not paths:
+              print("- **Tidak ada berkas hasil tes sama sekali**: build berhenti "
+                    "sebelum suite berjalan (kompilasi/gradle), bukan tes yang gagal.")
+          elif not rows:
+              print("- **Tidak ada testcase gagal**, tetapi langkah tetap gagal: "
+                    "kegagalannya di luar tes (lihat ekor log di bawah).")
+          else:
+              print("\n".join(rows))
+
+          log = "gradle-test.log"
+          if os.path.exists(log):
+              tail = open(log, encoding="utf-8", errors="replace").read().splitlines()[-40:]
+              print("\n<details><summary>ekor log gradle</summary>\n")
+              print("```")
+              print("\n".join(tail))
+              print("```")
+              print("</details>")
           PY
 
       - name: Upload test report
@@ -65,7 +95,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-report
-          path: app/build/reports/tests/testDebugUnitTest
+          # The gradle log is included because run 46's test step failed with no
+          # failing testcase recorded, and reading the log needs repo admin rights.
+          # An artifact outlives that restriction and holds the actual reason.
+          path: |
+            app/build/reports/tests/testDebugUnitTest
+            gradle-test.log
           if-no-files-found: ignore
 
       - name: Build debug APK
