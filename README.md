@@ -942,9 +942,17 @@ sebelum/sesudah, dan **15/15 tertangkap**:
   APK `versionCode='38'` / `2.18`, 5.547.084 byte.
 - Dokumen `2.18` — commit `516bb4b` (run `41624149137`) dan `e0d5d40`
   (run `41624759027`), keduanya success.
-- `2.18.1` — commit yang memuat tes `RingProgressMotionTest` (5 tes) dan mutasi
-  13–15; hash-nya tidak ditulis di sini karena berkas ini ikut di commit itu sendiri. Lokal **306 tes / 29 kelas / 0 gagal**, APK **5.547.164 byte**,
-  `aapt2 dump badging` → `versionCode='39' versionName='2.18.1'` (exit 0).
+- `2.18.1` — tes `RingProgressMotionTest` (5 tes) dan mutasi 13–15.
+  Commit `fc5b9c5` membuat Actions run `41627748298` **gagal** padahal clone bersih
+  lulus 3× lokal: tes animasi mengharuskan seluruh 180 ms habis dalam satu
+  `ShadowLooper.idle`, yang tidak dijamin runner lain. Commit `8499773` mengganti
+  itu dengan 40 langkah 20 ms sampai nilai mengendap, sekaligus menambahkan langkah
+  CI yang **menulis nama setiap tes gagal ke job summary** — sebelumnya log CI butuh
+  token, jadi kegagalan hanya terbaca "exit code 1".
+- `2.18.1` final: run **`41631200544`** (`8499773`) `completed success`, semua 13
+  langkah hijau termasuk Publish APK release. Lokal **306 tes / 29 kelas / 0 gagal**.
+  APK rilis **5.547.144 byte**, `aapt2 dump badging` →
+  `versionCode='39' versionName='2.18.1'` (exit 0).
 - **`md5` APK tidak dicatat sebagai patokan.** Setiap build ulang menghasilkan byte
   berbeda pada ukuran yang sama, jadi `md5` hanya berguna untuk membandingkan satu
   unduhan dengan unduhan lain **dari build yang sama**. Yang menentukan versi adalah
