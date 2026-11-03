@@ -74,12 +74,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.7 (APK)
+          name: Kuromaku Reader 2.8 (APK)
           body: |
             Pembaca native untuk dua novel dari Kaori Translation:
             *Monogatari no Kuromaku* dan *Magical★Explorer*.
 
-            * Versi: **2.7** (versionCode 27)
+            * Versi: **2.8** (versionCode 28)
             * **Download offline**: chapter dan seluruh volume bisa diunduh dan
               dibaca tanpa internet, termasuk semua ilustrasi. Teks disimpan
               terstruktur (JSON dengan urutan blok dan posisi gambar) dan setiap
@@ -115,10 +115,37 @@ jobs:
             * Pembaruan katalog dari Kaori Translation tetap berjalan: unduhan
               offline tidak menghalangi deteksi chapter baru, dan aplikasi tidak
               mengunduh ulang otomatis saat dibuka.
-            * 185 unit test lulus (37 di antaranya khusus offline), termasuk
-              unduhan ulang tanpa duplikasi, resume setelah batal, penulisan
-              atomik, data dua novel tidak tercampur, hapus unduhan tidak
-              menghapus progres, dan pembacaan offline tanpa satu pun request.
+            * **Perbaikan bug halaman blank**: menekan ikon Unduhan dulu bisa
+              meninggalkan toolbar hidup dengan seluruh isi di bawahnya hilang.
+              Akarnya dua: (1) layar mengosongkan kontennya lebih dulu lalu baru
+              membangun halaman, sehingga exception apa pun saat membangun —
+              index unduhan rusak, status chapter yang gagal dibaca — menyisakan
+              layar kosong tanpa pesan; (2) perubahan status unduhan dikirim
+              langsung dari thread worker, jadi activity membangun ulang view di
+              luar main thread dan berhenti setengah jalan. Sekarang halaman
+              dibangun lengkap lebih dulu baru ditukar, kegagalan menampilkan
+              pesan + tombol Coba lagi (bukan layar kosong), dan semua notifikasi
+              status selalu dikirim di main thread.
+            * **Halaman Unduhan selalu berisi**: keadaan kosong menampilkan ikon
+              unduhan, "Belum ada chapter yang diunduh", keterangan "Pilih chapter
+              atau volume untuk dibaca secara offline", dan tombol **Lihat
+              Chapter**. Saat berjalan tampil judul novel + volume, "x dari y
+              chapter selesai", progress bar, status chapter yang sedang diunduh,
+              dan **Batalkan**. Saat gagal tampil alasannya dan **Coba Lagi**.
+            * **Navigasi Unduhan benar**: header berjudul "Unduhan", tombol Kembali
+              dan Back Android kembali ke **Detail Novel**, dan halaman detail
+              kembali seperti semula — cover, metadata, sinopsis, daftar volume,
+              serta posisi gulirnya tetap.
+            * **Konfirmasi sebelum mengunduh banyak chapter**: "Download Semua"
+              pada volume menyebut berapa chapter yang akan diunduh dan berapa
+              yang sudah tersimpan sebelum mulai. Download chapter tunggal dan
+              indikator status per chapter tetap seperti sebelumnya.
+            * 207 unit test lulus (23 di antaranya khusus navigasi dan status
+              halaman Unduhan), termasuk unduhan ulang tanpa duplikasi, resume
+              setelah batal, penulisan atomik, data dua novel tidak tercampur,
+              hapus unduhan tidak menghapus progres, pembacaan offline tanpa satu
+              pun request, notifikasi status di main thread, dan layar tidak
+              pernah kosong meski index unduhan rusak.
             * Seluruh fitur 2.6 dipertahankan: header dengan WindowInsets yang
               benar, tombol Kembali 48 dp, animasi 180–250 ms, dua novel,
               cover per volume, tema, ukuran font, dan posisi gulir.

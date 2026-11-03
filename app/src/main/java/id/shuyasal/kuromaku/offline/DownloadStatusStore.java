@@ -1,5 +1,9 @@
 package id.shuyasal.kuromaku.offline;
 
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,6 +41,11 @@ public final class DownloadStatusStore {
 
     /** Progress of a running volume job: finished chapters and the total. */
     private static final Map<String, int[]> PROGRESS = new LinkedHashMap<>();
+
+    private static final String TAG = "KuromakuDownloads";
+
+    /** Every listener is delivered here, never on the worker's thread. */
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     private DownloadStatusStore() {
     }
@@ -108,12 +117,37 @@ public final class DownloadStatusStore {
         LISTENERS.remove(listener);
     }
 
+    /**
+     * Delivers a change to every listener on the main thread.
+     *
+     * <p>The worker updates state from its own thread. Calling listeners straight
+     * from there made the activity rebuild its page off the main thread: view
+     * work threw, the page stayed half-built behind a live toolbar, and the user
+     * saw a blank screen. When the change already happens on the main thread the
+     * delivery stays synchronous, so nothing about ordering changes for callers.
+     */
     private static void notifyListeners() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            deliver();
+            return;
+        }
+        MAIN.post(DownloadStatusStore::deliver);
+    }
+
+    private static void deliver() {
         List<Listener> copy;
         synchronized (DownloadStatusStore.class) {
             copy = new ArrayList<>(LISTENERS);
         }
-        for (Listener listener : copy) listener.onDownloadStateChanged();
+        for (Listener listener : copy) {
+            try {
+                listener.onDownloadStateChanged();
+            } catch (RuntimeException error) {
+                // One screen failing to repaint must not stop the others, and must
+                // never surface as a blank page with no trace.
+                Log.e(TAG, "listener unduhan gagal", error);
+            }
+        }
     }
 
     /** Drops every transient state; used by tests and on a full reset. */

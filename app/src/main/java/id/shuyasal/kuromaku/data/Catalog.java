@@ -67,6 +67,14 @@ public final class Catalog {
         return null;
     }
 
+    /** Volume with this number, or null when the catalogue has no such volume. */
+    public Volume volume(int number) {
+        for (Volume volume : volumes) {
+            if (volume.number == number) return volume;
+        }
+        return null;
+    }
+
     /**
      * Attaches verified per-volume covers. A volume with no entry in the cover
      * table is left uncovered on purpose: borrowing another volume's artwork

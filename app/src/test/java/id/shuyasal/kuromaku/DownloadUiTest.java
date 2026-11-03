@@ -438,14 +438,23 @@ public class DownloadUiTest {
         LinearLayout content = page.build();
 
         View empty = content.findViewWithTag("downloads_empty");
-        assertNotNull("keadaan kosong harus dijelaskan", empty);
-        // The summary states the fact, the empty block explains how to get content.
+        assertNotNull("keadaan kosong harus ada", empty);
+        // The summary states the fact; the empty block carries the icon, the
+        // explanation and the way back to the chapters.
         TextView summary = (TextView) content.findViewWithTag("downloads_summary");
         assertTrue("ringkasan harus menyatakan belum ada unduhan, dapat " + summary.getText(),
-                summary.getText().toString().contains("Belum ada"));
-        assertTrue("keadaan kosong harus menjelaskan cara mengunduh, dapat "
-                        + ((TextView) empty).getText(),
-                ((TextView) empty).getText().toString().contains("halaman detail novel"));
+                summary.getText().toString().contains("Belum ada chapter yang diunduh"));
+        assertNotNull("ikon unduhan harus ada pada keadaan kosong",
+                content.findViewWithTag("downloads_empty_icon"));
+        assertNotNull("tombol Lihat Chapter harus ada",
+                content.findViewWithTag("downloads_browse"));
+
+        StringBuilder text = new StringBuilder();
+        for (TextView view : findAll(empty, TextView.class)) {
+            text.append(view.getText()).append('\n');
+        }
+        assertTrue("keadaan kosong harus menjelaskan pilihannya, dapat: " + text,
+                text.toString().contains("Pilih chapter atau volume"));
         assertNull("tidak boleh ada blok novel kosong",
                 content.findViewWithTag("downloads_novel:" + NOVEL));
     }

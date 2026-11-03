@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.7
+# Kuromaku Reader 2.8
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -158,6 +158,10 @@ menyentuh progres membaca. Detail di bagian **Fitur Download Offline (2.7)**.
 - Crawl yang tidak lengkap tetap menampilkan daftar, dengan peringatan "Hanya X dari Y postingan".
 - Aplikasi **tidak** pernah diam-diam beralih menampilkan website penuh.
 
+Versi 2.8 memperbaiki **BUG halaman blank**: menekan ikon Unduhan bisa
+meninggalkan toolbar hidup dengan seluruh isi di bawahnya hilang. Akarnya bukan
+data kosong, melainkan urutan render dan thread. Detail di bagian **BUG 5 (2.8)**.
+
 ## Fitur Download Offline (2.7)
 
 Pengguna dapat mengunduh chapter satu per satu atau seluruh volume, lalu membaca
@@ -226,6 +230,56 @@ offline/
   jelas beserta tombol coba lagi dan tautan ke sumber asli — bukan layar kosong.
 - Ukuran font, spasi baris, tema, scrolling, posisi gulir, dan progres membaca
   tetap memakai mekanisme 2.4–2.6 tanpa perubahan.
+
+### BUG 5 (2.8) — Halaman blank setelah menekan ikon Download
+
+**Gejala.** Di halaman Detail Novel, menekan ikon download di header
+menghilangkan seluruh isi di bawah header. Header masih terlihat, tetapi tidak ada
+daftar unduhan, indikator loading, pesan error, maupun konten novel.
+
+**Akar masalah.** Dua cacat terpisah, dan keduanya harus diperbaiki:
+
+1. **Layar dikosongkan sebelum halaman dibangun.** `render()` memanggil
+   `content.removeAllViews()` lebih dulu, baru kemudian membangun halaman baru.
+   Kalau pembangunan halaman melempar exception — index unduhan rusak, satu status
+   chapter gagal dibaca, katalog belum siap — layar sudah kosong lebih dulu dan
+   exception itu tidak punya jalan untuk menampilkan apa pun. Hasilnya persis
+   keluhan: toolbar hidup, isi hilang, tanpa pesan.
+2. **Perubahan status dikirim dari thread worker.** `DownloadStatusStore`
+   memanggil semua listener tepat di thread pemanggil, dan `DownloadWorker`
+   memanggilnya dari thread latar. Listener di activity kemudian membangun ulang
+   view dari thread non-main — pekerjaan view gagal, halaman berhenti setengah
+   jadi, dan sisanya kosong. Di Robolectric ini tidak terlihat karena semua
+   dijadwalkan di main looper.
+
+**Perbaikan.**
+
+- `render()` sekarang **membangun halaman lebih dulu**, lalu menukarnya. Kalau
+  pembangunan gagal, yang ditampilkan adalah `page_failure`: judul
+  "Halaman Unduhan gagal dimuat", alasannya, dan tombol **Coba lagi** berukuran
+  48 dp — bukan layar kosong. Halaman lama tetap terlihat sampai halaman baru siap.
+- `DownloadStatusStore.notifyListeners()` mengirim ke **main thread**
+  (`Handler(Looper.getMainLooper())`). Kalau perubahan memang terjadi di main
+  thread, pengiriman tetap sinkron sehingga urutan tidak berubah. Setiap listener
+  dibungkus `try/catch` dan dicatat ke log, jadi satu layar yang gagal repaint
+  tidak menghentikan yang lain.
+- **Navigasi diperbaiki**: membuka Unduhan tidak lagi mengosongkan
+  `selectedNovel`, sebab novel yang terbuka itulah tujuan tombol Kembali dan
+  "Lihat Chapter". Posisi gulir halaman detail disimpan di `detailScrollY` dan
+  dipulihkan saat kembali.
+
+**Bukti tes menangkap bug.** Tiga bug dikembalikan sementara:
+
+1. `content.removeAllViews()` dipindah ke depan dan guard dihapus;
+2. listener dipanggil inline lagi (bukan lewat main thread);
+3. keadaan kosong ditampilkan walau ada unduhan berjalan.
+
+Hasil: **3 tes gagal**, yaitu `aPageBuildFailureNeverLeavesABlankScreen`,
+`statusChangesAreDeliveredOnTheMainThread`, dan `activityShowsRunningProgress`.
+Mutasi pertama awalnya lolos karena tidak ada jalur yang benar-benar melempar
+exception saat membangun halaman; tes ditambah dengan seam `MainActivity.pageFault`
+yang sengaja melempar, lalu mutasi yang sama tertangkap. Setelah dipulihkan,
+**207/207** lulus.
 
 ## Perbaikan bug
 
@@ -434,12 +488,12 @@ InsetStabilityTest > readerToolbarKeepsItsInsetAfterThemeChange FAILED
 13 tests completed, 11 failed
 ```
 
-Setelah perbaikan dipulihkan, seluruh **185/185** tes lulus dan suite dijalankan
+Setelah perbaikan dipulihkan, seluruh **207/207** tes lulus dan suite dijalankan
 tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **185 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **207 pengujian**, semuanya lulus:
 
 - **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
   `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
@@ -574,6 +628,27 @@ Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
   sebelumnya; halaman **Unduhan** menampilkan novel, volume, jumlah chapter,
   ukuran penyimpanan, tombol hapus chapter & volume 48 dp, keadaan kosong yang
   menjelaskan cara mengunduh, dan kembali ke keadaan kosong setelah semua dihapus.
+
+- **DownloadsNavigationTest** (11, Robolectric) — alur nyata dari `MainActivity`:
+  menekan ikon download merender halaman Unduhan (bukan layar kosong), halaman
+  benar-benar terlihat (alpha 1, tanpa translasi, punya ukuran), keadaan kosong
+  menjelaskan pilihan dan menyediakan **Lihat Chapter** yang kembali ke daftar
+  chapter, Back kembali ke **Detail Novel** (bukan Perpustakaan), posisi gulir
+  detail dipulihkan setelah bolak-balik, Back dari Perpustakaan tetap menutup
+  aplikasi, chapter tersimpan tercantum dengan label aslinya, membuka halaman
+  Unduhan tidak menembak jaringan sama sekali, cover/metadata/sinopsis detail
+  tetap utuh, dan **pembangunan halaman yang gagal menampilkan pesan + Coba lagi
+  alih-alih layar kosong**.
+- **DownloadsProgressTest** (11, Robolectric) — status yang ditampilkan adalah
+  status sebenarnya: kartu unduhan berjalan menyebut novel + volume, "2 dari 5
+  chapter selesai", progress bar dengan `max`/`progress` yang benar, status
+  chapter yang sedang diunduh, dan tombol **Batalkan** 48 dp yang memicu
+  pembatalan; bagian "Sedang diunduh" muncul walau belum ada yang tersimpan;
+  pekerjaan gagal menampilkan alasannya dan **Coba Lagi** yang benar-benar
+  mengulang; bagian berjalan dan gagal bisa tampil bersamaan; keadaan kosong
+  menyediakan ikon + **Lihat Chapter** 48 dp; perubahan status dari thread worker
+  **selalu dikirim di main thread**, dan listener yang melempar exception tidak
+  membungkam listener lain; index unduhan yang rusak tidak membuat layar kosong.
 
 ### Bukti tes offline menangkap bug
 
