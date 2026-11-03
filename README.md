@@ -695,7 +695,8 @@ menghitung chapternya akan menyimpulkan satu chapter hilang.
 Kalimat itu disusun dari `chapterEntries.size()` — jumlah **postingan** feed yang
 lolos penyaringan deskripsi — bukan dari jumlah chapter yang benar-benar masuk
 daftar. Feed Yariko memuat satu judul yang terbit dua kali
-(`Volume 3 Chapter 12` ada sebagai dua postingan berbeda), dan `LibraryBuilder`
+(`Volume 3 Chapter 4` ada sebagai dua postingan berbeda —
+`…-mob_10.html` 28 Mar dan `…-mob_65.html` 29 Mar), dan `LibraryBuilder`
 menggabungkannya menjadi satu baris. Jadi:
 
 | Angka | Nilai |
