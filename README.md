@@ -773,10 +773,11 @@ pada `preview.sourceUrl`). Angkanya tidak berubah — hanya keterangannya yang j
 
 ### Bukti tes menangkap bug
 
-`AddNovelDiagnosticsTest` (2 tes, Robolectric) membangun panel dengan dua alamat:
+`AddNovelDiagnosticsTest` (3 tes, Robolectric) membangun panel dengan dua alamat:
 
 - alamat label → baris harus memuat "di feed label"
 - alamat artikel → baris harus memuat "di artikel"
+- kedua bentuk alamat yang diterima disebut namanya di petunjuk
 
 Uji mutasi: kalimat dikembalikan menjadi satu versi tetap untuk semua alamat →
 `aLabelAddressSaysTheLinksCameFromTheFeed` gagal. Setelah dipulihkan:
@@ -1013,7 +1014,8 @@ layar bergantung sepenuhnya pada tata letak situs sumber.
 
 ### Bukti tes menangkap bug
 
-`MangaScreenTest` (8 tes). Uji mutasi `2.19.1` menjalankan **4 mutasi pada berkas
+`MangaScreenTest` (8 tes saat 2.19.1; kini 12 setelah 4 tes layar penuh di
+2.19.2 ditambahkan). Uji mutasi `2.19.1` menjalankan **4 mutasi pada berkas
 hidup** dengan `md5` sebelum/sesudah, dan **4/4 tertangkap** setelah dua celah
 ditutup:
 
@@ -1737,7 +1739,7 @@ Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
 Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
 **46/46 URL hasil parser** dari 7 volume diunduh → HTTP 200, `image/*`, decode valid.
 
-- **OfflineDownloadTest** (17, Robolectric) — inti penyimpanan offline:
+- **OfflineDownloadTest** (18, Robolectric) — inti penyimpanan offline:
   chapter tersimpan lalu dibaca ulang tanpa jaringan; ilustrasi benar-benar
   menjadi berkas lokal (bukan URL) dan ikut hilang saat dihapus; menekan unduh
   lagi untuk chapter yang sudah ada **tidak menambah satu request pun** (dihitung
