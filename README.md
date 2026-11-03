@@ -632,10 +632,10 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **239 pengujian** di 23 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **240 pengujian** di 23 kelas,
 semuanya lulus:
 
-- **DynamicCatalogueTest** (8, parser generik + normalisasi URL) — sepuluh bentuk URL
+- **DynamicCatalogueTest** (9, parser generik + normalisasi URL) — sepuluh bentuk URL
   yang tidak layak ditolak dengan pesan yang bisa dibaca; satu halaman menghasilkan
   satu identitas untuk sembilan penulisan berbeda (`?m=1`, garis miring di akhir,
   parameter pelacak, `www`, `http`, huruf besar, spasi di tepi, tanpa skema);
@@ -644,10 +644,11 @@ semuanya lulus:
   list, label tebal dengan titik dua terpisah) terbaca lengkap 6 chapter dalam 2
   volume, urutan `Prolog → Chapter 1 → Chapter 2 → Illustrasi` benar walau sumber
   menulis "Cahpter 2", cover memilih gambar potret di dalam tautan dan bukan banner
-  lebar, tautan menu/footer bukan chapter; parser generik yang sama juga membaca
-  kedua halaman novel bawaan (7 volume Monogatari, 13 volume Magical, Volume 14
-  tanpa chapter palsu).
-- **DynamicLibraryTest** (14, Room sungguhan) — tabel kosong di-seed dua novel
+  lebar, tautan menu/footer bukan chapter; membaca ulang halaman yang kini punya satu
+  volume baru memunculkan chapter dan volume itu tanpa mengubah URL chapter lama;
+  parser generik yang sama juga membaca kedua halaman novel bawaan (7 volume
+  Monogatari, 13 volume Magical, Volume 14 tanpa chapter palsu).
+- **DynamicLibraryTest** (15, Room sungguhan) — tabel kosong di-seed dua novel
   bawaan dengan metadata terverifikasi dan mode katalog masing-masing; membuka
   perpustakaan berulang tidak menggandakan baris; novel valid tersimpan dengan id
   dari slug URL dan ditambahkan di urutan akhir; URL yang sama dua kali ditolak
@@ -662,7 +663,7 @@ semuanya lulus:
   menyisakan novel dan progresnya; setelah satu novel dihapus, katalog dan progres
   dua novel bawaan tetap bekerja dan katalog novel terhapus dilupakan; setiap kolom
   yang disimpan kembali utuh lewat mapper; novel kosong ditolak.
-- **DynamicDownloadTest** (7, Robolectric) — novel hasil tambah lewat URL, bukan dua
+- **DynamicDownloadTest** (9, Robolectric) — novel hasil tambah lewat URL, bukan dua
   novel bawaan: unduh satu chapter menyimpan `content.json` di folder ber-id slug
   dan dua berkas gambar nyata; unduh satu volume menyelesaikan semua chapternya
   dengan gambar identik tidak disimpan dua kali; mengunduh chapter yang sama dua

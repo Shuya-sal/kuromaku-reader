@@ -3,6 +3,7 @@ package id.shuyasal.kuromaku;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -239,6 +240,48 @@ public class DynamicCatalogueTest {
         assertTrue("volume 14 tanpa tautan tidak boleh diberi chapter palsu",
                 volume(magical.volumes, 14) == null
                         || volume(magical.volumes, 14).chapterCount() == 0);
+    }
+
+    // ------------------------------- skenario 7: perbarui daftar chapter
+
+    /**
+     * Skenario 7: after the source publishes a new chapter, reading the page again
+     * shows it.
+     *
+     * <p>This is the half of a refresh that metadata tests do not cover. The page is
+     * parsed once, an extra volume is appended to the same markup, and the page is
+     * parsed again — so what is asserted is that a re-read of the source produces a
+     * larger catalogue, not that a stored list was mutated in place.
+     */
+    @Test
+    public void rereadingThePagePicksUpANewlyPublishedChapter() throws Exception {
+        String before = fixture("dynamic_catalogue.html");
+        NovelDiscovery.Result first = NovelDiscovery.parse(before, BASE);
+        assertEquals("katalog awal", 6, first.chapterCount());
+        assertEquals(2, first.filledVolumes());
+
+        // The same page after one more volume was published.
+        String after = before.replace("</div>",
+                "<h4>Volume&nbsp;3</h4>\n<ul>"
+                        + "<li><a href=\"/2026/04/novel-uji-v3-chapter-1.html\">Chapter 1</a></li>"
+                        + "<li><a href=\"/2026/04/novel-uji-v3-epilog.html\">Epilog</a></li>"
+                        + "</ul>\n</div>");
+        assertNotEquals("fixture harus benar-benar berubah", before, after);
+
+        NovelDiscovery.Result second = NovelDiscovery.parse(after, BASE);
+
+        assertEquals("chapter baru harus ikut terbaca", 8, second.chapterCount());
+        assertEquals("volume ketiga harus muncul", 3, second.filledVolumes());
+        Volume third = volume(second.volumes, 3);
+        assertNotNull("Volume 3 harus ada", third);
+        assertEquals(2, third.chapterCount());
+        assertEquals("Chapter 1", third.chapters.get(0).label);
+        assertEquals("Epilog", third.chapters.get(1).label);
+
+        // The old chapters keep their identity: a refresh must not renumber them.
+        assertEquals("chapter lama tidak boleh berubah URL",
+                volume(first.volumes, 1).chapters.get(1).url,
+                volume(second.volumes, 1).chapters.get(1).url);
     }
 
     private static Volume volume(List<Volume> volumes, int number) {

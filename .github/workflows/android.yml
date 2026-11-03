@@ -129,7 +129,7 @@ jobs:
               novel berdasarkan id punya fallback "novel pertama", sehingga novel
               yang baru dihapus bisa muncul kembali sebagai novel lain sambil
               membawa progres dan unduhannya.
-            * **239 unit test lulus**, 0 gagal (23 kelas). Termasuk: URL tidak valid
+            * **240 unit test lulus**, 0 gagal (23 kelas). Termasuk: URL tidak valid
               ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
               URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
               berformat berbeda (entry-content, heading h4, ordered list, label
