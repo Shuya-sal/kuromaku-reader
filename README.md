@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.15
+# Kuromaku Reader 2.16
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -45,6 +45,13 @@ Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
 perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
+
+Versi 2.16 **tidak mengubah kode produksi**: yang ditambahkan hanya pengujian untuk
+pemilih tautan manual, satu-satunya bagian halaman Tambah Novel yang belum pernah
+diuji lewat UI. Tidak ada bug baru yang diklaim — tiga aturan yang sudah dijanjikan
+sejak 2.10 sekarang dijaga tes: pemilih hanya menawarkan tautan yang mungkin chapter,
+centang/batal centang menentukan isi pilihan, dan tidak ada yang dikirim sebelum
+"Pakai pilihan ini" ditekan. Detail di bagian **Pengujian 2.16**.
 
 Versi 2.15 menyebut **dua bentuk alamat** yang diterima halaman Tambah Novel.
 Petunjuk di bawah judul hanya menyebut artikel katalog, padahal URL label
@@ -578,10 +585,10 @@ Cacat yang ditemukan saat menguji dengan HTML asli:
 10. Label interlude kembali memakai angka apa adanya (tanpa normalisasi Romawi) →
     `anInterludeIsLabelledTheSameFromDigitsOrRoman` gagal.
 
-Setelah semua dipulihkan: suite penuh **271 tes, 0 gagal**, penanda `MUTATION` di
+Setelah semua dipulihkan: suite penuh **265 tes, 0 gagal**, penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
-### Batasan yang masih berlaku untuk 2.15
+### Batasan yang masih berlaku untuk 2.11
 
 - Semua pengujian memakai HTML dan feed yang **disimpan sebagai fixture**, ditambah
   satu kali pembacaan jaringan nyata untuk memastikan angkanya. Novel lain dengan
@@ -648,7 +655,7 @@ Uji mutasi:
 2. Penjelasan "postingan deskripsi tidak dihitung" dihapus dari ringkasan →
    `reloadingALabelNovelKeepsTheDescriptionOutOfTheChapters` gagal.
 
-Setelah dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
+Setelah dipulihkan: **267 tes, 0 gagal**, penanda `MUTATION` nol.
 
 ## BUG 9 (2.13) — Panel diagnostik menyebut angka yang tidak ada di daftar
 
@@ -756,7 +763,8 @@ pada `preview.sourceUrl`). Angkanya tidak berubah — hanya keterangannya yang j
 
 Uji mutasi: kalimat dikembalikan menjadi satu versi tetap untuk semua alamat →
 `aLabelAddressSaysTheLinksCameFromTheFeed` gagal. Setelah dipulihkan:
-**270 tes, 0 gagal**, penanda `MUTATION` nol.
+**270 tes, 0 gagal**, penanda `MUTATION` nol. (Angka ini benar untuk 2.14; suite
+terus bertambah di versi berikutnya.)
 
 ## BUG 11 (2.15) — Bentuk alamat yang didukung tidak diberitahukan
 
@@ -793,6 +801,47 @@ dan `?m=1`.
 
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
+
+## Pengujian 2.16 — pemilih tautan manual akhirnya punya tes
+
+Versi ini tidak menyentuh kode produksi. Yang kurang sejak 2.10 bukan fitur, tapi
+bukti: `AddNovelPage.picker()` — daftar centang yang muncul saat parser tidak yakin —
+belum pernah dijalankan oleh satu tes pun. Tiga janji yang menyertainya karena itu
+hanya dijamin oleh pembacaan kode.
+
+### Yang sekarang dijaga `AddNovelPickerTest`
+
+1. **Hanya tautan yang mungkin chapter yang ditawarkan.** Fixture
+   `unlabelled_catalogue.html` memuat lima tautan seri, salah satunya menunjuk
+   halaman yang sedang dibaca. Kotak centang yang muncul harus sebanyak
+   `selectableCandidates()` — bukan `candidates` — karena tautan navigasi atau iklan
+   yang bisa dicentang berarti satu ketukan cukup untuk mengimpor iklan sebagai
+   chapter. Judul pemilih juga harus menyebut kedua angka ("3 dari 5"), supaya daftar
+   yang terpotong tidak disangka daftar lengkap.
+2. **Centang dan batal centang menentukan isi pilihan.** Tes mencentang tiga kotak
+   lalu membatalkan yang ketiga, menekan "Pakai pilihan ini", dan memastikan yang
+   terkirim tepat dua — bukan "semua yang pernah disentuh".
+3. **Tidak ada yang dikirim tanpa tombol.** Setelah kotak dicentang, daftar
+   `onApplySelection` harus masih kosong. Katalog yang sudah terbaca dengan yakin
+   (`yariko_toc.html`, 43 chapter) juga tidak boleh menampilkan pemilih sama sekali.
+
+### Uji mutasi
+
+Tiga mutasi dijalankan satu per satu, semuanya tertangkap:
+
+1. Pemilih menawarkan `preview.candidates` (semua tautan) bukan yang `selectable` →
+   `applySendsExactlyTheLinksLeftTicked` gagal.
+2. Batal centang tidak menghapus URL dari `state.selected` → tes yang sama gagal.
+3. Pemilih ditampilkan untuk katalog yang sudah yakin →
+   `aConfidentCatalogueHidesThePicker` gagal.
+
+Setelah dipulihkan: **274 tes, 0 gagal**, penanda `MUTATION` nol, working tree bersih.
+
+### Yang tetap belum diuji di perangkat
+
+Tes ini memakai Robolectric pada 320 dp — tata letak dan perilaku klik nyata, tapi
+bukan layar HP sungguhan. Pemilih dengan 80 kotak centang di perangkat nyata (tinggi
+layar, scroll di dalam scroll) masih perlu dicoba Master Lupi.
 
 ## Perbaikan bug
 
@@ -1006,12 +1055,16 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **271 pengujian** di 25 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **274 pengujian** di 26 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
   sesuai jenis alamat: "di feed label" untuk URL label, "di artikel" untuk URL
   artikel. Dibangun lewat Robolectric pada 320 dp.
+- **AddNovelPickerTest** (3) — pemilih tautan manual lewat Robolectric pada 320 dp:
+  hanya tautan yang mungkin chapter yang ditawarkan, centang/batal centang menentukan
+  isi pilihan, dan tidak ada yang dikirim sebelum tombol ditekan. Tiga mutasi
+  terbukti tertangkap.
 - **YarikoAndLabelTest** (28) — dua kegagalan dari laporan, dibuktikan lewat fixture
   HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
   dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
@@ -1315,7 +1368,7 @@ gradle testDebugUnitTest assembleDebug
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
 
-### Batasan parser generik (2.15) — diukur, bukan diperkirakan
+### Batasan parser generik — diukur, bukan diperkirakan
 
 Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
 diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan
