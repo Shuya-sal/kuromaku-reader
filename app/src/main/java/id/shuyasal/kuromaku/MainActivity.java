@@ -89,6 +89,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView titleText;
     private TextView subtitleView;
     private Button backButton;
+    private ImageButton sectionMenu;
     private ImageButton refreshButton;
     private ImageButton downloadsButton;
     private ImageButton themeButton;
@@ -217,8 +218,7 @@ public class MainActivity extends AppCompatActivity {
         toolbarRow.setGravity(Gravity.CENTER_VERTICAL);
         toolbarRow.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 6), 0);
 
-        Button sectionMenu = Ui.backButton(this, palette);
-        sectionMenu.setText("☰");
+        sectionMenu = Ui.iconButton(this, R.drawable.ic_menu, "Buka menu Novel dan Manga", palette);
         sectionMenu.setContentDescription("Menu Novel dan Manga");
         sectionMenu.setTag("section_menu");
         sectionMenu.setOnClickListener(v -> {
@@ -446,8 +446,9 @@ public class MainActivity extends AppCompatActivity {
 
         boolean downloads = showingDownloads;
         boolean adding = showingAdd;
-        backButton.setVisibility(selectedNovel == null && !downloads && !adding
-                ? View.GONE : View.VISIBLE);
+        boolean isLibrary = selectedNovel == null && !downloads && !adding;
+        sectionMenu.setVisibility(isLibrary ? View.VISIBLE : View.GONE);
+        backButton.setVisibility(isLibrary ? View.GONE : View.VISIBLE);
         titleText.setText(downloads ? "Unduhan"
                 : adding ? "Tambah Novel"
                 : selectedNovel == null ? "Perpustakaan" : "Detail Novel");

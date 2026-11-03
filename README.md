@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.19
+# Kuromaku Reader 2.19.1
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -819,11 +819,29 @@ dan `?m=1`.
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
-## Bagian Manga tahap 1 (2.19)
+## Bagian Manga tahap 1 (2.19, diperbaiki di 2.19.1)
 
-Tombol **☰** di toolbar Perpustakaan membuka menu **Novel / Manga**. Memilih Manga
+Tombol menu di toolbar Perpustakaan membuka pilihan **Novel / Manga**. Memilih Manga
 membuka layar terpisah; memilih Novel membawa kembali ke rak. Menu itu satu-satunya
 jalan masuk, jadi tanpa tombol ini layar manga tidak bisa dicapai dari aplikasi.
+
+### Perbaikan navigasi 2.19.1
+
+Versi 2.19 memakai tombol teks `☰` sebagai tombol menu bagian. Tiga hal salah di sana:
+
+1. **Tombol teks tidak bisa berganti menjadi panah kembali.** Panah kembali dan menu
+   bagian memakai `Button` yang sama, jadi panah muncul dengan tulisan `☰`, dan tidak
+   ada cara menyembunyikan menu saat masuk ke detail novel atau halaman Unduhan.
+   Sekarang menu bagian adalah `ImageButton` berikon (`ic_menu.xml`) dengan area ketuk
+   48 dp, dan visibilitasnya diatur eksplisit: menu tampil **hanya** di rak, panah
+   kembali mengambil tempatnya di halaman lain.
+2. **Ikon tanpa `drawable` lolos dari tes.** Tes lama hanya memeriksa tipe
+   `ImageButton`; tombol kosong — bisa diketuk, dibacakan pembaca layar, tapi tak
+   terlihat — tetap hijau. Tes sekarang juga menuntut `getDrawable()` tidak null.
+3. **Penjaga domain longgar tidak tertangkap.** Tes hanya memuat host yang
+   *berakhiran* nama sumber, jadi pemeriksaan `contains(".voratoon.id")` lolos tanpa
+   gagal. Ditambah kasus host yang *memuat* nama di tengah
+   (`cdn.voratoon.id.evil.com`), yang membedakan "berakhiran" dari "mengandung".
 
 ### Mengapa alamatnya `voratoon.id`, bukan subdomain bernomor
 
@@ -865,17 +883,23 @@ layar bergantung sepenuhnya pada tata letak situs sumber.
 
 ### Bukti tes menangkap bug
 
-`MangaScreenTest` (7 tes). Uji mutasi `2.19` menjalankan **6 mutasi pada berkas
-hidup** dengan `md5` sebelum/sesudah, dan **6/6 tertangkap**:
+`MangaScreenTest` (8 tes). Uji mutasi `2.19.1` menjalankan **4 mutasi pada berkas
+hidup** dengan `md5` sebelum/sesudah, dan **4/4 tertangkap** setelah dua celah
+ditutup:
 
 | Mutasi | Tertangkap oleh |
 |---|---|
-| Titik di depan akhiran dihapus (`evilvoratoon.id` lolos) | `aLookalikeHostIsRejected` |
-| Pemeriksaan `https` dihapus | `onlyHttpsOnARealHostIsAllowed` |
-| `voratoon.com` tidak lagi diterima | `theSourceAndItsOwnPagesAreAllowed` |
-| Deklarasi layar di manifest dihapus | `theScreenIsDeclaredInTheManifest` |
-| Tag tombol menu bagian dipindah | `theNovelToolbarOffersTheMangaSection` |
-| Simpan posisi halaman dihapus | `theOpenPageSurvivesARecreation` |
+| Visibilitas menu bagian dihapus (menu tetap tampil di Unduhan) | `theSectionMenuStepsAsideOnTheOtherPages` |
+| Panah kembali selalu tampil di rak | `theSectionMenuStepsAsideOnTheOtherPages` |
+| Tombol menu kembali jadi tombol teks tanpa ikon | `theNovelToolbarOffersTheMangaSection` |
+| Penjaga domain longgar (`contains` ganti `endsWith`) | `aLookalikeHostIsRejected` |
+
+Run pertama hanya **2/4**: mutasi tombol kosong dan penjaga longgar sama-sama
+bertahan hijau. Itu bukan keberhasilan, itu celah tes — kedua tes di atas ditulis
+ulang sampai mutasinya gagal, lalu run diulang 4/4.
+
+Penjaga domain sendiri tetap diuji dari 2.19: titik di depan akhiran, `https`,
+`voratoon.com`, deklarasi manifest, tag tombol, dan penyimpanan posisi halaman.
 
 ## Fitur Cover Volume & Indikator Unduhan (2.18)
 
@@ -1422,7 +1446,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **313 pengujian** di 30 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **314 pengujian** di 30 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1639,7 +1663,7 @@ Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
   **selalu dikirim di main thread**, dan listener yang melempar exception tidak
   membungkam listener lain; index unduhan yang rusak tidak membuat layar kosong.
 
-- **MangaScreenTest** (7, Robolectric) — layar Manga tahap 1: sumber dan
+- **MangaScreenTest** (8, Robolectric) — layar Manga tahap 1: sumber dan
   subdomainnya diterima, domain lama diterima, kemiripan nama (`evilvoratoon.id`,
   `voratoon.id.evil.com`) ditolak, `http`/`file`/`javascript`/tanpa host ditolak,
   path yang memuat nama domain di situs asli tetap diterima, layar terdaftar di

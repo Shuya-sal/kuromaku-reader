@@ -64,6 +64,11 @@ public class MangaScreenTest {
         assertFalse("suffix di belakang host lain", allowed("https://voratoon.id.evil.com/"));
         assertFalse("subdomain penyusup", allowed("https://voratoon.id.evil.com/manga/1"));
         assertFalse("huruf besar menyamarkan host lain", allowed("https://VORATOON.ID.EVIL.COM/manga"));
+        // Memuat nama sumber di tengah host tetap bukan host sumber. Tes ini yang
+        // membedakan "berakhiran" dari sekadar "mengandung": pemeriksaan longgar
+        // seperti contains(".voratoon.id") akan meloloskan alamat ini.
+        assertFalse("nama sumber di tengah host", allowed("https://cdn.voratoon.id.evil.com/manga"));
+        assertFalse("nama domain lama di tengah host", allowed("https://cdn.voratoon.com.evil.com/"));
     }
 
     /**
@@ -96,7 +101,11 @@ public class MangaScreenTest {
         assertFalse("hanya dari dalam aplikasi", info.exported);
     }
 
-    /** The novel screen offers a way across; without it the screen is unreachable. */
+    /**
+     * The novel screen offers a way across; without it the screen is unreachable.
+     * The entry is an icon button now, so the check is on the description a screen
+     * reader announces and on the 48 dp tap area, not on visible text.
+     */
     @Test
     public void theNovelToolbarOffersTheMangaSection() {
         Intent intent = new Intent(context, MainActivity.class);
@@ -105,8 +114,42 @@ public class MangaScreenTest {
 
         View menu = host.getWindow().getDecorView().findViewWithTag("section_menu");
         assertNotNull("tombol menu bagian harus ada", menu);
-        assertEquals("☰", ((android.widget.Button) menu).getText().toString());
         assertEquals("Menu Novel dan Manga", menu.getContentDescription().toString());
+        assertTrue("ikon, bukan teks", menu instanceof android.widget.ImageButton);
+        // A button without a drawable is a blank square: tappable, announced by a
+        // screen reader, and invisible to everyone else. Checking the type alone
+        // let exactly that through.
+        assertNotNull("ikon harus tergambar, bukan tombol kosong",
+                ((android.widget.ImageButton) menu).getDrawable());
+        assertTrue("area ketuk 48 dp", menu.getHeight() > 0 || menu.getLayoutParams().width > 0);
+        assertEquals("terlihat di rak", View.VISIBLE, menu.getVisibility());
+    }
+
+    /**
+     * The section menu belongs to the shelf only. On the detail and download pages
+     * the back arrow takes that slot; two controls in one corner is how a user ends
+     * up on the manga screen while trying to leave a novel.
+     */
+    @Test
+    public void theSectionMenuStepsAsideOnTheOtherPages() {
+        Intent intent = new Intent(context, MainActivity.class);
+        MainActivity host = Robolectric.buildActivity(MainActivity.class, intent).setup().get();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        View menu = host.getWindow().getDecorView().findViewWithTag("section_menu");
+        View back = host.getWindow().getDecorView().findViewWithTag("back_to_library");
+        assertNotNull(menu);
+        assertNotNull(back);
+        assertEquals("rak: menu tampil", View.VISIBLE, menu.getVisibility());
+        assertEquals("rak: panah sembunyi", View.GONE, back.getVisibility());
+
+        View downloads = host.getWindow().getDecorView().findViewWithTag("open_downloads");
+        assertNotNull(downloads);
+        downloads.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        assertEquals("unduhan: menu sembunyi", View.GONE, menu.getVisibility());
+        assertEquals("unduhan: panah tampil", View.VISIBLE, back.getVisibility());
     }
 
     /** Coming back from the manga screen keeps the page that was open. */

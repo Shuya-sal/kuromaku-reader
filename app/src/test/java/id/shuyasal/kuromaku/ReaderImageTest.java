@@ -266,21 +266,45 @@ public class ReaderImageTest {
         assertTrue("tinggi tetap dipertahankan saat gagal", cell.getHeight() > 0);
     }
 
-    /** Retry re-attempts the load instead of leaving the error frozen. */
+    /**
+     * Retry re-attempts the load instead of leaving the error frozen.
+     *
+     * <p>The failure is forced first, exactly as {@code failedImageShowsErrorAndRetry}
+     * does. Without that this test used to click retry on a cell that had never
+     * failed, so the only thing it could observe was whichever async Glide callback
+     * happened to land first — green on one machine, red on another. The assertions
+     * then run before the looper is idled again, because {@code load()} sets both
+     * flags synchronously and a later failure callback must not decide the outcome.
+     */
     @Test
-    public void retryButtonRestartsTheLoad() {
+    public void retryButtonRestartsTheLoad() throws Exception {
         List<ImageCell> cells = findAll(activity.getWindow().getDecorView(), ImageCell.class);
+        assertFalse("butuh sel gambar", cells.isEmpty());
         ImageCell cell = cells.get(0);
 
-        View retry = cell.findViewWithTag("image_retry");
-        assertNotNull(retry);
-        retry.performClick();
+        java.lang.reflect.Method fail = ImageCell.class
+                .getDeclaredMethod("fail", String.class, String.class);
+        fail.setAccessible(true);
+        fail.invoke(cell, "unduh", "HTTP 404");
         Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue("prasyarat: sel harus dalam keadaan gagal", cell.hasFailed());
+
+        View retry = cell.findViewWithTag("image_retry");
+        assertNotNull("tombol coba lagi harus ada setelah gagal", retry);
+        assertEquals("tombol harus terlihat", View.VISIBLE, retry.getVisibility());
+
+        ImageLoadLog.clear();
+        retry.performClick();
 
         assertFalse("setelah coba lagi, status gagal harus direset", cell.hasFailed());
         View error = cell.findViewWithTag("image_error");
         assertEquals("kotak error harus disembunyikan saat mencoba lagi",
                 View.GONE, error.getVisibility());
+        List<String> recent = ImageLoadLog.recent();
+        assertFalse("percobaan ulang harus tercatat", recent.isEmpty());
+        String last = recent.get(recent.size() - 1);
+        assertTrue("percobaan ulang harus masuk antrean lagi, dapat: " + last,
+                last.contains("stage=antrean"));
     }
 
     /** Logging names the failing stage and never leaks the full URL token. */

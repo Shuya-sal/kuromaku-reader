@@ -94,7 +94,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-2.19-debug
+          name: kuromaku-reader-2.19.1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -104,13 +104,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.19 (APK)
+          name: Kuromaku Reader 2.19.1 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.19** (versionCode 40)
+            * Versi: **2.19.1** (versionCode 41)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -198,7 +198,8 @@ jobs:
               interlude memakai angka apa adanya) — **kelima-limanya tertangkap**, tidak
               ada yang lolos. Pemulihan diverifikasi lewat `md5sum` sebelum/sesudah,
               `git diff HEAD` kosong, penanda `MUTATION` nol, suite tetap 274 tes hijau.
-            * **Bagian Manga tahap 1 (2.19).** Tombol **☰** di toolbar novel membuka
+            * **Bagian Manga tahap 1 (2.19), navigasi diperbaiki (2.19.1).**
+              Toolbar Perpustakaan memakai tombol ikon menu (48 dp) yang membuka
               menu **Novel / Manga**; memilih Manga membuka layar terpisah yang
               menampilkan sumber manga (`https://voratoon.id/`) dengan header, alamat
               halaman, bilah progres, dan tombol **Sumber** untuk kembali ke awal.
@@ -215,15 +216,19 @@ jobs:
               riwayat WebView lebih dulu, dan WebView dihancurkan di `onDestroy`.
               Tahap 1 sengaja hanya menampilkan situs: belum ada ekstraksi chapter
               atau penyimpanan offline untuk manga.
-            * **7 tes baru `MangaScreenTest`** mengunci penjaga itu: sumber dan
-              subdomainnya diterima, domain lama diterima, kemiripan nama ditolak,
-              `http`/`file`/`javascript`/tanpa host ditolak, path yang memuat nama
-              domain di situs asli tetap diterima, layar terdaftar di manifest dan
-              tidak diekspor, tombol ☰ ada di toolbar novel, serta halaman terakhir
-              bertahan saat layar dibuat ulang. Uji mutasi: **6/6 tertangkap**
-              (titik pada penjaga host dihapus, cek `https` dihapus, `voratoon.com`
-              dicabut, deklarasi manifest dihapus, tag tombol menu dipindah, simpan
-              posisi halaman dihapus) dengan pemulihan diverifikasi `md5`.
+            * **8 tes `MangaScreenTest`** mengunci penjaga dan navigasi itu: sumber
+              dan subdomainnya diterima, domain lama diterima, kemiripan nama ditolak
+              (termasuk nama sumber yang muncul di tengah host), `http`/`file`/
+              `javascript`/tanpa host ditolak, path yang memuat nama domain di situs
+              asli tetap diterima, layar terdaftar di manifest dan tidak diekspor,
+              tombol menu bagian berikon dan seluas 48 dp, menu itu hanya tampil di
+              rak sementara panah kembali mengambil tempatnya di halaman Unduhan,
+              serta halaman terakhir bertahan saat layar dibuat ulang.
+              Uji mutasi: **4/4 tertangkap** (visibilitas menu dihapus, panah kembali
+              selalu tampil, tombol menu kembali jadi tombol teks tanpa ikon, penjaga
+              domain dilonggarkan jadi `contains`) dengan pemulihan diverifikasi
+              `md5`. Run pertama hanya 2/4 — dua mutasi bertahan hijau, jadi kedua tes
+              ditulis ulang sampai mutasinya gagal, lalu run diulang 4/4.
             * **Fitur Cover Volume & Indikator Unduhan (2.18).** Dua keluhan dari
               laporan: volume novel yang ditambahkan lewat URL (Yarikon) hanya
               menampilkan placeholder "Vol 1", "Vol 2", "Vol 3", dan baris unduhan
@@ -267,7 +272,7 @@ jobs:
               "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
               selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
               tidak pernah muncul selama masih ada chapter belum lengkap.
-            * **313 unit test lulus**, 0 gagal (30 kelas). `VolumeCoversAndDownloadStateTest`
+            * **314 unit test lulus**, 0 gagal (30 kelas). `VolumeCoversAndDownloadStateTest`
               (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
               memicu laporan — dan mengukur UI pada layar 320 dp.
               `RingProgressMotionTest` (5 tes) menguji cincin progres langsung:
