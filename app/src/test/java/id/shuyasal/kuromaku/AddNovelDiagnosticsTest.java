@@ -61,6 +61,29 @@ public class AddNovelDiagnosticsTest {
         return found.getText().toString();
     }
 
+    /**
+     * A form the app accepts must be named on the page.
+     *
+     * <p>Label addresses were supported since 2.10, but the hint under the heading
+     * still mentioned only catalogue articles. A user holding a label URL had no way
+     * to know they could paste it — and that URL is the one shape that yields a
+     * complete chapter list in a single step.
+     */
+    @Test
+    public void theHintNamesBothAddressShapesItAccepts() {
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), new AddNovelPage.State(), null);
+        TextView hint = page.build().findViewWithTag("add_novel_hint");
+        assertNotNull("halaman harus punya petunjuk di bawah judul", hint);
+        String text = hint.getText().toString();
+        assertTrue("petunjuk harus menyebut halaman label: " + text,
+                text.contains("/search/label/"));
+        assertTrue("petunjuk harus menyebut artikel katalog: " + text,
+                text.contains("artikel katalog"));
+        assertTrue("petunjuk harus menyebut ?m=1 masih diterima: " + text,
+                text.contains("?m=1"));
+    }
+
     @Test
     public void aLabelAddressSaysTheLinksCameFromTheFeed() {
         String line = foundLine(LABEL_URL);

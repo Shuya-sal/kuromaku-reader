@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.14
+# Kuromaku Reader 2.15
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -45,6 +45,11 @@ Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
 perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
+
+Versi 2.15 menyebut **dua bentuk alamat** yang diterima halaman Tambah Novel.
+Petunjuk di bawah judul hanya menyebut artikel katalog, padahal URL label
+`/search/label/...` sudah didukung sejak 2.10 — dan justru bentuk itu yang memberi
+daftar chapter lengkap dalam satu langkah. Detail di bagian **BUG 11 (2.15)**.
 
 Versi 2.14 memperbaiki **kata di panel diagnostik**: baris pertama menulis
 "Tautan ditemukan di artikel" untuk alamat label juga, padahal tautannya datang
@@ -573,10 +578,10 @@ Cacat yang ditemukan saat menguji dengan HTML asli:
 10. Label interlude kembali memakai angka apa adanya (tanpa normalisasi Romawi) →
     `anInterludeIsLabelledTheSameFromDigitsOrRoman` gagal.
 
-Setelah semua dipulihkan: suite penuh **270 tes, 0 gagal**, penanda `MUTATION` di
+Setelah semua dipulihkan: suite penuh **271 tes, 0 gagal**, penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
-### Batasan yang masih berlaku untuk 2.14
+### Batasan yang masih berlaku untuk 2.15
 
 - Semua pengujian memakai HTML dan feed yang **disimpan sebagai fixture**, ditambah
   satu kali pembacaan jaringan nyata untuk memastikan angkanya. Novel lain dengan
@@ -643,7 +648,7 @@ Uji mutasi:
 2. Penjelasan "postingan deskripsi tidak dihitung" dihapus dari ringkasan →
    `reloadingALabelNovelKeepsTheDescriptionOutOfTheChapters` gagal.
 
-Setelah dipulihkan: **270 tes, 0 gagal**, penanda `MUTATION` nol.
+Setelah dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
 ## BUG 9 (2.13) — Panel diagnostik menyebut angka yang tidak ada di daftar
 
@@ -752,6 +757,42 @@ pada `preview.sourceUrl`). Angkanya tidak berubah — hanya keterangannya yang j
 Uji mutasi: kalimat dikembalikan menjadi satu versi tetap untuk semua alamat →
 `aLabelAddressSaysTheLinksCameFromTheFeed` gagal. Setelah dipulihkan:
 **270 tes, 0 gagal**, penanda `MUTATION` nol.
+
+## BUG 11 (2.15) — Bentuk alamat yang didukung tidak diberitahukan
+
+### Gejala
+
+Halaman Tambah Novel menulis di bawah judul:
+
+> Buka halaman katalog novel di kaoritranslation.blogspot.com, salin URL-nya, lalu
+> tempel di bawah. URL dengan ?m=1 juga diterima.
+
+Tidak sepatah kata pun tentang `/search/label/...`. Padahal Master Lupi sendiri
+mengirim URL label sebagai salah satu dari dua URL uji, dan URL itulah yang paling
+mudah didapat dari halaman kategori blog.
+
+### Akar masalah
+
+Kalimat petunjuk ditulis saat halaman ini hanya menerima artikel katalog. Ketika URL
+label ditambahkan di 2.10, yang berubah hanya jalur penguraian — teks di layar tidak
+ikut diperiksa. Fitur yang tidak bisa ditemukan sama saja dengan fitur yang tidak ada.
+
+### Perbaikan
+
+Petunjuk menyebut kedua bentuk, lengkap dengan contoh jalurnya:
+
+> Tempel URL halaman katalog novel dari kaoritranslation.blogspot.com: artikel
+> katalog (/2025/09/...) atau halaman label (/search/label/...). URL dengan ?m=1
+> juga diterima.
+
+### Bukti tes menangkap bug
+
+`theHintNamesBothAddressShapesItAccepts` — membangun halaman, mengambil elemen
+`add_novel_hint`, dan memastikan teksnya memuat `/search/label/`, `artikel katalog`,
+dan `?m=1`.
+
+Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
+dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
 ## Perbaikan bug
 
@@ -965,10 +1006,10 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **270 pengujian** di 25 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **271 pengujian** di 25 kelas,
 semuanya lulus:
 
-- **AddNovelDiagnosticsTest** (2) — panel diagnostik menyebut sumber tautannya
+- **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
   sesuai jenis alamat: "di feed label" untuk URL label, "di artikel" untuk URL
   artikel. Dibangun lewat Robolectric pada 320 dp.
 - **YarikoAndLabelTest** (28) — dua kegagalan dari laporan, dibuktikan lewat fixture
@@ -1274,7 +1315,7 @@ gradle testDebugUnitTest assembleDebug
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
 
-### Batasan parser generik (2.14) — diukur, bukan diperkirakan
+### Batasan parser generik (2.15) — diukur, bukan diperkirakan
 
 Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
 diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan

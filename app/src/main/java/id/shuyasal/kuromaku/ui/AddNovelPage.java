@@ -114,9 +114,13 @@ public final class AddNovelPage {
         heading.setTypeface(null, Typeface.BOLD);
         content.addView(heading);
 
+        // A label address is a supported shape now, so it is named here. Telling the
+        // user only about article pages hides the one form that gives a complete
+        // chapter list in a single step.
         TextView hint = Ui.label(context,
-                "Buka halaman katalog novel di kaoritranslation.blogspot.com, salin URL-nya, "
-                        + "lalu tempel di bawah. URL dengan ?m=1 juga diterima.",
+                "Tempel URL halaman katalog novel dari kaoritranslation.blogspot.com: "
+                        + "artikel katalog (/2025/09/...) atau halaman label (/search/label/...). "
+                        + "URL dengan ?m=1 juga diterima.",
                 12, palette.muted);
         hint.setTag("add_novel_hint");
         hint.setPadding(0, Ui.dp(context, 4), 0, Ui.dp(context, 14));

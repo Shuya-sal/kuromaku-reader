@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.14 (APK)
+          name: Kuromaku Reader 2.15 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.14** (versionCode 34)
+            * Versi: **2.15** (versionCode 35)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -129,7 +129,7 @@ jobs:
               novel berdasarkan id punya fallback "novel pertama", sehingga novel
               yang baru dihapus bisa muncul kembali sebagai novel lain sambil
               membawa progres dan unduhannya.
-            * **270 unit test lulus**, 0 gagal (25 kelas). Termasuk: URL tidak valid
+            * **271 unit test lulus**, 0 gagal (25 kelas). Termasuk: URL tidak valid
               ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
               URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
               berformat berbeda (entry-content, heading h4, ordered list, label
@@ -141,6 +141,13 @@ jobs:
             * Uji mutasi: lima bug di atas dikembalikan satu per satu dan setiap
               kali ada tes yang gagal — tes ini terbukti menangkap bug, bukan
               sekadar hijau.
+            * **Bug 2.15 yang diperbaiki** — bentuk alamat yang didukung tidak
+              diberitahukan. Petunjuk di bawah judul halaman Tambah Novel hanya
+              menyebut artikel katalog, padahal URL label `/search/label/...` sudah
+              didukung sejak 2.10 — dan justru bentuk itu yang memberi daftar chapter
+              lengkap dalam satu langkah. Petunjuk sekarang menyebut kedua bentuk
+              beserta contoh jalurnya. Satu tes Robolectric menjaga teks itu, dan
+              satu mutasi terbukti tertangkap.
             * **Bug 2.14 yang diperbaiki** — panel diagnostik menyebut "Tautan
               ditemukan di artikel" untuk alamat label juga, padahal tautan label
               datang dari feed JSON per-label dan halaman artikelnya tidak pernah
