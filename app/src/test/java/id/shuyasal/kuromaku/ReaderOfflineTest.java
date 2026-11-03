@@ -399,6 +399,180 @@ public class ReaderOfflineTest {
         assertNotNull(keep);
     }
 
+    // ------------------------------------------------------- failure screen
+
+    /**
+     * Robolectric reports no active network by default, which would send every
+     * failure through the "not downloaded yet" branch and leave the extraction
+     * branch untested. This registers a connected network so {@code online()}
+     * returns true, exactly like a phone with Wi-Fi.
+     */
+    private static void goOnline() {
+        android.net.ConnectivityManager manager = (android.net.ConnectivityManager)
+                RuntimeEnvironment.getApplication()
+                        .getSystemService(android.content.Context.CONNECTIVITY_SERVICE);
+        assertNotNull("ConnectivityManager harus tersedia", manager);
+        org.robolectric.shadows.ShadowConnectivityManager shadow =
+                Shadows.shadowOf(manager);
+
+        android.net.Network network = org.robolectric.shadows.ShadowNetwork.newInstance(1);
+        android.net.NetworkInfo info = org.robolectric.shadows.ShadowNetworkInfo.newInstance(
+                android.net.NetworkInfo.DetailedState.CONNECTED,
+                android.net.ConnectivityManager.TYPE_WIFI, 0, true,
+                android.net.NetworkInfo.State.CONNECTED);
+        shadow.addNetwork(network, info);
+        shadow.setActiveNetworkInfo(info);
+        shadow.setDefaultNetworkActive(true);
+
+        android.net.NetworkCapabilities caps =
+                org.robolectric.shadows.ShadowNetworkCapabilities.newInstance();
+        Shadows.shadowOf(caps).addCapability(
+                android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        shadow.setNetworkCapabilities(network, caps);
+    }
+
+    /**
+     * README promises the failure screen carries four things: the reason, a retry
+     * action, a source link and a browser button. Before this test nothing in the
+     * tree asserted any of them, so all four could have been deleted silently.
+     */
+    @Test
+    public void aFailedExtractionShowsTheReasonRetryAndTheSourceLink() {
+        goOnline();
+        final String missing = "https://kaoritranslation.blogspot.com/2026/03/v1c9.html";
+        Fetcher.use(new Fetcher.Source() {
+            @Override
+            public String page(String url) {
+                // A page that loads fine but holds no article container at all.
+                return "<html><body><nav>menu</nav><div class='sidebar'>x</div></body></html>";
+            }
+
+            @Override
+            public byte[] image(String url) throws Exception {
+                return plate("offline/plate_a.jpg");
+            }
+        });
+
+        ReaderActivity activity = open(missing);
+
+        assertEquals("judul bar harus menyebut kegagalan",
+                "Gagal memuat chapter", headerTitle(activity));
+
+        List<CharSequence> texts = allTexts(activity);
+        assertTrue("alasan kegagalan harus tampil, dapat: " + texts,
+                contains(texts, "Isi chapter tidak dapat diekstrak"));
+        assertTrue("alasan dari parser harus diteruskan, dapat: " + texts,
+                contains(texts, "Isi artikel tidak ditemukan"));
+        assertTrue("aplikasi harus menyatakan tidak membuka website penuh, dapat: " + texts,
+                contains(texts, "tidak akan membuka tampilan website penuh"));
+
+        assertNotNull("tombol \"Coba lagi\" harus ada", buttonWithText(activity, "Coba lagi"));
+        assertNotNull("tombol \"Buka halaman sumber\" harus ada",
+                buttonWithText(activity, "Buka halaman sumber"));
+
+        TextView link = selectableText(activity);
+        assertNotNull("URL sumber harus bisa disalin", link);
+        assertEquals("URL yang ditampilkan harus URL chapter yang gagal",
+                missing, link.getText().toString());
+        assertTrue("URL harus selectable agar bisa disalin", link.isTextSelectable());
+    }
+
+    /**
+     * The user's hard constraint: a failed extraction must never fall back to
+     * showing the source website in a WebView. Nothing else in the suite checks
+     * that no WebView exists after a failure.
+     */
+    @Test
+    public void aFailedExtractionNeverShowsTheWebsiteItself() {
+        goOnline();
+        final String missing = "https://kaoritranslation.blogspot.com/2026/03/v1c9.html";
+        Fetcher.use(new Fetcher.Source() {
+            @Override
+            public String page(String url) {
+                return "<html><body><nav>menu</nav></body></html>";
+            }
+
+            @Override
+            public byte[] image(String url) throws Exception {
+                return plate("offline/plate_a.jpg");
+            }
+        });
+
+        ReaderActivity activity = open(missing);
+
+        assertTrue("layar gagal harus muncul lebih dulu",
+                contains(allTexts(activity), "Gagal memuat chapter"));
+        assertTrue("tidak boleh ada WebView sama sekali setelah ekstraksi gagal",
+                findAll(activity.getWindow().getDecorView(),
+                        android.webkit.WebView.class).isEmpty());
+    }
+
+    /** The offline branch must offer the same three ways out, not just a sentence. */
+    @Test
+    public void theOfflineFailureAlsoOffersRetryAndTheSourceLink() {
+        String other = "https://kaoritranslation.blogspot.com/2026/03/v1c9.html";
+        ReaderActivity activity = open(other);
+
+        assertTrue("pesan harus menyebut chapter belum diunduh",
+                contains(allTexts(activity), "belum diunduh"));
+        assertNotNull("tombol \"Coba lagi\" harus ada di jalur offline",
+                buttonWithText(activity, "Coba lagi"));
+        assertNotNull("tombol \"Buka halaman sumber\" harus ada di jalur offline",
+                buttonWithText(activity, "Buka halaman sumber"));
+        TextView link = selectableText(activity);
+        assertNotNull("URL sumber harus bisa disalin di jalur offline", link);
+        assertEquals(other, link.getText().toString());
+    }
+
+    private static String headerTitle(ReaderActivity activity) {
+        for (TextView label : findAll(activity.getWindow().getDecorView(), TextView.class)) {
+            CharSequence text = label.getText();
+            if (text == null) continue;
+            String value = text.toString();
+            if (value.startsWith("Gagal memuat") || value.startsWith("Memuat…")) return value;
+        }
+        return null;
+    }
+
+    private static List<CharSequence> allTexts(ReaderActivity activity) {
+        List<CharSequence> out = new ArrayList<>();
+        for (TextView label : findAll(activity.getWindow().getDecorView(), TextView.class)) {
+            CharSequence text = label.getText();
+            if (text != null && text.length() > 0) out.add(text);
+        }
+        return out;
+    }
+
+    /** True when at least one visible label contains {@code needle}. */
+    private static boolean contains(List<CharSequence> texts, String needle) {
+        for (CharSequence text : texts) {
+            if (text.toString().contains(needle)) return true;
+        }
+        return false;
+    }
+
+    private static TextView buttonWithText(ReaderActivity activity, String label) {
+        for (TextView view : findAll(activity.getWindow().getDecorView(), TextView.class)) {
+            CharSequence text = view.getText();
+            if (text != null && label.contentEquals(text) && view.getVisibility() == View.VISIBLE) {
+                return view;
+            }
+        }
+        return null;
+    }
+
+    /** The one visible, selectable, non-button label: the copyable source URL. */
+    private static TextView selectableText(ReaderActivity activity) {
+        for (TextView view : findAll(activity.getWindow().getDecorView(), TextView.class)) {
+            if (view.isTextSelectable() && view.getVisibility() == View.VISIBLE
+                    && view.getText() != null
+                    && view.getText().toString().startsWith("http")) {
+                return view;
+            }
+        }
+        return null;
+    }
+
     /** The adapter resolves every image block to a local path, not a URL. */
     @Test
     public void adapterBindsLocalImageSourceForStoredBlocks() {

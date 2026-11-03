@@ -1579,7 +1579,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **342 pengujian** di 32 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **345 pengujian** di 32 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1760,7 +1760,7 @@ Angka 44 sama dengan yang dijaga `ChapterImageParserTest` (5+5+5+8+7+7+7).
   membatalkan di tengah tidak meninggalkan chapter setengah jadi; unduhan ulang
   penuh menghasilkan ukuran penyimpanan yang sama; hapus volume hanya menghapus
   volume itu; dan menghapus seluruh unduhan mengembalikan penyimpanan ke nol.
-- **ReaderOfflineTest** (8, Robolectric) — Reader Mode offline: chapter terunduh
+- **ReaderOfflineTest** (11, Robolectric) — Reader Mode offline: chapter terunduh
   **dibuka tanpa satu pun request jaringan**; jumlah blok dan teks identik dengan
   versi online; setiap gambar memakai `file:` lokal sehingga tampil di mode
   pesawat dan posisinya di antara paragraf tetap sama (indeks blok dibandingkan
@@ -1769,6 +1769,12 @@ Angka 44 sama dengan yang dijaga `ChapterImageParserTest` (5+5+5+8+7+7+7).
   chapter yang belum diunduh saat offline menampilkan pesan jelas dan bukan layar
   kosong; membuka ulang chapter tersimpan tidak menembak jaringan; dan progres
   baca offline berperilaku sama dengan online (ekuivalensi, bukan angka tetap).
+  Tiga tes 2.20 menjaga **layar kegagalan**: alasan dari parser diteruskan apa
+  adanya, tombol "Coba lagi" dan "Buka halaman sumber" ada, URL sumber
+  `setTextIsSelectable(true)` sehingga bisa disalin, cabang offline menawarkan hal
+  yang sama, dan **tidak ada `WebView`** setelah ekstraksi gagal. Bukti keenam
+  elemen itu dijaga: enam mutasi pada `ReaderActivity` — **6/6 tertangkap**,
+  `md5` sumber dipulihkan sesudah tiap mutasi.
 - **DownloadUiTest** (16, Robolectric, 320×640dp) — kontrol unduh di halaman
   detail: setiap baris chapter punya tombol unduh 48 dp dengan
   `contentDescription`; label status dimulai "Belum diunduh", berubah
