@@ -15,6 +15,7 @@ import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -215,6 +216,22 @@ public class MainActivity extends AppCompatActivity {
         toolbarRow.setOrientation(LinearLayout.HORIZONTAL);
         toolbarRow.setGravity(Gravity.CENTER_VERTICAL);
         toolbarRow.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 6), 0);
+
+        Button sectionMenu = Ui.backButton(this, palette);
+        sectionMenu.setText("☰");
+        sectionMenu.setContentDescription("Menu Novel dan Manga");
+        sectionMenu.setTag("section_menu");
+        sectionMenu.setOnClickListener(v -> {
+            PopupMenu menu = new PopupMenu(this, sectionMenu);
+            menu.getMenu().add("Novel ✓");
+            menu.getMenu().add("Manga").setOnMenuItemClickListener(item -> {
+                startActivity(new Intent(this, MangaActivity.class));
+                return true;
+            });
+            menu.show();
+        });
+        toolbarRow.addView(sectionMenu, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
         backButton = Ui.backButton(this, palette);
         backButton.setTag("back_to_library");

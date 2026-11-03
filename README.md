@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.18.1
+# Kuromaku Reader 2.19
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -819,6 +819,64 @@ dan `?m=1`.
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
+## Bagian Manga tahap 1 (2.19)
+
+Tombol **☰** di toolbar Perpustakaan membuka menu **Novel / Manga**. Memilih Manga
+membuka layar terpisah; memilih Novel membawa kembali ke rak. Menu itu satu-satunya
+jalan masuk, jadi tanpa tombol ini layar manga tidak bisa dicapai dari aplikasi.
+
+### Mengapa alamatnya `voratoon.id`, bukan subdomain bernomor
+
+Versi pertama sempat memakai subdomain bernomor (`12.voratoon.com`). Nomor itu tidak
+stabil: ia berubah dan yang lama bisa mati, sehingga aplikasi akan menampilkan
+halaman kosong tanpa penjelasan. Halaman mendarat `https://voratoon.id/` dipakai
+supaya **situs sendiri** yang menentukan domain mana yang aktif saat itu; kode tidak
+pernah mematok nomor.
+
+### Penjaga domain
+
+Setiap navigasi bingkai utama diperiksa sebelum dimuat:
+
+| Alamat | Hasil |
+|---|---|
+| `https://voratoon.id/` | diterima |
+| `https://cdn.voratoon.id/page/1.jpg` | diterima |
+| `https://12.voratoon.com/manga` | diterima |
+| `https://evilvoratoon.id/` | **ditolak** |
+| `https://voratoon.id.evil.com/` | **ditolak** |
+| `http://voratoon.id/` | **ditolak** |
+| `file:///etc/hosts`, `javascript:…`, tanpa host | **ditolak** |
+| `https://voratoon.id/palsu.evil.com` | diterima — itu path di situs asli |
+
+Baris `evilvoratoon.id` adalah alasan penjaga menulis titik di depan akhiran
+(`endsWith(".voratoon.id")`). Tanpanya, host mana pun yang namanya berakhiran
+`voratoon.id` akan lolos. Baris terakhir menjaga arah sebaliknya: nama domain yang
+muncul di **path** bukan host, dan menolaknya akan mematahkan tautan biasa.
+
+Penolakan tidak diam-diam: pesan "Tautan luar diblokir. Buka melalui browser jika
+diperlukan." muncul, dan WebView tidak pernah dibelokkan ke alamat itu.
+
+### Batasan tahap 1
+
+Layar ini menampilkan situs apa adanya, jadi ia masih **WebView** — beda dengan
+bagian novel yang sudah native. Belum ada ekstraksi chapter, belum ada penyimpanan
+offline untuk manga, dan belum ada tampilan baca khusus. Konsekuensi lain: isi
+layar bergantung sepenuhnya pada tata letak situs sumber.
+
+### Bukti tes menangkap bug
+
+`MangaScreenTest` (7 tes). Uji mutasi `2.19` menjalankan **6 mutasi pada berkas
+hidup** dengan `md5` sebelum/sesudah, dan **6/6 tertangkap**:
+
+| Mutasi | Tertangkap oleh |
+|---|---|
+| Titik di depan akhiran dihapus (`evilvoratoon.id` lolos) | `aLookalikeHostIsRejected` |
+| Pemeriksaan `https` dihapus | `onlyHttpsOnARealHostIsAllowed` |
+| `voratoon.com` tidak lagi diterima | `theSourceAndItsOwnPagesAreAllowed` |
+| Deklarasi layar di manifest dihapus | `theScreenIsDeclaredInTheManifest` |
+| Tag tombol menu bagian dipindah | `theNovelToolbarOffersTheMangaSection` |
+| Simpan posisi halaman dihapus | `theOpenPageSurvivesARecreation` |
+
 ## Fitur Cover Volume & Indikator Unduhan (2.18)
 
 Dua keluhan dari laporan diterjemahkan menjadi satu perubahan yang bisa diukur:
@@ -1364,7 +1422,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **306 pengujian** di 29 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **313 pengujian** di 30 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1580,6 +1638,13 @@ Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
   menyediakan ikon + **Lihat Chapter** 48 dp; perubahan status dari thread worker
   **selalu dikirim di main thread**, dan listener yang melempar exception tidak
   membungkam listener lain; index unduhan yang rusak tidak membuat layar kosong.
+
+- **MangaScreenTest** (7, Robolectric) — layar Manga tahap 1: sumber dan
+  subdomainnya diterima, domain lama diterima, kemiripan nama (`evilvoratoon.id`,
+  `voratoon.id.evil.com`) ditolak, `http`/`file`/`javascript`/tanpa host ditolak,
+  path yang memuat nama domain di situs asli tetap diterima, layar terdaftar di
+  manifest dan tidak diekspor, tombol ☰ ada di toolbar novel dengan deskripsi
+  "Menu Novel dan Manga", serta halaman terakhir bertahan saat layar dibuat ulang.
 
 ### Bukti tes offline menangkap bug
 

@@ -94,7 +94,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-2.18.1-debug
+          name: kuromaku-reader-2.19-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -104,13 +104,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.18.1 (APK)
+          name: Kuromaku Reader 2.19 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.18.1** (versionCode 39)
+            * Versi: **2.19** (versionCode 40)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -198,6 +198,32 @@ jobs:
               interlude memakai angka apa adanya) — **kelima-limanya tertangkap**, tidak
               ada yang lolos. Pemulihan diverifikasi lewat `md5sum` sebelum/sesudah,
               `git diff HEAD` kosong, penanda `MUTATION` nol, suite tetap 274 tes hijau.
+            * **Bagian Manga tahap 1 (2.19).** Tombol **☰** di toolbar novel membuka
+              menu **Novel / Manga**; memilih Manga membuka layar terpisah yang
+              menampilkan sumber manga (`https://voratoon.id/`) dengan header, alamat
+              halaman, bilah progres, dan tombol **Sumber** untuk kembali ke awal.
+              Halaman mendarat dipakai supaya situs menentukan sendiri domain
+              angkanya — subdomain bernomor seperti `12.voratoon.com` tidak pernah
+              dipatok di kode, karena nomor itu berubah dan bisa sudah mati.
+              **Penjaga domain** menolak setiap navigasi bingkai utama yang bukan
+              `https` pada `voratoon.id`/`voratoon.com` atau subdomainnya; penolakan
+              diberi pesan ("Tautan luar diblokir") dan tidak pernah diam-diam
+              diikuti. Pemeriksaan memakai titik di depan akhiran, sehingga
+              `evilvoratoon.id` dan `voratoon.id.evil.com` ditolak, sementara path
+              yang kebetulan memuat nama domain di situs asli tetap terbaca. Posisi
+              halaman disimpan saat layar dibuat ulang, tombol kembali memakai
+              riwayat WebView lebih dulu, dan WebView dihancurkan di `onDestroy`.
+              Tahap 1 sengaja hanya menampilkan situs: belum ada ekstraksi chapter
+              atau penyimpanan offline untuk manga.
+            * **7 tes baru `MangaScreenTest`** mengunci penjaga itu: sumber dan
+              subdomainnya diterima, domain lama diterima, kemiripan nama ditolak,
+              `http`/`file`/`javascript`/tanpa host ditolak, path yang memuat nama
+              domain di situs asli tetap diterima, layar terdaftar di manifest dan
+              tidak diekspor, tombol ☰ ada di toolbar novel, serta halaman terakhir
+              bertahan saat layar dibuat ulang. Uji mutasi: **6/6 tertangkap**
+              (titik pada penjaga host dihapus, cek `https` dihapus, `voratoon.com`
+              dicabut, deklarasi manifest dihapus, tag tombol menu dipindah, simpan
+              posisi halaman dihapus) dengan pemulihan diverifikasi `md5`.
             * **Fitur Cover Volume & Indikator Unduhan (2.18).** Dua keluhan dari
               laporan: volume novel yang ditambahkan lewat URL (Yarikon) hanya
               menampilkan placeholder "Vol 1", "Vol 2", "Vol 3", dan baris unduhan
@@ -241,7 +267,7 @@ jobs:
               "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
               selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
               tidak pernah muncul selama masih ada chapter belum lengkap.
-            * **306 unit test lulus**, 0 gagal (29 kelas). `VolumeCoversAndDownloadStateTest`
+            * **313 unit test lulus**, 0 gagal (30 kelas). `VolumeCoversAndDownloadStateTest`
               (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
               memicu laporan — dan mengukur UI pada layar 320 dp.
               `RingProgressMotionTest` (5 tes) menguji cincin progres langsung:
