@@ -94,9 +94,13 @@ jobs:
       - name: Render release notes
         run: |
           set -e
-          # `body_path` is read as a plain file: a `${{ ... }}` left inside it is
-          # published as that literal text, which is what shipped on 2.20. The token
-          # is filled here instead, where the shell can see the real value.
+          # `body_path` is read as a plain file: a GitHub expression left inside it
+          # is published as that literal text, which is what shipped on 2.20. The
+          # token is filled here instead, where the shell can see the real value.
+          # Do not write an expression delimiter in this file, not even in a
+          # comment: Actions interpolates it everywhere, and an invalid one makes
+          # the whole workflow invalid -- run 38 failed with zero jobs because of
+          # exactly that, one comment line.
           sed "s|@COMMIT@|${GITHUB_SHA}|g" .github/release-notes.md > release-body.md
           if grep -q "@COMMIT@" release-body.md; then
             echo "::error::token @COMMIT@ tidak terisi di release-body.md"
