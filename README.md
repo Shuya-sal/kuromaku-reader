@@ -856,6 +856,26 @@ terbanyak yang terukur di katalog nyata adalah **43** — angka itu belum pernah
 dirender sebagai pemilih di tes mana pun. Layar HP sungguhan dengan puluhan kotak
 centang (scroll di dalam scroll, tinggi layar, jempol) masih perlu dicoba Master Lupi.
 
+### Verifikasi ulang mutasi 2.11 di pohon 2.16
+
+Sebuah proses mutasi lama (skrip 2.11) mengirim notifikasi terlambat bahwa
+**N2 — alasan "potongan judul" dihapus — LOLOS (buruk)**. Notifikasi itu tidak
+menggambarkan kode sekarang: skrip tersebut menulis mutannya ke *snapshot lama*, lalu
+memulihkan dari snapshot yang sama, sehingga verdiktnya berlaku untuk pohon lama.
+
+Kelima mutasi 2.11 dijalankan ulang di pohon 2.16, dengan backup diambil dari berkas
+hidup saat itu juga (`md5sum` sebelum/sesudah dibandingkan, bukan dipercaya):
+
+1. N1 alasan `"tautan gambar"` dihapus → `everyRejectionSaysWhatTheLinkActuallyIs` gagal.
+2. N2 alasan `"potongan judul"` dihapus → `aStrayNumeralIsNamedAsAFragment` gagal.
+3. N3 `mergeSplitLabels` dimatikan → `aNumeralTornIntoItsOwnAnchorIsPutBack` gagal.
+4. N4 alasan spesifik ditimpa alasan generik → `everyRejectionSaysWhatTheLinkActuallyIs` gagal.
+5. N5 label interlude memakai angka apa adanya → `anInterludeIsLabelledTheSameFromDigitsOrRoman` gagal.
+
+**Kelima mutasi tertangkap; tidak ada yang lolos.** Pemulihan terverifikasi
+(`RESTORE ND: OK`, `RESTORE CN: OK`), `git diff HEAD` kosong, penanda `MUTATION` nol,
+dan suite penuh tetap **274 tes, 0 gagal**.
+
 ## Perbaikan bug
 
 ### BUG 1 (2.1) — Volume 1–4 tidak muncul

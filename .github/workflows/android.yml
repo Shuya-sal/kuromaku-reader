@@ -158,6 +158,16 @@ jobs:
               URL label: 44 tautan, 42 chapter, 15+13+14) — pemilih sepadat itu belum
               pernah dirender di tes. Layar HP sungguhan dengan puluhan kotak centang
               masih perlu diuji di perangkat.
+            * **Verifikasi ulang mutasi 2.11 di pohon 2.16** — notifikasi terlambat
+              dari skrip mutasi lama menyebut N2 "LOLOS", padahal skrip itu menulis
+              mutannya ke snapshot lama lalu memulihkan dari snapshot yang sama, jadi
+              verdiktnya berlaku untuk pohon lama. Kelima mutasi 2.11 dijalankan ulang
+              dengan backup dari berkas hidup saat itu juga: N1 (alasan "tautan gambar"
+              dihapus), N2 (alasan "potongan judul" dihapus), N3 (`mergeSplitLabels`
+              dimatikan), N4 (alasan spesifik ditimpa alasan generik), N5 (label
+              interlude memakai angka apa adanya) — **kelima-limanya tertangkap**, tidak
+              ada yang lolos. Pemulihan diverifikasi lewat `md5sum` sebelum/sesudah,
+              `git diff HEAD` kosong, penanda `MUTATION` nol, suite tetap 274 tes hijau.
             * **Bug 2.15 yang diperbaiki** — bentuk alamat yang didukung tidak
               diberitahukan. Petunjuk di bawah judul halaman Tambah Novel hanya
               menyebut artikel katalog, padahal URL label `/search/label/...` sudah
