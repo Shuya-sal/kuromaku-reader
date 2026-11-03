@@ -364,6 +364,55 @@ public class YarikoAndLabelTest {
         assertFalse("katalog feed tidak perlu konfirmasi manual", preview.needsConfirmation);
     }
 
+    /**
+     * Every number in the diagnostics has to match the list the user is looking at.
+     *
+     * <p>The first version printed "43 chapter diambil dari feed" above a list of 42,
+     * because it counted feed posts before the duplicate merge. A user who counts the
+     * chapters and finds one missing goes looking for a chapter that was never lost.
+     * This asserts the reported figure equals the actual chapter count.
+     */
+    @Test
+    public void theReportedChapterCountEqualsTheListOnScreen() throws Exception {
+        final String labelHtml = fixture("label_yarikonde.html");
+        // Two posts carry the same volume and the same chapter title, so the builder
+        // keeps one. 5 posts -> 4 unique chapters.
+        final List<String> titles = Arrays.asList(
+                "Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita",
+                "Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 1 Bab 1",
+                "Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 1 Bab 2",
+                "Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 1 Bab 2",
+                "Yarikonde ita Game Sekai no Akuyaku Mob ni Tensei Shimashita Volume 1 Bab 3");
+
+        Fetcher.use(new Fetcher.Source() {
+            @Override
+            public String page(String url) {
+                if (url.contains("/feeds/posts/summary/-/")) return feedPageRaw(url, titles);
+                return labelHtml;
+            }
+
+            @Override
+            public byte[] image(String url) {
+                return new byte[0];
+            }
+        });
+
+        NovelDiscovery.Result preview = CatalogLoader.inspect(NovelUrl.normalize(YARIKO_LABEL));
+        assertEquals("tiga chapter unik", 3, preview.chapterCount());
+
+        String said = warningsJoin(preview);
+        // 4 chapter posts, one of them published twice -> 4 posts, 3 chapters.
+        assertTrue("angka yang dilaporkan harus sama dengan daftar, bukan jumlah "
+                        + "postingan feed; peringatan: " + said,
+                said.contains("3 chapter diambil dari feed label"));
+        assertTrue("penggabungan harus dijelaskan beserta angkanya: " + said,
+                said.contains("4 postingan chapter di feed")
+                        && said.contains("1 di antaranya")
+                        && said.contains("3 chapter unik"));
+        assertTrue("postingan deskripsi tetap dilaporkan: " + said,
+                said.contains("deskripsi novel tidak dihitung"));
+    }
+
     /** A label that holds nothing is refused instead of producing an empty novel. */
     @Test
     public void anEmptyLabelIsRefusedInsteadOfStoredEmpty() throws Exception {

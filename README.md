@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.12
+# Kuromaku Reader 2.13
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -45,6 +45,12 @@ Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
 perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
+
+Versi 2.13 memperbaiki **angka di panel diagnostik**: panel sempat menulis
+"43 chapter diambil dari feed" di atas daftar berisi 42, karena yang dihitung
+adalah jumlah postingan feed sebelum judul kembar digabung. Semua angka sekarang
+sama dengan panjang daftar yang terlihat di layar. Detail di bagian
+**BUG 9 (2.13)**.
 
 Versi 2.12 memperbaiki jalur **Muat Ulang** untuk novel yang disimpan lewat URL
 label: jalur itu masih memakai aturan lama, sehingga postingan deskripsi novel
@@ -562,10 +568,10 @@ Cacat yang ditemukan saat menguji dengan HTML asli:
 10. Label interlude kembali memakai angka apa adanya (tanpa normalisasi Romawi) →
     `anInterludeIsLabelledTheSameFromDigitsOrRoman` gagal.
 
-Setelah semua dipulihkan: suite penuh **267 tes, 0 gagal**, penanda `MUTATION` di
+Setelah semua dipulihkan: suite penuh **268 tes, 0 gagal**, penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
-### Batasan yang masih berlaku untuk 2.12
+### Batasan yang masih berlaku untuk 2.13
 
 - Semua pengujian memakai HTML dan feed yang **disimpan sebagai fixture**, ditambah
   satu kali pembacaan jaringan nyata untuk memastikan angkanya. Novel lain dengan
@@ -632,7 +638,75 @@ Uji mutasi:
 2. Penjelasan "postingan deskripsi tidak dihitung" dihapus dari ringkasan →
    `reloadingALabelNovelKeepsTheDescriptionOutOfTheChapters` gagal.
 
-Setelah dipulihkan: **267 tes, 0 gagal**, penanda `MUTATION` nol.
+Setelah dipulihkan: **268 tes, 0 gagal**, penanda `MUTATION` nol.
+
+## BUG 9 (2.13) — Panel diagnostik menyebut angka yang tidak ada di daftar
+
+Ditemukan Shuvi sendiri saat memeriksa keluaran panel dengan kedua URL asli, bukan
+dari laporan Master Lupi.
+
+### Gejala
+
+Untuk URL label Yariko, panel menulis:
+
+```
+43 chapter diambil dari feed label "..."
+```
+
+di atas daftar **42** chapter. Selisih satu, tanpa penjelasan. Pengguna yang
+menghitung chapternya akan menyimpulkan satu chapter hilang.
+
+### Akar masalah
+
+Kalimat itu disusun dari `chapterEntries.size()` — jumlah **postingan** feed yang
+lolos penyaringan deskripsi — bukan dari jumlah chapter yang benar-benar masuk
+daftar. Feed Yariko memuat satu judul yang terbit dua kali
+(`Volume 3 Chapter 12` ada sebagai dua postingan berbeda), dan `LibraryBuilder`
+menggabungkannya menjadi satu baris. Jadi:
+
+| Angka | Nilai |
+| --- | --- |
+| Postingan di feed | 44 |
+| Setelah penyaringan deskripsi | 43 |
+| Setelah judul kembar digabung | **42** ← yang tampil di daftar |
+
+Peringatan penggabungan sudah ada di daftar `warnings`, tapi angka utamanya tetap
+yang salah — dan angka utama itulah yang dibaca orang lebih dulu.
+
+### Perbaikan
+
+1. Angka di kalimat utama dihitung dari `catalog.volumes` (jumlah chapter yang
+   benar-benar ada di daftar), bukan dari jumlah entri feed. Berlaku untuk **kedua**
+   jalur — preview dan Muat Ulang — karena keduanya punya kalimat sendiri.
+2. Kalimat penggabungan menyebut kedua angka sekaligus: berapa postingan chapter di
+   feed, berapa yang digabung, dan berapa chapter unik yang dihasilkan. Jadi selisih
+   44 → 42 bisa dilacak tanpa menebak.
+
+### Bukti tes menangkap bug
+
+`theReportedChapterCountEqualsTheListOnScreen` — feed berisi 5 postingan: satu
+deskripsi, satu judul yang terbit dua kali, dua chapter lain. Hasilnya harus
+**3 chapter**, dan peringatan harus menyebut "3 chapter diambil dari feed label"
+serta "4 postingan chapter di feed … 1 di antaranya … 3 chapter unik".
+
+Uji mutasi:
+
+1. Angka dikembalikan ke jumlah entri feed (sebelum penggabungan) →
+   `theReportedChapterCountEqualsTheListOnScreen` gagal.
+2. Kalimat yang menjelaskan penggabungan dihapus →
+   `theReportedChapterCountEqualsTheListOnScreen` gagal.
+
+Setelah dipulihkan: **268 tes, 0 gagal**, penanda `MUTATION` nol.
+
+### Yang diverifikasi dengan jaringan nyata
+
+Dijalankan ke `kaoritranslation.blogspot.com` setelah perbaikan:
+
+- Artikel Yariko → **43 chapter / 3 volume** (16 + 13 + 14).
+- Label Yariko → **42 chapter / 3 volume** (15 + 13 + 14), panel melaporkan 44
+  ditemukan dan 42 dipakai, dengan alasan untuk dua yang tidak dipakai.
+- Muat Ulang novel label yang sama → **42 chapter / 3 volume**, sama persis dengan
+  preview.
 
 ## Perbaikan bug
 
@@ -846,10 +920,10 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **267 pengujian** di 24 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **268 pengujian** di 24 kelas,
 semuanya lulus:
 
-- **YarikoAndLabelTest** (27) — dua kegagalan dari laporan, dibuktikan lewat fixture
+- **YarikoAndLabelTest** (28) — dua kegagalan dari laporan, dibuktikan lewat fixture
   HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
   dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
   label apa pun (tidak di-hardcode); katalog label dibaca dari **dua halaman feed**
@@ -1152,7 +1226,7 @@ gradle testDebugUnitTest assembleDebug
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
 
-### Batasan parser generik (2.12) — diukur, bukan diperkirakan
+### Batasan parser generik (2.13) — diukur, bukan diperkirakan
 
 Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
 diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan

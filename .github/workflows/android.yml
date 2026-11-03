@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.12 (APK)
+          name: Kuromaku Reader 2.13 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.12** (versionCode 32)
+            * Versi: **2.13** (versionCode 33)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -129,7 +129,7 @@ jobs:
               novel berdasarkan id punya fallback "novel pertama", sehingga novel
               yang baru dihapus bisa muncul kembali sebagai novel lain sambil
               membawa progres dan unduhannya.
-            * **267 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
+            * **268 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
               ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
               URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
               berformat berbeda (entry-content, heading h4, ordered list, label
@@ -141,6 +141,16 @@ jobs:
             * Uji mutasi: lima bug di atas dikembalikan satu per satu dan setiap
               kali ada tes yang gagal — tes ini terbukti menangkap bug, bukan
               sekadar hijau.
+            * **Bug 2.13 yang diperbaiki** — panel diagnostik menyebut angka yang
+              tidak ada di daftar. Untuk URL label Yariko panel menulis "43 chapter
+              diambil dari feed" di atas daftar berisi 42. Angka itu dihitung dari
+              jumlah postingan feed yang lolos penyaringan deskripsi, padahal
+              `LibraryBuilder` menggabungkan satu judul yang terbit dua kali: 44
+              postingan -> 43 setelah penyaringan -> **42** chapter unik. Semua angka
+              di panel sekarang dihitung dari daftar yang benar-benar tampil, di kedua
+              jalur (preview dan Muat Ulang), dan kalimat penggabungan menyebut ketiga
+              angka sekaligus supaya selisihnya bisa dilacak. Dua mutasi dijalankan,
+              keduanya tertangkap.
             * **Bug 2.12 yang diperbaiki** — daftar chapter berubah setelah Muat
               Ulang. Novel yang disimpan lewat URL label dibaca oleh dua fungsi
               berbeda: jalur Tambah Novel menyaring postingan deskripsi novel,

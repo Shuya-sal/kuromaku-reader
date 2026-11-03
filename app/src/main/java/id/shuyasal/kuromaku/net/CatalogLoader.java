@@ -166,11 +166,20 @@ public final class CatalogLoader {
         }
         Catalog catalog = LibraryBuilder.build(novel.id, chapterEntries);
 
+        // Same rule as the preview: a number the user can check against the list.
+        int catalogued = 0;
+        for (Volume volume : catalog.volumes) catalogued += volume.chapterCount();
+        int merged = chapterEntries.size() - catalogued;
+
         List<String> warnings = new ArrayList<>();
-        warnings.add(chapterEntries.size() + " chapter diambil dari feed label “" + label + "”.");
+        warnings.add(catalogued + " chapter diambil dari feed label “" + label + "”.");
         if (descriptionPosts > 0) {
             warnings.add(descriptionPosts + " postingan deskripsi novel tidak dihitung sebagai "
                     + "chapter, karena isinya bukan bagian dari cerita.");
+        }
+        if (merged > 0) {
+            warnings.add(merged + " judul chapter terbit lebih dari sekali dan digabung, "
+                    + "supaya tidak ada chapter ganda di daftar.");
         }
         if (feed.pagesRead > 1) {
             warnings.add("Feed dibaca " + feed.pagesRead + " halaman; daftar chapter lengkap.");
@@ -179,9 +188,6 @@ public final class CatalogLoader {
         // this null, so a reload that dropped the description post said nothing at
         // all and looked like a chapter had gone missing.
         StringBuilder extraText = new StringBuilder();
-        int catalogued = 0;
-        for (Volume volume : catalog.volumes) catalogued += volume.chapterCount();
-        int merged = chapterEntries.size() - catalogued;
         if (descriptionPosts > 0) {
             extraText.append(descriptionPosts).append(" postingan deskripsi novel tidak "
                     + "dihitung sebagai chapter.");
@@ -350,22 +356,25 @@ public final class CatalogLoader {
         }
         Catalog catalog = LibraryBuilder.build("", chapterEntries);
 
+        // Every number printed below has to equal the length of the list on screen.
+        // The first version said "43 chapter diambil dari feed" while the list showed
+        // 42, because it counted the feed posts before the duplicate merge — the kind
+        // of off-by-one that sends the user looking for a chapter that never existed.
+        int catalogued = 0;
+        for (Volume volume : catalog.volumes) catalogued += volume.chapterCount();
+        int merged = chapterEntries.size() - catalogued;
+
         List<String> warnings = new ArrayList<>();
-        warnings.add(chapterEntries.size() + " chapter diambil dari feed label “" + label + "”"
+        warnings.add(catalogued + " chapter diambil dari feed label “" + label + "”"
                 + (feed.pagesRead > 1 ? " (" + feed.pagesRead + " halaman feed)." : "."));
         if (descriptionPosts > 0) {
             warnings.add(descriptionPosts + " postingan deskripsi novel tidak dihitung sebagai "
                     + "chapter, karena isinya bukan bagian dari cerita.");
         }
-        // The feed listed two posts with the same volume and the same chapter title; the
-        // builder keeps one. Saying "43 chapter" while the list shows 42 is the kind of
-        // off-by-one that makes a user think a chapter went missing, so it is spelled out.
-        int catalogued = 0;
-        for (Volume volume : catalog.volumes) catalogued += volume.chapterCount();
-        int merged = chapterEntries.size() - catalogued;
         if (merged > 0) {
-            warnings.add(merged + " judul chapter terbit lebih dari sekali di feed dan digabung, "
-                    + "supaya tidak ada chapter ganda di daftar.");
+            warnings.add(chapterEntries.size() + " postingan chapter di feed; " + merged
+                    + " di antaranya menerbitkan ulang judul yang sama dan digabung, "
+                    + "jadi daftar berisi " + catalogued + " chapter unik.");
         }
         if (feed.warning != null) warnings.add(feed.warning);
         warnings.add("Halaman label menampilkan 20 postingan per halaman; aplikasi membaca "
