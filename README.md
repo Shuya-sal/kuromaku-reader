@@ -840,8 +840,21 @@ Setelah dipulihkan: **274 tes, 0 gagal**, penanda `MUTATION` nol, working tree b
 ### Yang tetap belum diuji di perangkat
 
 Tes ini memakai Robolectric pada 320 dp — tata letak dan perilaku klik nyata, tapi
-bukan layar HP sungguhan. Pemilih dengan 80 kotak centang di perangkat nyata (tinggi
-layar, scroll di dalam scroll) masih perlu dicoba Master Lupi.
+bukan layar HP sungguhan.
+
+Angka yang benar-benar diukur, bukan diperkirakan:
+
+- fixture `unlabelled_catalogue.html` → **5 kandidat, 3 boleh dipilih**, 0 chapter,
+  `needsConfirmation = true`; itulah yang diuji;
+- `yariko_toc.html` → **47 kandidat, 43 boleh dipilih**, 43 chapter, pemilih tidak
+  muncul;
+- artikel Yariko live → **47 tautan, 43 chapter, 3 volume (16+13+14)**;
+- URL label Yariko live → **44 tautan, 42 chapter, 3 volume (15+13+14)**.
+
+Jadi pemilih yang paling padat baru diuji dengan **3 kotak centang**. Kandidat
+terbanyak yang terukur di katalog nyata adalah **43** — angka itu belum pernah
+dirender sebagai pemilih di tes mana pun. Layar HP sungguhan dengan puluhan kotak
+centang (scroll di dalam scroll, tinggi layar, jempol) masih perlu dicoba Master Lupi.
 
 ## Perbaikan bug
 

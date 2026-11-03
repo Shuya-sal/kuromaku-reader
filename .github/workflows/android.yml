@@ -152,8 +152,12 @@ jobs:
               semua yang pernah disentuh; (3) tidak ada yang dikirim sebelum "Pakai
               pilihan ini" ditekan, dan katalog yang sudah terbaca dengan yakin tidak
               menampilkan pemilih sama sekali. Tiga mutasi dijalankan, semuanya
-              tertangkap. Pemilih dengan 80 kotak centang di layar HP sungguhan masih
-              perlu diuji di perangkat.
+              tertangkap. Yang diuji baru pemilih dengan **3 kotak centang** (fixture:
+              5 kandidat, 3 boleh dipilih). Kandidat terbanyak yang terukur di katalog
+              nyata adalah **43** (artikel Yariko: 47 tautan, 43 chapter, volume 16+13+14;
+              URL label: 44 tautan, 42 chapter, 15+13+14) — pemilih sepadat itu belum
+              pernah dirender di tes. Layar HP sungguhan dengan puluhan kotak centang
+              masih perlu diuji di perangkat.
             * **Bug 2.15 yang diperbaiki** — bentuk alamat yang didukung tidak
               diberitahukan. Petunjuk di bawah judul halaman Tambah Novel hanya
               menyebut artikel katalog, padahal URL label `/search/label/...` sudah
