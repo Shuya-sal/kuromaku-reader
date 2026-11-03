@@ -87,6 +87,24 @@ public final class RingProgress extends View {
         return indeterminate;
     }
 
+    /**
+     * The fraction actually painted right now, as a percentage, or {@code -1}
+     * while the ring spins without a measurable total.
+     *
+     * <p>This is what the view draws, not what it was asked to draw: while the
+     * 180 ms animation runs it reports the interpolated value. The download code
+     * prints its own measured number beside the ring, so the two can never
+     * disagree about a total that was never measured.
+     *
+     * <p>The range is deliberately <b>not</b> clamped here. The single guard is in
+     * {@link #setProgress(int)}; duplicating it here would hide the real one, so a
+     * test could never prove the guard exists.
+     */
+    public int percentShown() {
+        if (indeterminate) return -1;
+        return Math.round(shown * 100f);
+    }
+
     private void indeterminate(boolean value) {
         if (indeterminate == value) return;
         indeterminate = value;

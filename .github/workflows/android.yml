@@ -64,7 +64,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-2.18-debug
+          name: kuromaku-reader-2.18.1-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.18 (APK)
+          name: Kuromaku Reader 2.18.1 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.18** (versionCode 38)
+            * Versi: **2.18.1** (versionCode 39)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -211,16 +211,18 @@ jobs:
               "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
               selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
               tidak pernah muncul selama masih ada chapter belum lengkap.
-            * **301 unit test lulus**, 0 gagal (28 kelas). `VolumeCoversAndDownloadStateTest`
+            * **306 unit test lulus**, 0 gagal (29 kelas). `VolumeCoversAndDownloadStateTest`
               (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
               memicu laporan — dan mengukur UI pada layar 320 dp.
-            * Uji mutasi 2.18: **12 mutasi pada berkas hidup** (cover tidak ditempel,
+            * Uji mutasi 2.18: **15 mutasi pada berkas hidup** (cover tidak ditempel,
               semua volume memakai cover pertama, tabel menimpa hasil parse, novel
               asing meminjam tabel Magical, persentase volume dipalsukan, "Tersimpan
               semua" padahal belum, persentase menempel ke status, angka persen
               dikarang, chapter parsial dianggap lengkap, `isComplete` disamakan
-              `isSaved`, gambar rusak tetap ditulis, progres byte tidak diteruskan) —
-              **12/12 tertangkap**, pemulihan diverifikasi `md5` sebelum/sesudah.
+              `isSaved`, gambar rusak tetap ditulis, progres byte tidak diteruskan,
+              animasi dijalankan walau "Remove animations" aktif, spinner melaporkan
+              persen, fraksi di luar 0–100 tidak dijepit) — **15/15 tertangkap**,
+              pemulihan diverifikasi `md5` sebelum/sesudah.
             * **BUG 12 (2.17) — sumber katalog Monogatari diganti ke artikel
               daftar isi sumbernya.** Gejala: Monogatari gagal dengan "Respons feed
               halaman ke-1 tidak dapat dibaca" dan daftar chapter jadi **0**, karena

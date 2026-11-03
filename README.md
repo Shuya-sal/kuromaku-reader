@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.18
+# Kuromaku Reader 2.18.1
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -909,9 +909,14 @@ perilaku ini dilaporkan, bukan disembunyikan.
 ### Bukti tes menangkap bug
 
 `VolumeCoversAndDownloadStateTest` (17 tes) memakai `yariko_article_covers.html` —
-artikel asli yang memicu laporan — dan mengukur UI pada layar 320 dp. Uji mutasi
-`2.18` menjalankan **12 mutasi pada berkas hidup** dengan `md5` sebelum/sesudah, dan
-**12/12 tertangkap**:
+artikel asli yang memicu laporan — dan mengukur UI pada layar 320 dp.
+`RingProgressMotionTest` (5 tes) menguji cincin progres secara langsung: nilainya
+langsung tampil saat "Remove animations" aktif, animasi berakhir tepat pada angka
+yang diberikan, spinner tidak pernah melaporkan persen, dan fraksi di luar 0–100
+dijepit.
+
+Uji mutasi `2.18` menjalankan **15 mutasi pada berkas hidup** dengan `md5`
+sebelum/sesudah, dan **15/15 tertangkap**:
 
 | Mutasi | Tertangkap oleh |
 |---|---|
@@ -927,19 +932,23 @@ artikel asli yang memicu laporan — dan mengukur UI pada layar 320 dp. Uji muta
 | `isComplete` disamakan dengan `isSaved` | `brokenIllustrationStoresTextAsPartialAndCountsTheMissingPicture` |
 | Gambar rusak tetap ditulis | `brokenIllustrationStoresTextAsPartialAndCountsTheMissingPicture` |
 | Progres byte tidak diteruskan ke status | `byteProgressOfTheRunningChapterReachesTheStatusStore` |
+| Animasi dijalankan walau "Remove animations" aktif | `withMotionOffTheRingJumpsStraightToTheMeasuredValue` |
+| Spinner melaporkan persen padahal total tidak diketahui | `aRingWithoutAMeasuredTotalNeverReportsAPercentage` |
+| Fraksi di luar 0–100 tidak dijepit | `aFractionOutsideTheRangeIsClampedInsteadOfDrawnOutsideTheRing` |
 
-### Hasil rilis 2.18 (terukur)
+### Hasil rilis 2.18 / 2.18.1 (terukur)
 
-- Commit `fe519a8` di `main`; GitHub Actions run **`41623707350`** — `completed success`.
-  Commit dokumen `516bb4b` → run **`41624149137`** — `completed success`.
-- APK rilis di tag `latest-apk`: **5.547.084 byte**, `aapt2 dump badging` →
-  `versionCode='38' versionName='2.18'` (exit 0).
-- Build lokal: `5.547.104 byte` — beda ukuran karena metadata build, versi dan isi sama.
+- `2.18` — commit `fe519a8`; Actions run **`41623707350`** `completed success`.
+  APK `versionCode='38'` / `2.18`, 5.547.084 byte.
+- Dokumen `2.18` — commit `516bb4b` (run `41624149137`) dan `e0d5d40`
+  (run `41624759027`), keduanya success.
+- `2.18.1` — commit yang memuat tes `RingProgressMotionTest` (5 tes) dan mutasi
+  13–15; hash-nya tidak ditulis di sini karena berkas ini ikut di commit itu sendiri. Lokal **306 tes / 29 kelas / 0 gagal**, APK **5.547.164 byte**,
+  `aapt2 dump badging` → `versionCode='39' versionName='2.18.1'` (exit 0).
 - **`md5` APK tidak dicatat sebagai patokan.** Setiap build ulang menghasilkan byte
-  berbeda pada ukuran yang sama (`5497eea1…` untuk build `fe519a8`, `1df00ac7…` untuk
-  build `516bb4b`), jadi `md5` hanya berguna untuk membandingkan satu unduhan dengan
-  unduhan lain **dari build yang sama**. Yang menentukan versi adalah keluaran
-  `aapt2`, bukan hash.
+  berbeda pada ukuran yang sama, jadi `md5` hanya berguna untuk membandingkan satu
+  unduhan dengan unduhan lain **dari build yang sama**. Yang menentukan versi adalah
+  keluaran `aapt2`, bukan hash.
 - Probe live pada sumber asli: Monogatari **116 chapter / 7 volume / 7 cover**;
   Magical★Explorer **141 chapter / 14 volume / 14 cover**; Yarikon lewat URL
   **43 chapter / 3 volume / 3 cover** (16+13+14).
@@ -1347,7 +1356,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **301 pengujian** di 28 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **306 pengujian** di 29 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
