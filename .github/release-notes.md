@@ -6,7 +6,7 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.19.1** (versionCode 41)
+* Versi: **2.19.2** (versionCode 42)
 * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
   Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
   katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -112,6 +112,29 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   riwayat WebView lebih dulu, dan WebView dihancurkan di `onDestroy`.
   Tahap 1 sengaja hanya menampilkan situs: belum ada ekstraksi chapter
   atau penyimpanan offline untuk manga.
+* **Layar penuh untuk manga (2.19.2).** Tombol **⛶** di header Manga
+  menyembunyikan header dan bilah alamat sekaligus, sehingga halaman
+  mendapat seluruh tinggi layar. Status bar dan bilah navigasi ikut
+  disembunyikan lewat `WindowInsetsControllerCompat`, dan bisa dimunculkan
+  sementara dengan menggeser dari tepi. Tombol **Kembali** keluar dari
+  layar penuh lebih dulu sebelum menutup layar atau memundurkan riwayat
+  WebView — kalau tidak, satu-satunya jalan keluar adalah meninggalkan
+  halaman dan kehilangan posisi baca. Status layar penuh disimpan di
+  `onSaveInstanceState`, jadi memutar HP tidak mengembalikan toolbar.
+  Di mode normal, toolbar digeser turun oleh **tinggi status bar sebenarnya**
+  dari `WindowInsets` (bukan padding tetap), dan konten diberi ruang di
+  bawah sebesar bilah navigasi. Di layar penuh kedua padding itu nol.
+  Konsekuensinya `setDecorFitsSystemWindows(false)` dipakai, jadi padding
+  inset adalah satu-satunya yang mencegah toolbar tertutup status bar.
+* **4 tes baru layar penuh** di `MangaScreenTest` menekan tombol ⛶ yang
+  sungguhan: header dan bilah alamat hilang lalu kembali, `Kembali` keluar
+  dari layar penuh tanpa menutup layar, status bertahan setelah layar dibuat
+  ulang, dan inset 72/48 px dari sistem menggeser toolbar 72 px serta
+  menyisakan 48 px di bawah — lalu keduanya nol saat layar penuh.
+  Uji mutasi: **7/7 tertangkap** (header tidak disembunyikan, bilah alamat
+  tetap tampil, tombol tidak bereaksi, `Kembali` tidak keluar dari layar
+  penuh, status tidak disimpan, inset diabaikan, padding bawah tetap ada di
+  layar penuh) dengan pemulihan diverifikasi `md5`.
 * **8 tes `MangaScreenTest`** mengunci penjaga dan navigasi itu: sumber
   dan subdomainnya diterima, domain lama diterima, kemiripan nama ditolak
   (termasuk nama sumber yang muncul di tengah host), `http`/`file`/
@@ -120,7 +143,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   tombol menu bagian berikon dan seluas 48 dp, menu itu hanya tampil di
   rak sementara panah kembali mengambil tempatnya di halaman Unduhan,
   serta halaman terakhir bertahan saat layar dibuat ulang.
-  Uji mutasi: **4/4 tertangkap** (visibilitas menu dihapus, panah kembali
+  Uji mutasi navigasi 2.19.1: **4/4 tertangkap** (visibilitas menu dihapus, panah kembali
   selalu tampil, tombol menu kembali jadi tombol teks tanpa ikon, penjaga
   domain dilonggarkan jadi `contains`) dengan pemulihan diverifikasi
   `md5`. Run pertama hanya 2/4 — dua mutasi bertahan hijau, jadi kedua tes
@@ -168,7 +191,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
   selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
   tidak pernah muncul selama masih ada chapter belum lengkap.
-* **314 unit test lulus**, 0 gagal (30 kelas). `VolumeCoversAndDownloadStateTest`
+* **318 unit test lulus**, 0 gagal (30 kelas). `VolumeCoversAndDownloadStateTest`
   (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
   memicu laporan — dan mengukur UI pada layar 320 dp.
   `RingProgressMotionTest` (5 tes) menguji cincin progres langsung:

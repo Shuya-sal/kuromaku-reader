@@ -8,6 +8,10 @@ import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -27,14 +31,21 @@ public class MangaActivity extends AppCompatActivity {
     private ProgressBar progress;
     private TextView address;
     private String lastTrusted = LANDING;
+    private LinearLayout root, header;
+    private TextView addressBar;
+    private boolean fullscreen = false;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         LinearLayout layout = new LinearLayout(this);
+        root = layout;
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setBackgroundColor(Color.rgb(19, 21, 28));
         LinearLayout header = new LinearLayout(this);
+        this.header = header;
+        header.setTag("manga_header");
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(8), dp(8), dp(8), dp(8));
         Button menu = button("☰");
@@ -48,8 +59,15 @@ public class MangaActivity extends AppCompatActivity {
         Button home = button("Sumber");
         home.setOnClickListener(v -> web.loadUrl(LANDING));
         header.addView(home);
+        Button expand = button("⛶");
+        expand.setTag("manga_fullscreen");
+        expand.setContentDescription("Aktifkan atau nonaktifkan layar penuh");
+        expand.setOnClickListener(v -> setFullscreen(!fullscreen));
+        header.addView(expand);
         layout.addView(header);
         address = new TextView(this);
+        addressBar = address;
+        address.setTag("manga_address");
         address.setTextColor(0xffaaaaaa);
         address.setTextSize(12);
         address.setPadding(dp(16), dp(5), dp(16), dp(8));
@@ -83,7 +101,29 @@ public class MangaActivity extends AppCompatActivity {
         });
         layout.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(layout);
+        // Edge-to-edge safe area: never place toolbar behind status bar or
+        // bottom content behind gesture navigation in normal mode.
+        ViewCompat.setOnApplyWindowInsetsListener(layout, (view, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            view.setPadding(bars.left, fullscreen ? 0 : bars.top, bars.right, fullscreen ? 0 : bars.bottom);
+            return insets;
+        });
+        if (state != null && state.getBoolean("manga_fullscreen", false)) setFullscreen(true);
         web.loadUrl(state == null ? LANDING : state.getString("manga_url", LANDING));
+    }
+
+    private void setFullscreen(boolean enabled) {
+        fullscreen = enabled;
+        header.setVisibility(enabled ? View.GONE : View.VISIBLE);
+        addressBar.setVisibility(enabled ? View.GONE : View.VISIBLE);
+        WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), root);
+        if (enabled) {
+            controller.hide(WindowInsetsCompat.Type.systemBars());
+            controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        } else {
+            controller.show(WindowInsetsCompat.Type.systemBars());
+        }
+        ViewCompat.requestApplyInsets(root);
     }
 
     /**
@@ -116,10 +156,12 @@ public class MangaActivity extends AppCompatActivity {
     }
     private int dp(int value) { return (int) (getResources().getDisplayMetrics().density * value + .5f); }
     @Override public void onBackPressed() {
-        if (web != null && web.canGoBack()) web.goBack(); else super.onBackPressed();
+        if (fullscreen) setFullscreen(false);
+        else if (web != null && web.canGoBack()) web.goBack(); else super.onBackPressed();
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         state.putString("manga_url", lastTrusted);
+        state.putBoolean("manga_fullscreen", fullscreen);
         super.onSaveInstanceState(state);
     }
     @Override protected void onDestroy() {

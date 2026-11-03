@@ -8,8 +8,8 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 41
-        versionName = "2.19.1"
+        versionCode = 42
+        versionName = "2.19.2"
     }
 
     buildTypes {

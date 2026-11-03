@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.19.1
+# Kuromaku Reader 2.19.2
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -819,11 +819,39 @@ dan `?m=1`.
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
-## Bagian Manga tahap 1 (2.19, diperbaiki di 2.19.1)
+## Bagian Manga tahap 1 (2.19, layar penuh di 2.19.2)
 
 Tombol menu di toolbar Perpustakaan membuka pilihan **Novel / Manga**. Memilih Manga
 membuka layar terpisah; memilih Novel membawa kembali ke rak. Menu itu satu-satunya
 jalan masuk, jadi tanpa tombol ini layar manga tidak bisa dicapai dari aplikasi.
+
+### Layar penuh 2.19.2
+
+Tombol **⛶** di header Manga menyembunyikan header dan bilah alamat, jadi halaman
+manga mendapat seluruh tinggi layar. Status bar dan bilah navigasi ikut hilang lewat
+`WindowInsetsControllerCompat`, dan bisa dimunculkan sementara dengan menggeser dari
+tepi layar.
+
+**Kembali keluar dari layar penuh lebih dulu**, sebelum memundurkan riwayat WebView
+atau menutup layar. Tanpa urutan itu, satu-satunya jalan keluar dari halaman penuh
+adalah meninggalkannya — dan posisi baca hilang.
+
+Status layar penuh disimpan di `onSaveInstanceState`, jadi memutar HP tidak
+mengembalikan toolbar. Ukuran layar penuh juga bertahan saat layar dibuat ulang.
+
+#### Insets, bukan padding tetap
+
+`setDecorFitsSystemWindows(false)` dipakai supaya layar penuh benar-benar penuh.
+Konsekuensinya konten berada di bawah status bar, jadi **padding inset menjadi
+satu-satunya** yang mencegah toolbar tertutup. Di mode normal padding atas dan bawah
+memakai tinggi sebenarnya dari `WindowInsets` (`systemBars | displayCutout`); di
+layar penuh keduanya nol.
+
+Tes mengirim inset 72/48 px dari sistem lalu memeriksa padding yang dihasilkan:
+toolbar tergeser tepat 72 px, konten menyisakan 48 px di bawah, dan keduanya nol
+setelah tombol ⛶ ditekan. Angka 72 dan 48 itu **dipilih tes**, bukan hasil ukur
+perangkat — yang diuji adalah bahwa kode memakai angka yang dilaporkan sistem, bukan
+angka yang dipatok sendiri.
 
 ### Perbaikan navigasi 2.19.1
 
@@ -1446,7 +1474,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **314 pengujian** di 30 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **318 pengujian** di 30 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1663,12 +1691,16 @@ Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
   **selalu dikirim di main thread**, dan listener yang melempar exception tidak
   membungkam listener lain; index unduhan yang rusak tidak membuat layar kosong.
 
-- **MangaScreenTest** (8, Robolectric) — layar Manga tahap 1: sumber dan
+- **MangaScreenTest** (12, Robolectric) — layar Manga: sumber dan
   subdomainnya diterima, domain lama diterima, kemiripan nama (`evilvoratoon.id`,
-  `voratoon.id.evil.com`) ditolak, `http`/`file`/`javascript`/tanpa host ditolak,
-  path yang memuat nama domain di situs asli tetap diterima, layar terdaftar di
-  manifest dan tidak diekspor, tombol ☰ ada di toolbar novel dengan deskripsi
-  "Menu Novel dan Manga", serta halaman terakhir bertahan saat layar dibuat ulang.
+  `voratoon.id.evil.com`, `cdn.voratoon.id.evil.com`) ditolak,
+  `http`/`file`/`javascript`/tanpa host ditolak, path yang memuat nama domain di
+  situs asli tetap diterima, layar terdaftar di manifest dan tidak diekspor, tombol
+  menu bagian berikon 48 dp, menu itu hanya tampil di rak, halaman terakhir bertahan
+  saat layar dibuat ulang, dan empat tes layar penuh: header serta bilah alamat hilang
+  lalu kembali lewat tombol ⛶, `Kembali` keluar dari layar penuh tanpa menutup layar,
+  status layar penuh bertahan setelah dibuat ulang, serta inset 72/48 px dari sistem
+  menggeser toolbar dan menyisakan ruang bawah — nol saat layar penuh.
 
 ### Bukti tes offline menangkap bug
 

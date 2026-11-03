@@ -11,9 +11,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewGroup;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.test.core.app.ApplicationProvider;
 
 import org.junit.Test;
@@ -164,5 +169,113 @@ public class MangaScreenTest {
         assertEquals("https://voratoon.id/", state.getString("manga_url"));
 
         assertNotNull("layar harus terbangun", screen.getWindow().getDecorView());
+    }
+
+    // ---------------------------------------------------------------- fullscreen
+
+    private MangaActivity manga() {
+        Intent intent = new Intent(context, MangaActivity.class);
+        MangaActivity screen = Robolectric.buildActivity(MangaActivity.class, intent).setup().get();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        return screen;
+    }
+
+    private static View tagged(MangaActivity screen, String tag) {
+        return screen.getWindow().getDecorView().findViewWithTag(tag);
+    }
+
+    /**
+     * Fullscreen has to actually give the page its space back. The button is the
+     * only way in, so the test presses the real button rather than calling a setter.
+     */
+    @Test
+    public void theFullscreenButtonHidesTheChrome() {
+        MangaActivity screen = manga();
+        View header = tagged(screen, "manga_header");
+        View address = tagged(screen, "manga_address");
+        View toggle = tagged(screen, "manga_fullscreen");
+        assertNotNull("header harus ada", header);
+        assertNotNull("bilah alamat harus ada", address);
+        assertNotNull("tombol layar penuh harus ada", toggle);
+        assertEquals("awalnya bukan layar penuh", View.VISIBLE, header.getVisibility());
+        assertEquals("awalnya bilah alamat tampil", View.VISIBLE, address.getVisibility());
+
+        toggle.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("header harus hilang", View.GONE, header.getVisibility());
+        assertEquals("bilah alamat harus hilang", View.GONE, address.getVisibility());
+
+        toggle.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals("header harus kembali", View.VISIBLE, header.getVisibility());
+        assertEquals("bilah alamat harus kembali", View.VISIBLE, address.getVisibility());
+    }
+
+    /**
+     * Back leaves fullscreen first. If it did not, the only way out of a full page
+     * would be to leave the screen entirely, which loses the reading position.
+     */
+    @Test
+    public void backLeavesFullscreenBeforeLeavingTheScreen() {
+        MangaActivity screen = manga();
+        View header = tagged(screen, "manga_header");
+
+        tagged(screen, "manga_fullscreen").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, header.getVisibility());
+
+        screen.onBackPressed();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        assertEquals("kembali harus keluar dari layar penuh", View.VISIBLE, header.getVisibility());
+        assertFalse("layar tidak boleh ikut tertutup", screen.isFinishing());
+    }
+
+    /** Rotating the phone in fullscreen must not bring the toolbar back. */
+    @Test
+    public void fullscreenSurvivesARecreation() {
+        Bundle state = new Bundle();
+        state.putBoolean("manga_fullscreen", true);
+        state.putString("manga_url", "https://voratoon.id/manga/1");
+
+        MangaActivity screen = Robolectric.buildActivity(MangaActivity.class,
+                new Intent(context, MangaActivity.class))
+                .setup(state).get();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        assertEquals("header harus tetap hilang setelah dipulihkan",
+                View.GONE, tagged(screen, "manga_header").getVisibility());
+
+        Bundle saved = new Bundle();
+        screen.onSaveInstanceState(saved);
+        assertTrue("status layar penuh harus disimpan", saved.getBoolean("manga_fullscreen"));
+    }
+
+    /**
+     * The status bar area belongs to the page only in fullscreen. In normal mode the
+     * toolbar must be pushed below the status bar by the real inset height, never by
+     * a hardcoded padding — this asserts the number the system reported.
+     */
+    @Test
+    public void theStatusBarInsetMovesTheToolbarInsteadOfOverlappingIt() {
+        MangaActivity screen = manga();
+        View root = screen.findViewById(android.R.id.content);
+        assertNotNull(root);
+        View content = ((ViewGroup) root).getChildAt(0);
+
+        WindowInsetsCompat insets = new WindowInsetsCompat.Builder()
+                .setInsets(WindowInsetsCompat.Type.systemBars(), Insets.of(0, 72, 0, 48))
+                .build();
+        ViewCompat.dispatchApplyWindowInsets(content, insets);
+
+        assertEquals("toolbar di bawah status bar 72px", 72, content.getPaddingTop());
+        assertEquals("konten tidak menabrak navigasi 48px", 48, content.getPaddingBottom());
+
+        tagged(screen, "manga_fullscreen").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        ViewCompat.dispatchApplyWindowInsets(content, insets);
+
+        assertEquals("layar penuh memakai seluruh tinggi", 0, content.getPaddingTop());
+        assertEquals("layar penuh memakai seluruh dasar", 0, content.getPaddingBottom());
     }
 }

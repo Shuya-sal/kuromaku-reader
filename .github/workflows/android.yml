@@ -94,7 +94,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-2.19.1-debug
+          name: kuromaku-reader-2.19.2-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -104,7 +104,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.19.1 (APK)
+          name: Kuromaku Reader 2.19.2 (APK)
           body_path: .github/release-notes.md
           files: |
             app/build/outputs/apk/debug/app-debug.apk
