@@ -110,6 +110,14 @@ jobs:
             echo "::error::placeholder commit masih ada di badan rilis"
             exit 1
           fi
+          # Checking only that the token disappeared is not enough: if the footer is
+          # ever rewritten without it, nothing is substituted, the previous check
+          # passes vacuously, and the release publishes with no commit named at all.
+          # So the rendered body must actually contain this build's commit.
+          if ! grep -q "${GITHUB_SHA}" release-body.md; then
+            echo "::error::badan rilis tidak menyebut commit ${GITHUB_SHA}"
+            exit 1
+          fi
           echo "badan rilis: $(stat -c%s release-body.md) karakter, commit ${GITHUB_SHA}"
 
       - name: Upload APK artifact
