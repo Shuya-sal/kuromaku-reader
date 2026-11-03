@@ -1453,8 +1453,8 @@ diunduh pun tidak punya tempat untuk digambar, sehingga teks tampil tetapi semua
 ilustrasi hilang — termasuk isi postingan "Illustrasi".
 
 Yang **bukan** penyebabnya, sudah diuji dan disingkirkan:
-- **URL hasil parser**: 46 URL dari 7 volume diunduh langsung → **46/46 HTTP 200**,
-  `Content-Type: image/*`, hasil decode JPEG/PNG valid.
+- **URL hasil parser**: 44 URL dari 7 postingan Illustrasi (5+5+5+8+7+7+7) diunduh
+  langsung → **44/44 HTTP 200**, `Content-Type: image/*`, hasil decode JPEG/PNG valid.
 - **Akses gambar**: tanpa User-Agent khusus tetap `200`; tidak ada redirect aneh,
   tidak ada blokir.
 - **Dependency Glide**: `glide:4.16.0` ada di `debugRuntimeClasspath` dan kelasnya
@@ -1738,7 +1738,8 @@ Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
 6 halaman, **117/117 postingan**, Volume 1–7 lengkap.
 
 Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
-**46/46 URL hasil parser** dari 7 volume diunduh → HTTP 200, `image/*`, decode valid.
+**44/44 URL hasil parser** dari 7 postingan Illustrasi diunduh → HTTP 200, `image/*`, decode valid.
+Angka 44 sama dengan yang dijaga `ChapterImageParserTest` (5+5+5+8+7+7+7).
 
 - **OfflineDownloadTest** (18, Robolectric) — inti penyimpanan offline:
   chapter tersimpan lalu dibaca ulang tanpa jaringan; ilustrasi benar-benar
