@@ -74,12 +74,25 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.5 (APK)
+          name: Kuromaku Reader 2.6 (APK)
           body: |
             Pembaca native untuk dua novel dari Kaori Translation:
             *Monogatari no Kuromaku* dan *Magical★Explorer*.
 
-            * Versi: **2.5** (versionCode 25)
+            * Versi: **2.6** (versionCode 26)
+            * **Perbaikan bug status bar**: header tidak lagi bertabrakan dengan
+              jam setelah pergantian tema. Akar masalahnya adalah dua hal di
+              pengelolaan WindowInsets — listener hanya menerapkan padding
+              "kalau nilainya berubah" (padahal ganti tema membangun ulang
+              seluruh view tree, sehingga toolbar baru mulai dari padding 0 dan
+              listener memutuskan tidak ada yang berubah), dan dispatch inset
+              kosong bisa menimpa tinggi status bar yang sudah diketahui dengan
+              0. Sekarang inset disimpan di satu objek `SystemBarInsets` yang
+              menolak pembacaan kosong, dan padding selalu diterapkan ulang
+              (idempoten, jadi tidak bisa menumpuk). Tidak ada padding-top
+              hardcoded; tinggi status bar selalu dari WindowInsets aktual.
+            * Ikon status bar mengikuti tema: gelap pada tema terang, terang
+              pada tema gelap, dan diterapkan ulang setiap kali tema berubah.
             * **Header ringkas di seluruh halaman**: toolbar satu baris 58 dp
               (56 dp di Reader Mode) di luar system inset, status bar inset
               diterapkan sebagai padding di atas toolbar sehingga judul tidak
@@ -114,8 +127,12 @@ jobs:
               tombol Coba lagi, logging tanpa token.
             * Tema terang / gelap / sepia, ukuran font, spasi baris.
             * Monogatari no Kuromaku tetap lengkap: Volume 1–7, 117 chapter.
-            * 135 unit test lulus, termasuk 18 tes header & animasi baru yang
-              diukur di layar 320×640 dp dan 411×891 dp.
+            * 148 unit test lulus, termasuk 13 tes `InsetStabilityTest` baru:
+              ganti tema 10 kali berturut-turut, buka detail → kembali → ganti
+              tema lagi, buka ulang dengan tema gelap tersimpan, dispatch inset
+              berulang (tidak menumpuk), tinggi header tetap 56–64 dp, animasi
+              tidak menggeser toolbar, dan toolbar Reader Mode tetap benar
+              setelah ganti tema.
 
             APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
             Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.

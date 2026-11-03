@@ -36,6 +36,7 @@ import id.shuyasal.kuromaku.ui.Motion;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.ScrollMath;
+import id.shuyasal.kuromaku.ui.SystemBarInsets;
 import id.shuyasal.kuromaku.ui.Ui;
 
 /**
@@ -79,8 +80,17 @@ public class ReaderActivity extends AppCompatActivity {
     private ChapterContent content;
     private int panel = PANEL_NONE;
 
-    private int insetTop;
-    private int insetBottom;
+    /**
+     * Single source of truth for window insets (BUG 2.6).
+     *
+     * <p>The previous pair of int fields was only updated "when it changed", and a
+     * layout-only inset dispatch that reports no system bars used to overwrite the
+     * real value with 0 — after which the toolbar lost its status bar padding and
+     * slid under the clock. This app never hides the system bars, so a dispatch
+     * that reports nothing while we already know the real height is treated as
+     * "no information yet" and ignored.
+     */
+    private final SystemBarInsets insets = new SystemBarInsets();
     private int pendingRestorePosition = -1;
     private int pendingRestoreOffset;
     private boolean progressSaved;
@@ -188,6 +198,9 @@ public class ReaderActivity extends AppCompatActivity {
 
         setContentView(root);
         applySystemBars();
+        // Apply the insets we already know before the next dispatch arrives, so a
+        // repainted or re-created reader never flashes with the bar under the clock.
+        adaptInsets();
         applyInsetsListener();
 
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -205,13 +218,11 @@ public class ReaderActivity extends AppCompatActivity {
      */
     private void applyInsetsListener() {
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
-            Insets systemBars = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-            if (systemBars.top != insetTop || systemBars.bottom != insetBottom) {
-                insetTop = systemBars.top;
-                insetBottom = systemBars.bottom;
-                adaptInsets();
-            }
+            // A layout-only dispatch can report no bars at all; the app never
+            // hides them, so SystemBarInsets keeps the last real height instead of
+            // accepting the zero and stripping the toolbar's padding.
+            insets.accept(windowInsets);
+            adaptInsets();
             return windowInsets;
         });
         ViewCompat.requestApplyInsets(root);
@@ -220,10 +231,13 @@ public class ReaderActivity extends AppCompatActivity {
     /** Applies the current insets to bars, list and footer padding. */
     private void adaptInsets() {
         if (topBar != null) {
-            topBar.setPadding(0, insetTop, 0, 0);
+            // Status bar inset belongs to the toolbar container only, so its
+            // surface colour still paints behind the bar and nothing else needs
+            // its own copy of the value.
+            topBar.setPadding(0, insets.get().top, 0, 0);
         }
         if (bottomBar != null) {
-            bottomBar.setPadding(0, 0, 0, insetBottom);
+            bottomBar.setPadding(0, 0, 0, insets.get().bottom);
         }
         if (panelBox != null) {
             panelBox.setPadding(0, 0, 0, 0);
@@ -235,7 +249,7 @@ public class ReaderActivity extends AppCompatActivity {
             // Space the last block must clear: panel height is not an overlay,
             // but the gesture bar plus a comfortable gap is.
             adapter.setBottomPadding(Math.max(Ui.dp(this, 28),
-                    ScrollMath.footerPadding(Ui.dp(this, 28), insetBottom)));
+                    ScrollMath.footerPadding(Ui.dp(this, 28), insets.get().bottom)));
             adapter.notifyDataSetChanged();
         }
     }
@@ -654,6 +668,9 @@ public class ReaderActivity extends AppCompatActivity {
 
     private void repaint() {
         applySystemBars();
+        // Re-assert the insets after any theme repaint: a repaint must never be
+        // able to leave the toolbar above the status bar.
+        adaptInsets();
         root.setBackgroundColor(palette.background);
         topBar.setBackgroundColor(palette.surface);
         bottomBar.setBackgroundColor(palette.surface);

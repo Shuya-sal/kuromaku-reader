@@ -27,6 +27,7 @@ import com.bumptech.glide.request.target.Target;
 import id.shuyasal.kuromaku.ui.ImageLoadLog;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.SystemBarInsets;
 import id.shuyasal.kuromaku.ui.Ui;
 import id.shuyasal.kuromaku.ui.ZoomableImageView;
 
@@ -48,8 +49,14 @@ public class ImageViewerActivity extends AppCompatActivity {
     private LinearLayout errorBox;
     private TextView errorDetail;
     private String url;
-    private int insetTop;
-    private int insetBottom;
+    /**
+     * Single source of truth for window insets (same fix as MainActivity).
+     * A "changed?" guard against loose int fields loses the status bar padding
+     * whenever the tree is rebuilt for a new theme.
+     */
+    private final SystemBarInsets insets = new SystemBarInsets();
+    private LinearLayout bar;
+    private FrameLayout stage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,7 +80,7 @@ public class ImageViewerActivity extends AppCompatActivity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(0xFF000000);
 
-        LinearLayout bar = new LinearLayout(this);
+        bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setBackgroundColor(0xCC000000);
@@ -102,7 +109,7 @@ public class ImageViewerActivity extends AppCompatActivity {
         root.addView(bar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        FrameLayout stage = new FrameLayout(this);
+        stage = new FrameLayout(this);
         image = new ZoomableImageView(this);
         image.setTag("viewer_image");
         stage.addView(image, new FrameLayout.LayoutParams(
@@ -146,18 +153,23 @@ public class ImageViewerActivity extends AppCompatActivity {
         setContentView(root);
 
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
-            Insets bars = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-            if (bars.top != insetTop || bars.bottom != insetBottom) {
-                insetTop = bars.top;
-                insetBottom = bars.bottom;
-                bar.setPadding(Ui.dp(this, 10), insetTop + Ui.dp(this, 8),
-                        Ui.dp(this, 10), Ui.dp(this, 8));
-                stage.setPadding(0, 0, 0, insetBottom);
-            }
+            insets.accept(windowInsets);
+            applyInsets();
             return windowInsets;
         });
+        applyInsets();
         ViewCompat.requestApplyInsets(root);
+    }
+
+    /** Top inset on the close bar, bottom inset on the image stage — one each. */
+    private void applyInsets() {
+        if (bar != null) {
+            bar.setPadding(Ui.dp(this, 10), insets.get().top + Ui.dp(this, 8),
+                    Ui.dp(this, 10), Ui.dp(this, 8));
+        }
+        if (stage != null) {
+            stage.setPadding(0, 0, 0, insets.get().bottom);
+        }
     }
 
     private void load() {

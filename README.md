@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.5
+# Kuromaku Reader 2.6
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -20,6 +20,10 @@ Versi 2.5 memoles **header dan animasi**: toolbar ringkas dengan status bar inse
 yang benar, tombol **Kembali** berlabel yang mudah ditekan, tombol aksi berbentuk
 ikon, dan animasi navigasi 180–250 ms yang menghormati pengaturan
 *Remove animations* Android. Tidak ada fitur 2.4 yang dihapus.
+
+Versi 2.6 memperbaiki **BUG status bar**: header bertabrakan dengan jam setelah
+tema diganti terang → gelap. Akarnya ada di pengelolaan `WindowInsets`, bukan di
+ukuran padding. Detail lengkap di bagian **BUG 4 (2.6)**.
 
 ## Fitur (baru di 2.5)
 
@@ -268,9 +272,95 @@ ReaderImageTest > scrollingAndNavigationStillWork FAILED
 
 Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 
+### BUG 4 (2.6) — Header bertabrakan dengan status bar setelah ganti tema
+
+Gejala: pada halaman **Perpustakaan** judul "Perpustakaan" bertabrakan dengan jam, dan
+pada halaman **Detail Novel** tombol Kembali, judul, ikon refresh, dan ikon tema ikut
+naik ke area status bar. Yang penting: ini **hanya** terjadi setelah tema diganti
+terang → gelap, bukan saat aplikasi pertama dibuka. Karena itu dugaan pertama
+("padding kurang") salah — menambah 24 dp hanya akan menghilangkan bug di satu tema
+lalu merusak tema lain.
+
+**Akar masalah.** Ada dua cacat di pengelolaan `WindowInsets`, keduanya soal *kapan*
+nilai inset dipakai, bukan berapa nilainya:
+
+1. **Listener hanya menerapkan padding kalau nilainya berubah.**
+   `MainActivity` menyimpan `insetTop`/`insetBottom` sebagai field, lalu:
+
+   ```java
+   if (bars.top != insetTop || bars.bottom != insetBottom) { ... applyInsets(); }
+   ```
+
+   Ganti tema di aplikasi ini **membangun ulang seluruh view tree**
+   (`rebuildShell()` → `buildShell()` → `setContentView()`). Toolbar yang baru lahir
+   dengan padding 0, tetapi field `insetTop` masih menyimpan nilai lama. Saat platform
+   mengirim ulang inset yang sama, perbandingan itu menyimpulkan "tidak ada yang
+   berubah" dan padding **tidak pernah** dipasang ke toolbar baru. Itulah sebabnya
+   bug selalu muncul setelah pergantian tema, dan tinggi header terlihat "bergeser
+   terlalu tinggi" — isinya naik, bukan bar-nya yang bertambah tinggi.
+
+2. **Dispatch inset kosong bisa menimpa nilai yang sudah benar.** Sebagian dispatch
+   datang sebagai hasil layout pass dan melaporkan `top = 0, bottom = 0`. Menyimpan
+   angka nol itu menghapus tinggi status bar yang sudah diketahui, sehingga
+   penerapan berikutnya justru mencabut padding yang tadinya benar.
+
+Cacat yang sama ada di `ReaderActivity` dan `ImageViewerActivity` (pola
+`if (bars.top != insetTop)` disalin ke keduanya), jadi Header di Reader Mode juga bisa
+jatuh ke bawah jam setelah tema diganti dari panel pengaturan.
+
+**Perbaikan.** Nilai inset dipusatkan di satu kelas, `ui/SystemBarInsets`, dan
+penerapannya dibuat idempoten:
+
+- `SystemBarInsets.accept(windowInsets)` menyimpan nilai sungguhan dan **menolak**
+  dispatch kosong selama ada nilai non-nol yang diketahui. Aplikasi ini tidak pernah
+  menyembunyikan system bar, jadi bacaan nol di tengah jalan adalah pengukuran
+  sementara, bukan keadaan.
+- `buildShell()` memanggil `applyInsets()` **segera setelah `setContentView()`**, jadi
+  shell hasil rebuild langsung benar tanpa menunggu dispatch berikutnya.
+- Listener memanggil `applyInsets()` **tanpa syarat** setiap dispatch. `setPadding`
+  idempoten, sehingga menerapkan inset yang sama berkali-kali tidak pernah menumpuk —
+  ini yang membuat pendekatan lama ("hanya kalau berubah") tidak diperlukan lagi.
+- **Satu inset, satu level layout.** Top inset menjadi padding **container toolbar**
+  saja (agar warna permukaan tetap mengecat di belakang status bar, sementara baris
+  58 dp mulai di bawah jam). Bottom inset menjadi padding **di dalam konten yang
+  bisa digulir** saja. Tidak ada komponen lain yang membaca inset yang sama.
+- **Tidak ada padding-top hardcoded.** Tinggi status bar selalu berasal dari
+  `WindowInsetsCompat.Type.systemBars() | displayCutout()`.
+- Ganti tema di Reader Mode memanggil `adaptInsets()` lagi dari `repaint()`, jadi
+  repaint tidak bisa meninggalkan toolbar di atas status bar.
+- Ikon status bar diatur ulang di `applySystemBars()` setiap kali tema berubah:
+  gelap pada tema terang/sepia, terang pada tema gelap.
+- Animasi navigasi hanya menggeser `page_host`; toolbar dan root tidak pernah
+  ditranslasi, sehingga animasi tidak bisa membawa header ke area status bar.
+
+**File yang diubah:** `MainActivity.java`, `ReaderActivity.java`,
+`ImageViewerActivity.java`, dan file baru `ui/SystemBarInsets.java`.
+
+**Bukti tes menangkap BUG 4.** Bug lama dikembalikan sementara dalam tiga bentuk
+sekaligus (listener "hanya kalau berubah" tanpa penerapan awal, `SystemBarInsets`
+menerima dispatch kosong, dan padding-top hardcoded 24 dp) → **11 dari 13 tes gagal**:
+
+```
+InsetStabilityTest > aRebuiltShellReappliesKnownInsetsWithoutWaitingForADispatch FAILED
+InsetStabilityTest > themeChangeKeepsTheToolbarBelowTheStatusBar FAILED
+InsetStabilityTest > tenThemeChangesNeverLoseOrDoubleTheInset FAILED
+InsetStabilityTest > storedDarkThemeOnRelaunchStillAppliesTheInset FAILED
+InsetStabilityTest > detailPageThenBackThenThemeChangeKeepsTheInset FAILED
+InsetStabilityTest > repeatedInsetDeliveriesDoNotDoubleThePadding FAILED
+InsetStabilityTest > headerHeightStaysStableAcrossThemeChanges FAILED
+InsetStabilityTest > navigationAnimationNeverMovesTheToolbar FAILED
+InsetStabilityTest > themeChangeWithMotionDisabledKeepsTheSameGeometry FAILED
+InsetStabilityTest > firstLaunchAppliesTheStatusBarInset FAILED
+InsetStabilityTest > readerToolbarKeepsItsInsetAfterThemeChange FAILED
+13 tests completed, 11 failed
+```
+
+Setelah perbaikan dipulihkan, seluruh **148/148** tes lulus dan suite dijalankan
+tiga kali berturut-turut tanpa kegagalan.
+
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **135 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **148 pengujian**, semuanya lulus:
 
 - **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
   `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
@@ -325,6 +415,22 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
   halaman detail tetap bisa digulir sampai atribusi/tombol sumber; tema gelap tetap
   memakai warna teks yang benar; toolbar Reader Mode punya tombol Kembali berlabel dan
   ikon pengaturan 48 dp dengan judul satu baris.
+- **InsetStabilityTest** (13, Robolectric, 411×891dp) — bug 2.6 dikunci di sini:
+  - peluncuran pertama menerapkan padding status bar;
+  - **ganti tema terang → gelap tidak menghilangkan padding** (bug yang dilaporkan);
+  - **10 pergantian tema berturut-turut** tidak pernah kehilangan atau menggandakan
+    padding, dan tinggi baris toolbar tetap sama persis di setiap putaran;
+  - dispatch inset berulang 5 kali tidak menumpuk padding (idempoten);
+  - shell yang dibangun ulang langsung memakai inset yang sudah diketahui, tanpa
+    menunggu dispatch berikutnya (ini reproduksi setia bug di perangkat);
+  - tema gelap yang tersimpan lalu aplikasi dibuka ulang tetap benar;
+  - detail novel → Back → ganti tema lagi tetap benar;
+  - ikon status bar gelap di tema terang dan terang di tema gelap;
+  - animasi navigasi hanya menggeser `page_host`, tidak pernah toolbar/root;
+  - konten tetap menyisakan ruang untuk navigation bar dan halaman tetap bisa digulir;
+  - toolbar Reader Mode tetap di bawah status bar setelah ganti tema di panel, dan
+    tombol Kembali tetap 48 dp;
+  - dengan animasi dimatikan, geometri tetap identik.
 - **ReaderLayoutTest** (7, Robolectric) — geometri panel navigasi, tinggi area baca, progres.
 - **FeedPaginationTest** (11) — halaman pendek tidak menghentikan crawl, Volume 1–7 bertahan
   pada ukuran halaman tidak beraturan (25/22/25/20/12/13), dedupe, peringatan crawl tidak lengkap.
@@ -333,11 +439,13 @@ Setelah perbaikan dipulihkan, seluruh **79/79** tes lulus.
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
 ```bash
-gradle testDebugUnitTest      # 135 tes
+gradle testDebugUnitTest      # 148 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
 tes benar-benar gagal, lalu kode dipulihkan dan seluruh suite hijau kembali.
+Mutation test untuk 2.6 ada di bagian **BUG 4 (2.6)** — 11 dari 13 tes gagal saat bug
+WindowInsets dikembalikan, lalu 148/148 hijau setelah dipulihkan.
 
 | Mutasi yang dikembalikan | Tes yang gagal |
 | --- | --- |

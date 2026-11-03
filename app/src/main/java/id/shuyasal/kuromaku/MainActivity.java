@@ -37,6 +37,7 @@ import id.shuyasal.kuromaku.ui.Motion;
 import id.shuyasal.kuromaku.ui.NovelListPage;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.SystemBarInsets;
 import id.shuyasal.kuromaku.ui.Ui;
 
 /**
@@ -82,8 +83,20 @@ public class MainActivity extends AppCompatActivity {
     private Novel selectedNovel;
     private boolean loading;
     private boolean synopsisOpen;
-    private int insetTop;
-    private int insetBottom;
+    /**
+     * Single source of truth for window insets.
+     *
+     * <p>BUG (2.6): this used to be two int fields updated inside the inset
+     * listener <em>only when they changed</em>. A theme change rebuilds the whole
+     * view tree ({@link #rebuildShell()}), so the freshly created toolbar started
+     * at padding 0 while the fields still held the previous values — the listener
+     * then decided "nothing changed" and never applied the status bar padding.
+     * The title and the Kembali/refresh/theme controls ended up under the clock,
+     * and only after a theme switch. Keeping the real inset value in one place and
+     * applying it unconditionally fixes that: {@code setPadding} is idempotent, so
+     * re-applying can never double the inset.
+     */
+    private final SystemBarInsets insets = new SystemBarInsets();
     private int pendingScrollY;
 
     /** Loaded catalogues, one per novel. Never mixed. */
@@ -151,6 +164,9 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(root);
         applySystemBars();
+        // Apply what we already know BEFORE the next dispatch arrives: a rebuilt
+        // shell must never flash (or stay) with the toolbar under the status bar.
+        applyInsets();
         applyInsetsListener();
     }
 
@@ -243,29 +259,37 @@ public class MainActivity extends AppCompatActivity {
 
     private void applyInsetsListener() {
         ViewCompat.setOnApplyWindowInsetsListener(root, (view, windowInsets) -> {
-            Insets bars = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
-            if (bars.top != insetTop || bars.bottom != insetBottom) {
-                insetTop = bars.top;
-                insetBottom = bars.bottom;
-                applyInsets();
-            }
+            // Accept the real value once, then always re-apply. Two failures made
+            // the header slide under the clock after a theme switch: a "changed?"
+            // guard that skipped the rebuilt tree, and an empty dispatch that
+            // erased the known height. SystemBarInsets rejects the second and the
+            // unconditional re-apply fixes the first.
+            insets.accept(windowInsets);
+            applyInsets();
             return windowInsets;
         });
         ViewCompat.requestApplyInsets(root);
     }
 
     /**
-     * The status bar inset is padding above the toolbar row, so the bar's 58 dp
-     * of content starts below the clock instead of underneath it.
+     * Applies the window insets from the single {@link SystemBarInsets} source.
+     *
+     * <p>Each inset is consumed by exactly one layout level, never by several:
+     * the <b>top</b> inset is padding on the toolbar container (so its surface
+     * colour still paints behind the status bar while the 58 dp row starts below
+     * the clock), and the <b>bottom</b> inset is padding inside the scrolling
+     * content (so the last element clears the gesture/navigation bar). Nothing
+     * else reads insets, and no hardcoded "24dp status bar" exists anywhere.
      */
     private void applyInsets() {
+        int top = insets.get().top;
+        int bottom = insets.get().bottom;
         if (toolbar != null) {
-            toolbar.setPadding(0, insetTop, 0, 0);
+            toolbar.setPadding(0, top, 0, 0);
         }
         if (content != null) {
             content.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14),
-                    Ui.dp(this, 32) + insetBottom);
+                    Ui.dp(this, 32) + bottom);
         }
     }
 
