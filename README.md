@@ -1276,7 +1276,8 @@ dikenal feed. Peringatan yang ditampilkan aplikasi saat itu:
   gagal → galat, bukan daftar kosong;
 - `anOlderStoredRowIsPointedAtTheNewSourceWithoutLosingAnything` — baris lama
   dipindahkan sumbernya, `id`/posisi/judul/progres tetap;
-- `theSameChapterIsNotCountedTwice` — tidak ada duplikat chapter.
+- `aChapterAlreadyOnThePageIsNotAddedTwice` — chapter yang sudah ada di artikel
+  tidak ditambahkan lagi oleh feed, jadi tidak ada duplikat.
 
 Uji mutasi `2.17` (5 mutasi, dijalankan pada berkas hidup dengan `md5` sebelum dan
 sesudah):
