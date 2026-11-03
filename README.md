@@ -164,7 +164,7 @@ boilerplate sebelum dibaca. Detail akar masalah di bagian **BUG 7 (2.11)**.
 - **Semua halaman feed dibaca** sampai Blogger mengembalikan halaman kosong, bukan berhenti di halaman pendek.
 - Pengelompokan otomatis per volume, urutan baca alami: Prolog → Chapter 1..N → Interlude → Short/Side Story → Epilog → Afterword → Illustrasi.
 - Volume diurutkan menaik (Volume 1 di atas), chapter diurutkan numerik (Chapter 2 sebelum Chapter 10).
-- Penanda progres per chapter (`42%`, `selesai`) dan tombol "Lanjutkan Membaca".
+- Penanda progres per chapter (`42% dibaca`, `Selesai dibaca`) dan tombol "Lanjutkan Membaca".
 - Tombol **Muat ulang** di bar atas untuk mengambil katalog terbaru.
 
 **Reader Mode**
