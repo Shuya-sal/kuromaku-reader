@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.16
+# Kuromaku Reader 2.17
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -45,6 +45,12 @@ Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
 perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
+
+Versi 2.17 memindahkan sumber katalog **Monogatari no Kuromaku** dari feed label ke
+artikel daftar isi milik sumber sendiri, dan menjalankan pengujian ke tiga novel.
+Feed label yang rusak ("Respons feed halaman ke-1 tidak dapat dibaca") tidak lagi
+bisa mengosongkan daftar chapter, karena artikel tetap menjadi sumber utama dan feed
+hanya dipakai untuk menambal. Detail di bagian **BUG 12 (2.17)**.
 
 Versi 2.16 **tidak mengubah kode produksi**: yang ditambahkan hanya pengujian untuk
 pemilih tautan manual, satu-satunya bagian halaman Tambah Novel yang belum pernah
@@ -802,6 +808,115 @@ dan `?m=1`.
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
+## BUG 12 (2.17) — Sumber katalog Monogatari berhenti bekerja, daftar chapter jadi 0
+
+### Gejala
+
+Membuka **Monogatari no Kuromaku** gagal dengan pesan:
+
+> Respons feed halaman ke-1 tidak dapat dibaca
+
+Daftar chapter kosong: 0 chapter, 0 volume. Novel lain (Magical★Explorer,
+Yarikon) tetap normal, jadi ini bukan kerusakan jaringan atau parser umum.
+
+### Akar masalah
+
+Monogatari adalah satu-satunya novel yang katalognya **hanya** bergantung pada feed
+label Blogger: `feeds/posts/summary/-/Monogatari no Kuromaku`. Sumbernya sendiri
+punya artikel daftar isi yang lengkap — `2025/09/ln-monogatari-no-kuromaku-ni-tensei.html` —
+tetapi aplikasi tidak pernah membacanya. Ketika satu halaman feed gagal diuraikan,
+seluruh katalog ikut hilang karena tidak ada sumber kedua. Satu titik kegagalan
+untuk seluruh daftar chapter.
+
+Artikel itu juga **tidak** identik dengan feed, dan bedanya penting:
+
+- Artikel memuat **7 heading volume** dan 116 tautan chapter; landing lama yang
+  dibaca parser generik hanya menghasilkan 111 chapter karena heading volume tidak
+  dibaca sebagai penanda.
+- Satu tautan di artikel salah: entri berlabel `Prolog` pada Volume 2 menunjuk ke
+  URL `...volume-2_49.html`, URL yang sama dengan `Chapter 1`. Prolog sebenarnya
+  ada di `...volume-2_12.html` dan hanya dikenal feed.
+- Parser lama membuang tautan kedua saat URL-nya kembar, sehingga `Chapter 1`
+  hilang seluruhnya dari daftar — bukan cuma Prolog yang salah alamat.
+
+### Perbaikan
+
+Sumber katalog Monogatari dipindahkan ke artikelnya sendiri, dengan feed label
+tetap dipakai sebagai penambal dan cadangan:
+
+1. **Mode baru `CATALOG_ARTICLE_FEED`** (`Novel.CATALOG_ARTICLE_FEED = 3`).
+   Monogatari memakainya; Magical★Explorer tetap `CATALOG_LANDING`, Yarikon tetap
+   `CATALOG_FEED` atau jalur label sesuai bentuk URL yang ditempel.
+2. **`CatalogueMerge`** menggabungkan dua sumber dengan aturan yang jelas:
+   - artikel menentukan **urutan, volume, dan judul**;
+   - bila URL sebuah chapter di artikel ternyata dipakai chapter lain, dan feed
+     mengenal URL yang benar untuk chapter itu, tautannya **diperbaiki** (Prolog
+     Volume 2 → `_12`);
+   - chapter yang hanya diketahui feed **ditambahkan** ke volume yang sesuai;
+   - tidak ada chapter yang dihitung dua kali; kuncinya judul **dan** URL.
+3. **`LandingCatalogParser`** tidak lagi membuang tautan hanya karena URL-nya
+   kembar. Kuncinya kini `URL | volume | label`, jadi dua chapter berbeda yang
+   kebetulan menunjuk URL sama tetap tercatat, dan pembersihan duplikat tetap jalan
+   untuk anchor yang benar-benar sama.
+4. **Kegagalan tidak mengosongkan apa pun.** Kalau artikel gagal dan feed berhasil,
+   katalog diambil dari feed disertai peringatan jujur di panel diagnostik. Kalau
+   **keduanya** gagal, loader **melempar galat** dan katalog lama di rak tidak
+   diganti daftar kosong.
+5. **Baris lama di perpustakaan ikut diperbaiki** lewat `upgradeBuiltIns()`: novel
+   bawaan yang masih tercatat memakai feed lama dipindahkan ke sumber baru.
+   Yang **tidak** disentuh: `id`, `position`, judul, metadata yang sudah tersimpan,
+   progres membaca, bookmark, dan unduhan offline. Tidak ada baris baru yang dibuat,
+   jadi tidak ada duplikat.
+6. **Muat Ulang** memakai jalur yang sama, jadi chapter baru yang muncul di artikel
+   atau di feed ikut terambil tanpa memperbarui APK.
+
+### Hasil ukur pada sumber asli
+
+| | Sebelum (2.16) | Sesudah (2.17) |
+|---|---|---|
+| Monogatari chapter | **0** (feed gagal) | **116** |
+| Monogatari volume | 0 | **7** (14+18+17+17+16+18+16) |
+| Monogatari cover volume | 0 | **7 dari 7** |
+| Monogatari metadata | kosong | penulis **Yuuki Ryou** terbaca dari artikel |
+| Magical★Explorer | 141 chapter / 14 volume | **141 chapter / 13 volume berisi** (tidak berubah) |
+| Yarikon | 43 chapter / 3 volume | **43 chapter / 3 volume** (tidak berubah) |
+
+Angka 116 berasal dari 115 tautan unik di artikel ditambah 1 chapter yang hanya
+dikenal feed. Peringatan yang ditampilkan aplikasi saat itu:
+
+> Daftar chapter diambil dari artikel katalog sumber, 1 tautan yang salah di
+> artikel diperbaiki dari feed label.
+
+### Bukti tes menangkap bug
+
+`MonogatariCatalogueTest` (9 tes) memakai dua fixture yang diambil dari sumber asli:
+`monogatari_article.html` (artikel daftar isi) dan `monogatari_feed.json`
+(117 entri feed label). Yang diuji antara lain:
+
+- `loadingTheBuiltInMonogatariUsesArticleAndFeed` — 116 chapter, 7 volume, Prolog
+  Volume 2 memakai URL `_12`, `Chapter 1` tetap `_49`;
+- `aChapterThatOnlyTheFeedKnowsYetIsAddedOnReload` — chapter baru dari feed ikut
+  muncul tanpa update APK;
+- `whenBothSourcesFailTheLoaderRefusesInsteadOfReturningNothing` — kedua sumber
+  gagal → galat, bukan daftar kosong;
+- `anOlderStoredRowIsPointedAtTheNewSourceWithoutLosingAnything` — baris lama
+  dipindahkan sumbernya, `id`/posisi/judul/progres tetap;
+- `theSameChapterIsNotCountedTwice` — tidak ada duplikat chapter.
+
+Uji mutasi `2.17` (5 mutasi, dijalankan pada berkas hidup dengan `md5` sebelum dan
+sesudah):
+
+| Mutasi | Tertangkap oleh |
+|---|---|
+| Perbaikan tautan kembar dimatikan | `loadingTheBuiltInMonogatariUsesArticleAndFeed` |
+| Penambahan chapter dari feed dimatikan | `aChapterThatOnlyTheFeedKnowsYetIsAddedOnReload` |
+| `LandingCatalogParser` kembali dedupe URL saja | `loadingTheBuiltInMonogatariUsesArticleAndFeed` |
+| Loader mengembalikan katalog kosong saat kedua sumber gagal | `whenBothSourcesFailTheLoaderRefusesInsteadOfReturningNothing` |
+| Upgrade baris lama di `Library` dimatikan | `anOlderStoredRowIsPointedAtTheNewSourceWithoutLosingAnything` |
+
+Kelima-limanya **tertangkap**; pemulihan `md5` cocok untuk keempat berkas. Setelah
+dipulihkan: **283 tes, 27 kelas, 0 gagal**, penanda `MUTATION` nol, working tree bersih.
+
 ## Pengujian 2.16 — pemilih tautan manual akhirnya punya tes
 
 Versi ini tidak menyentuh kode produksi. Yang kurang sejak 2.10 bukan fitur, tapi
@@ -1088,7 +1203,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **274 pengujian** di 26 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **283 pengujian** di 27 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya

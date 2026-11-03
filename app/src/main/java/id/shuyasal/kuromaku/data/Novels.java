@@ -98,7 +98,7 @@ public final class Novels {
                 0.704042f,
                 synopsis,
                 3,
-                Novel.CATALOG_FEED,
+                Novel.CATALOG_ARTICLE_FEED,
                 "monogatari",
                 "Monogatari no Kuromaku",
                 true);

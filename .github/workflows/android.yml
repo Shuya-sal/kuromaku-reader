@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.16 (APK)
+          name: Kuromaku Reader 2.17 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.16** (versionCode 36)
+            * Versi: **2.17** (versionCode 37)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -168,6 +168,50 @@ jobs:
               interlude memakai angka apa adanya) — **kelima-limanya tertangkap**, tidak
               ada yang lolos. Pemulihan diverifikasi lewat `md5sum` sebelum/sesudah,
               `git diff HEAD` kosong, penanda `MUTATION` nol, suite tetap 274 tes hijau.
+            * **BUG 12 (2.17) — sumber katalog Monogatari diganti ke artikel
+              daftar isi sumbernya.** Gejala: Monogatari gagal dengan "Respons feed
+              halaman ke-1 tidak dapat dibaca" dan daftar chapter jadi **0**, karena
+              Monogatari satu-satunya novel yang katalognya hanya bergantung pada feed
+              label Blogger — satu halaman gagal berarti seluruh katalog hilang.
+              Sumbernya sendiri punya artikel daftar isi lengkap
+              (`2025/09/ln-monogatari-no-kuromaku-ni-tensei.html`) yang belum pernah
+              dibaca aplikasi. Artikel itu tidak identik dengan feed: ada **7 heading
+              volume** (parser generik hanya menghasilkan 111 chapter karena heading
+              volume tidak dibaca sebagai penanda), dan entri `Prolog` Volume 2 menunjuk
+              URL yang sama dengan `Chapter 1` (`...volume-2_49.html`) sedangkan Prolog
+              sebenarnya ada di `...volume-2_12.html`. Parser lama juga membuang tautan
+              kedua saat URL kembar, sehingga `Chapter 1` hilang seluruhnya. Perbaikan:
+              mode baru `CATALOG_ARTICLE_FEED` dengan `CatalogueMerge` yang memakai
+              artikel sebagai urutan/volume/judul, memperbaiki tautan yang salah dari
+              feed, dan menambahkan chapter yang hanya diketahui feed; kunci duplikat
+              `LandingCatalogParser` diubah dari URL saja menjadi `URL | volume | label`.
+              Bila artikel gagal, katalog diambil dari feed disertai peringatan jujur;
+              bila **keduanya** gagal, loader melempar galat dan katalog lama di rak
+              tidak diganti daftar kosong. Baris lama di perpustakaan dipindahkan ke
+              sumber baru lewat `upgradeBuiltIns()` tanpa menyentuh `id`, posisi, judul,
+              metadata tersimpan, progres membaca, bookmark, atau unduhan offline —
+              tidak ada baris baru, jadi tidak ada duplikat. "Muat Ulang" memakai jalur
+              yang sama, sehingga chapter baru ikut terambil tanpa update APK.
+            * **Hasil ukur pada sumber asli (2.17):** Monogatari **116 chapter di 7
+              volume** (14+18+17+17+16+18+16) dengan **7 dari 7 cover volume** dan
+              penulis **Yuuki Ryou** terbaca dari artikel — sebelumnya 0 chapter.
+              Magical★Explorer tetap **141 chapter / 13 volume berisi** (14 volume,
+              volume 14 hanya cover), Yarikon tetap **43 chapter / 3 volume**
+              (16+13+14). Angka 116 = 115 tautan unik di artikel + 1 chapter yang hanya
+              dikenal feed; aplikasi menampilkan peringatan "1 tautan yang salah di
+              artikel diperbaiki dari feed label".
+            * **283 unit test lulus**, 0 gagal (27 kelas). `MonogatariCatalogueTest`
+              (9 tes) memakai dua fixture dari sumber asli (`monogatari_article.html`,
+              `monogatari_feed.json` — 117 entri feed) dan menjaga: katalog memakai
+              artikel+feed, Prolog Volume 2 memakai `_12` sementara `Chapter 1` tetap
+              `_49`, chapter yang hanya diketahui feed bertambah saat Muat Ulang, kedua
+              sumber gagal → galat bukan daftar kosong, baris lama dipindahkan sumbernya
+              tanpa kehilangan identitas/progres, dan tidak ada chapter dihitung dua kali.
+            * Uji mutasi 2.17: lima mutasi (perbaikan tautan kembar dimatikan,
+              penambahan chapter dari feed dimatikan, `LandingCatalogParser` kembali
+              dedupe URL saja, loader mengembalikan katalog kosong, upgrade baris lama
+              dimatikan) — **kelima-limanya tertangkap**, pemulihan diverifikasi lewat
+              `md5` sebelum/sesudah.
             * **Bug 2.15 yang diperbaiki** — bentuk alamat yang didukung tidak
               diberitahukan. Petunjuk di bawah judul halaman Tambah Novel hanya
               menyebut artikel katalog, padahal URL label `/search/label/...` sudah

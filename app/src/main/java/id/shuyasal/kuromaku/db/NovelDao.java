@@ -47,4 +47,17 @@ public interface NovelDao {
                         String author, String illustrator, String genres, String status,
                         String coverUrl, float coverRatio, String synopsis,
                         int synopsisPreview, String slugPrefix, long lastRefresh);
+
+    /**
+     * Points an existing row at a different catalogue source.
+     *
+     * <p>Used when a built-in novel's source changes between app versions: the row
+     * keeps its id (so progress, bookmarks and offline folders still resolve), and
+     * only the three columns describing how to read the catalogue are rewritten. The
+     * URL is passed back unchanged so a stored address is never replaced.
+     */
+    @Query("UPDATE novels SET url = :url, catalogMode = :catalogMode,"
+            + " slugPrefix = :slugPrefix, feedLabel = :feedLabel WHERE id = :id")
+    void updateCatalogueSource(String id, String url, int catalogMode,
+                               String slugPrefix, String feedLabel);
 }

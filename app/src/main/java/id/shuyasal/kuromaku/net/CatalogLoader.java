@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import id.shuyasal.kuromaku.data.Catalog;
+import id.shuyasal.kuromaku.data.CatalogueMerge;
 import id.shuyasal.kuromaku.data.FeedEntry;
 import id.shuyasal.kuromaku.data.LibraryBuilder;
 import id.shuyasal.kuromaku.data.Novel;
@@ -72,6 +73,11 @@ public final class CatalogLoader {
 
         if (novel.catalogMode == Novel.CATALOG_FEED) {
             catalog = fromFeed(novel);
+        } else if (novel.catalogMode == Novel.CATALOG_ARTICLE_FEED) {
+            Loaded article = fromArticleAndFeed(novel);
+            catalog = article.catalog;
+            discovery = article.discovery;
+            extra = article.warning;
         } else if (novel.catalogMode == Novel.CATALOG_LANDING) {
             catalog = fromLanding(novel);
         } else if (NovelUrl.isLabel(novel.landingUrl)) {
@@ -116,6 +122,132 @@ public final class CatalogLoader {
             throw new IOException("Tautan chapter tidak ditemukan di halaman katalog.");
         }
         return new Catalog(novel.id, volumes);
+    }
+
+    /**
+     * Catalogue from the source's own list article, repaired and extended by the
+     * label feed.
+     *
+     * <p>The article is the authority: it prints every volume heading and the
+     * chapter links in reading order, which no feed can express. The feed is a
+     * helper with three jobs — resolve a link the article printed twice, add a
+     * chapter the article never listed, and stand in as the whole catalogue when
+     * the article cannot be read at all.
+     *
+     * <p>Failure is not silent and never produces an empty shelf: if the article
+     * fails but the feed answers, the feed builds the catalogue and the warning says
+     * the article was skipped; if both fail the exception travels to the caller,
+     * which keeps the catalogue it already had instead of replacing it with nothing.
+     */
+    private static Loaded fromArticleAndFeed(Novel novel) throws IOException, JSONException {
+        String pageUrl = novel.landingUrl;
+        String html = null;
+        List<Volume> pageVolumes = null;
+        String pageProblem = null;
+        try {
+            html = Fetcher.get().page(pageUrl);
+            if (html == null || html.trim().isEmpty()) {
+                pageProblem = "halaman katalog kosong";
+            } else {
+                pageVolumes = LandingCatalogParser.parse(html, novel.slugPrefix, novel.id);
+                if (pageVolumes.isEmpty()) {
+                    pageProblem = "tidak ada tautan chapter di halaman katalog";
+                    pageVolumes = null;
+                }
+            }
+        } catch (Exception error) {
+            pageProblem = reason(error);
+        }
+
+        List<FeedEntry> chapterPosts = new ArrayList<>();
+        String feedProblem = null;
+        if (novel.feedLabel != null && !novel.feedLabel.isEmpty()) {
+            try {
+                FeedClient.Result feed = FeedClient.fetchLabel(novel.feedLabel, url -> {
+                    try {
+                        return Fetcher.get().page(url);
+                    } catch (IOException error) {
+                        throw error;
+                    } catch (Exception error) {
+                        throw new IOException(error.getMessage() == null
+                                ? error.getClass().getSimpleName() : error.getMessage(), error);
+                    }
+                });
+                for (FeedEntry entry : feed.entries) {
+                    // The feed also carries the description post, which is not a
+                    // chapter and has no volume.
+                    if (LibraryBuilder.isChapterPost(entry.title)) chapterPosts.add(entry);
+                }
+            } catch (Exception error) {
+                feedProblem = reason(error);
+            }
+        }
+
+        List<Volume> volumes;
+        CatalogueMerge.Result merged = null;
+        if (pageVolumes != null) {
+            merged = CatalogueMerge.merge(novel.id, pageVolumes, chapterPosts);
+            volumes = merged.volumes;
+        } else if (!chapterPosts.isEmpty()) {
+            volumes = LibraryBuilder.build(novel.id, chapterPosts).volumes;
+        } else {
+            String problem = "Katalog " + novel.title + " tidak dapat dibaca. ";
+            if (pageProblem != null) problem += "Halaman katalog: " + pageProblem + ". ";
+            if (feedProblem != null) problem += "Feed label: " + feedProblem + ". ";
+            if (novel.feedLabel == null || novel.feedLabel.isEmpty()) {
+                problem += "Novel ini tidak punya label feed sebagai cadangan.";
+            }
+            throw new IOException(problem.trim());
+        }
+
+        // Metadata from the article, when it was readable. A failure here leaves the
+        // stored metadata alone rather than guessing.
+        NovelDiscovery.Result discovery = null;
+        if (html != null) {
+            try {
+                discovery = NovelDiscovery.describe(html, pageUrl);
+            } catch (NovelDiscovery.Unreadable ignored) {
+                // The chapter list parsed, so the body exists; this only means the
+                // description fields could not be read.
+            }
+        }
+
+        StringBuilder notes = new StringBuilder();
+        if (merged != null) {
+            notes.append("Daftar chapter diambil dari artikel katalog sumber");
+            if (merged.repaired > 0) {
+                notes.append(", ").append(merged.repaired)
+                        .append(" tautan yang salah di artikel diperbaiki dari feed label");
+            }
+            if (merged.added > 0) {
+                notes.append(", ").append(merged.added)
+                        .append(" chapter yang belum ada di artikel ditambahkan dari feed label");
+            }
+            notes.append('.');
+        } else {
+            notes.append("Artikel katalog tidak terbaca (").append(pageProblem)
+                    .append("), jadi daftar chapter diambil dari feed label “")
+                    .append(novel.feedLabel).append("” saja.");
+        }
+        if (pageVolumes != null && feedProblem != null) {
+            notes.append(" Feed label gagal dibaca (").append(feedProblem)
+                    .append("); daftar chapter memakai artikel saja, tanpa perbaikan tautan.");
+        }
+        if (pageVolumes != null && chapterPosts.isEmpty() && feedProblem == null
+                && novel.feedLabel != null && !novel.feedLabel.isEmpty()) {
+            notes.append(" Feed label tidak mengembalikan chapter, jadi tidak ada yang bisa "
+                    + "dipakai untuk memeriksa tautan artikel.");
+        }
+
+        return new Loaded(new Catalog(novel.id, volumes), "", notes.toString(), discovery);
+    }
+
+    /** Short, human-readable cause for a warning line. */
+    private static String reason(Throwable error) {
+        String message = error == null ? null : error.getMessage();
+        return message == null || message.trim().isEmpty()
+                ? (error == null ? "tanpa keterangan" : error.getClass().getSimpleName())
+                : message.trim();
     }
 
     /**

@@ -125,10 +125,19 @@ public final class LandingCatalogParser {
             String href = element.attr("abs:href");
             if (href == null || href.isEmpty()) href = element.attr("href");
             if (!belongsToNovel(href, slugPrefix)) continue;
-            if (!seenUrls.add(href)) continue;
 
             String raw = element.text();
             if (raw == null || raw.trim().isEmpty()) continue;
+
+            // A volume can print two labels over one URL when the source links the
+            // wrong post (Monogatari volume 2 lists "Prolog" and "Chapter 1" both
+            // pointing at the chapter 1 post). Deduplicating on the URL alone kept
+            // the first label and silently dropped the second, so a chapter vanished
+            // and the surviving label looked like it owned the wrong post.
+            // Keying on URL + volume + label keeps both, and still refuses a link
+            // that is printed twice under the same name.
+            String key = href + "|" + currentVolume + "|" + raw.trim().toLowerCase(Locale.ROOT);
+            if (!seenUrls.add(key)) continue;
 
             int volume = currentVolume > 0 ? currentVolume : volumeFromUrl(href);
             String label = label(raw);

@@ -274,6 +274,7 @@ public final class Library {
                 }
                 dao.insertAll(seeds);
             }
+            upgradeBuiltIns();
             novels.clear();
             for (NovelRecord record : dao.all()) {
                 Novel novel = NovelMapper.toNovel(record);
@@ -281,6 +282,42 @@ public final class Library {
             }
             seeded = true;
         }
+    }
+
+    /**
+     * Brings already-stored built-in rows up to the catalogue source this version
+     * ships.
+     *
+     * <p>Monogatari's catalogue moved from the label feed to the source's own list
+     * article, and a row written by the previous version still says "feed". Without
+     * this step the fix would only help people who never opened the app before, and
+     * everyone else would keep the broken feed path until they deleted the novel —
+     * which would also throw away their reading progress and downloads.
+     *
+     * <p>Only the three columns that describe where the catalogue is read from are
+     * touched, and only on a row whose id is a built-in one. The primary key, the
+     * URL, the library position, the metadata and everything stored outside this
+     * table (progress, bookmarks, offline files) are left exactly as they are, so
+     * this can never create a second Monogatari or detach the reader from a chapter
+     * it already saved.
+     */
+    private void upgradeBuiltIns() {
+        for (Novel seed : Novels.builtIns()) {
+            NovelRecord stored = dao.byId(seed.id);
+            if (stored == null) continue;
+            boolean sameSource = stored.catalogMode == seed.catalogMode
+                    && safeEquals(stored.slugPrefix, seed.slugPrefix)
+                    && safeEquals(stored.feedLabel, seed.feedLabel);
+            if (sameSource) continue;
+            dao.updateCatalogueSource(stored.id, stored.url, seed.catalogMode,
+                    seed.slugPrefix, seed.feedLabel);
+        }
+    }
+
+    private static boolean safeEquals(String left, String right) {
+        String a = left == null ? "" : left;
+        String b = right == null ? "" : right;
+        return a.equals(b);
     }
 
     private static String pick(String preferred, String fallback) {

@@ -184,7 +184,12 @@ public class DynamicLibraryTest {
         assertTrue("novel bawaan harus ditandai", monogatari.builtIn && magical.builtIn);
         assertEquals("Yuuki Ryou", monogatari.author);
         assertEquals("Irisu", magical.author);
-        assertEquals("katalog Monogatari lewat feed", Novel.CATALOG_FEED, monogatari.catalogMode);
+        // Monogatari's catalogue comes from the source's own list article, with the
+        // label feed kept alongside it to repair links and pick up new chapters.
+        assertEquals("katalog Monogatari lewat artikel + feed",
+                Novel.CATALOG_ARTICLE_FEED, monogatari.catalogMode);
+        assertEquals("label feed cadangan Monogatari",
+                "Monogatari no Kuromaku", monogatari.feedLabel);
         assertEquals("katalog Magical lewat landing", Novel.CATALOG_LANDING, magical.catalogMode);
     }
 

@@ -23,6 +23,21 @@ public final class Novel {
     public static final int CATALOG_DISCOVERED = 2;
 
     /**
+     * Catalogue read from the source's own list article, with the label feed used
+     * to repair and extend it.
+     *
+     * <p>Monogatari publishes one article that lists every volume and every chapter
+     * link, so that article is the authority on volume order and labels — a feed
+     * cannot show which volume a post belongs to except by parsing its title. But
+     * the article is maintained by hand, and it is wrong in one place: its Volume 2
+     * "Prolog" anchor points at the Chapter 1 post. The feed still has the real
+     * prologue, so both are read and reconciled by
+     * {@link id.shuyasal.kuromaku.data.CatalogueMerge}: the article decides the
+     * shape, the feed fills a hole or a wrong link, and neither can blank the other.
+     */
+    public static final int CATALOG_ARTICLE_FEED = 3;
+
+    /**
      * True for the two novels that ship with the app. A built-in novel can still
      * be removed from the library, but the app knows its verified metadata
      * without ever fetching it, so it does not depend on the network to appear.
