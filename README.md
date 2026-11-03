@@ -1912,8 +1912,14 @@ gradle testDebugUnitTest assembleDebug
 ## Atribusi dan hak cipta
 
 - Seluruh teks dan ilustrasi milik penulis, penerbit, dan penerjemah aslinya.
-- Aplikasi ini hanya menampilkan konten publik dari situs sumber saat dibuka; **tidak**
-  menyertakan salinan novel di dalam APK dan tidak menyimpan arsip offline.
+- Aplikasi ini menampilkan konten publik dari situs sumber saat dibuka: **tidak**
+  menyertakan salinan chapter di dalam APK.
+- Satu-satunya teks sumber yang ditanam di APK adalah sinopsis resmi dari halaman novel
+  (2.467 karakter untuk dua novel), ditampilkan di layar detail beserta atribusi. Cover
+  hanya disimpan sebagai URL ke sumbernya, bukan berkas gambar di dalam APK.
+- Chapter yang diunduh pengguna disimpan **di perangkat** (`getFilesDir()/offline/`), bukan
+  di dalam APK, dan bisa dihapus kapan saja lewat halaman Unduhan tanpa menghapus progres
+  membaca.
 - Setiap chapter menampilkan tautan ke halaman aslinya.
 
 ## Batasan

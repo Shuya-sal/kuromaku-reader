@@ -384,4 +384,5 @@ mengatakannya. Verifikasi UI masih lewat Robolectric: halaman Tambah
 Novel dan dialog hapus belum dilihat di layar perangkat sungguhan.
 
 APK debug, hasil build otomatis dari commit `@COMMIT@`.
-Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.
+Aplikasi tidak memuat salinan chapter; yang ditanam hanya sinopsis resmi dari halaman
+novel dan URL cover. Seluruh konten milik Kaori Translation.
