@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.19.2
+# Kuromaku Reader 2.20
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -819,6 +819,100 @@ dan `?m=1`.
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
 
+## Drawer bagian dan backup progres membaca (2.20)
+
+Tombol menu di toolbar Perpustakaan dulu membuka popup kecil berisi satu pilihan.
+Sekarang tombol yang sama membuka **drawer samping** gaya modal: panel selebar 82%
+layar, latar diredupkan 55%, dan animasi geser 220 ms yang tidak dijalankan bila
+*Remove animations* aktif. Isinya empat baris — **Novel**, **Manga**, **Backup
+progres membaca**, dan **Restore progres membaca** — masing-masing setinggi 64 dp
+sehingga tidak ada yang perlu dibidik.
+
+Halaman dan drawer tidak berbagi state: drawer hanya memanggil aksi yang sama
+dengan tombol lama (`showLibrary()`, `MangaActivity`). Fitur Manga 2.19 tetap utuh,
+hanya jalan masuknya berpindah dari popup ke drawer.
+
+### Kenapa backup mencatat tipe, bukan hanya nilai
+
+Progres baca disimpan di satu berkas preferensi sebagai **peta datar bertipe
+campuran**:
+
+| Kunci | Tipe | Arti |
+| --- | --- | --- |
+| `<novel>:last_url` | `String` | chapter terakhir |
+| `<novel>:scroll_pos:<url>` | `int` | posisi gulir |
+| `<novel>:progress:<url>` | `int` | persen baca |
+| `<novel>:scroll_off:<url>` | `int` | offset di dalam blok |
+| `expanded_volumes` | `Set<String>` | akordeon volume yang terbuka |
+| `line_spacing` | `float` | spasi baris |
+
+Kalau berkas backup hanya menulis nilai, `SharedPreferences` akan mengembalikan
+setiap angka sebagai teks. `getInt` pada kunci yang berisi teks mengembalikan nilai
+default, jadi progres terbaca 0 dan pembaca dibuka di awal chapter **tanpa satu pun
+pesan galat**. Karena itu setiap nilai ditulis sebagai
+`{"type": "...", "value": ...}` dan dipulihkan sesuai tipenya. Himpunan akordeon
+ditulis sebagai larik dan dikembalikan sebagai `Set<String>`; kalau tidak, semua
+volume akan menutup sendiri setelah restore.
+
+### Restore menolak sebelum menulis
+
+`ReadingBackup.restore()` mem-parse **seluruh** dokumen lebih dulu, menyimpannya di
+daftar sementara, dan baru menyentuh penyimpanan kalau semuanya sah:
+
+- format selain `kuromaku-reading-v1` → ditolak;
+- JSON terpotong → ditolak oleh parser;
+- dokumen `null` atau kosong → ditolak;
+- lebih dari 5 MB → ditolak, dan pembacaan berkas berhenti begitu batas terlampaui
+  sehingga berkas raksasa tidak pernah ditahan di memori;
+- tipe yang tidak dikenal (berkas dari versi lebih baru) → **hanya kunci itu** yang
+  dilewati, sisanya tetap dipulihkan.
+
+Restore tidak pernah mengosongkan lebih dulu. Karena itu mencadangkan satu novel
+lalu memulihkannya **tidak** menghapus bookmark novel lain — perilaku ini diuji,
+bukan diasumsikan.
+
+Jumlah nilai yang diterima dikembalikan ke pemanggil dan ditampilkan sebagai
+`"N progres dipulihkan"`, jadi restore yang hanya separuh berhasil tidak tampak
+seperti sukses penuh. Setelah restore, halaman rak digambar ulang; cache katalog
+**tidak** dibuang, karena membuangnya memaksa request jaringan dan akan membuat
+restore yang berhasil terlihat gagal saat offline.
+
+### Berkas milik pembaca
+
+Ekspor memakai `ACTION_CREATE_DOCUMENT` dengan nama saran
+`kuromaku-reading-backup.json`; impor memakai `ACTION_OPEN_DOCUMENT` dengan tipe
+`application/json` dan kategori `CATEGORY_OPENABLE`. Tidak ada server, tidak ada
+akun, dan berkasnya bisa disalin ke Drive atau kartu SD seperti berkas biasa.
+Picker yang dibatalkan (`RESULT_CANCELED`) tidak dianggap berkas kosong: progres
+tidak disentuh dan tidak ada pesan.
+
+### Bukti tes
+
+`ReadingBackupTest` (9 tes) menguji setiap tipe bolak-balik **sebagai tipe**,
+penolakan berkas asing/terpotong/kosong/kebesaran tanpa mengubah progres, isolasi
+antar novel, pelewatan tipe asing, dan kestabilan hasil ekspor.
+`SectionDrawerTest` (9 tes) menekan tombol menu dan setiap item drawer yang
+sungguhan: drawer memuat keempat baris, Backup membuka
+`ACTION_CREATE_DOCUMENT` dengan kode permintaan `REQUEST_BACKUP`, Restore membuka
+`ACTION_OPEN_DOCUMENT` dengan kode yang berbeda, ekspor menulis dokumen nyata ke
+stream terdaftar, dokumen itu dipulihkan lewat `onActivityResult` ke penyimpanan
+kosong, picker yang dibatalkan tidak menyentuh progres, dan berkas yang tidak bisa
+dibuka dilaporkan sebagai `Gagal: …`.
+
+Uji mutasi 2.20: **18/18 tertangkap** pada berkas hidup dengan `md5` dipulihkan
+sesudah setiap mutasi — 14 mutasi fitur (backup, drawer, label progres) dan 4
+mutasi animasi drawer. Mutasi animasi dijalankan **dua kali**: run pertama hanya
+2 dari 3 tertangkap, karena tes membaca posisi setelah looper dikuras sehingga
+animasi yang seharusnya berjalan sudah selesai lebih dulu. Tesnya diubah membaca
+posisi **sebelum** looper berjalan, dan bentuk kode animasi ditulis eksplisit
+(`slide ? -lebar : 0f`) supaya "animasi mati" tidak bisa tertukar dengan "animasi
+tidak pernah jalan".
+
+**Batasan:** pertukaran berkas lewat pemilih dokumen **belum** dicoba di perangkat
+sungguhan — verifikasi masih Robolectric dengan `ContentResolver` dan `Dialog`
+bayangan. Versi berkas tidak punya tanda tangan atau pemeriksaan integritas: berkas
+JSON yang sah tetapi diubah tangan akan diterima selama format dan tipenya benar.
+
 ## Bagian Manga tahap 1 (2.19, layar penuh di 2.19.2)
 
 Tombol menu di toolbar Perpustakaan membuka pilihan **Novel / Manga**. Memilih Manga
@@ -1474,7 +1568,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **318 pengujian** di 30 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **340 pengujian** di 32 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1658,7 +1752,7 @@ Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
   chapter yang belum diunduh saat offline menampilkan pesan jelas dan bukan layar
   kosong; membuka ulang chapter tersimpan tidak menembak jaringan; dan progres
   baca offline berperilaku sama dengan online (ekuivalensi, bukan angka tetap).
-- **DownloadUiTest** (12, Robolectric, 320×640dp) — kontrol unduh di halaman
+- **DownloadUiTest** (16, Robolectric, 320×640dp) — kontrol unduh di halaman
   detail: setiap baris chapter punya tombol unduh 48 dp dengan
   `contentDescription`; label status dimulai "Belum diunduh", berubah
   "Tersimpan" setelah tersimpan, dan tombol unduh diganti tombol hapus; chapter
@@ -1669,6 +1763,32 @@ Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
   sebelumnya; halaman **Unduhan** menampilkan novel, volume, jumlah chapter,
   ukuran penyimpanan, tombol hapus chapter & volume 48 dp, keadaan kosong yang
   menjelaskan cara mengunduh, dan kembali ke keadaan kosong setelah semua dihapus.
+  Empat tes 2.20 menguji label progres baca: chapter yang sedang dibaca menulis
+  "67% dibaca" di view sendiri, chapter selesai menulis "Selesai dibaca", chapter
+  yang belum dibuka tidak punya label sama sekali, dan progres baca tidak pernah
+  berbagi satu view dengan status unduhan — bug "67%Mengunduh…" yang dilaporkan.
+
+- **ReadingBackupTest** (9) — cadangan progres membaca sebagai berkas milik
+  pembaca. Penyimpanan progres adalah peta datar bertipe campuran (bookmark
+  string, offset gulir int, persen int, akordeon string set), jadi setiap tipe
+  diuji bolak-balik **sebagai tipe**, bukan hanya nilainya: int yang kembali
+  sebagai teks akan mereset progres tanpa pesan. Berkas asing, berkas terpotong,
+  dokumen kosong, dan berkas di atas batas 5 MB ditolak **sebelum** apa pun
+  ditulis, dan progres yang sudah ada tidak berubah. Cadangan satu novel tidak
+  menghapus bookmark novel lain. Tipe dari versi lebih baru dilewati satu kunci
+  saja, sisanya tetap dipulihkan.
+
+- **SectionDrawerTest** (9, Robolectric) — drawer bagian dan backup yang
+  dibawanya, ditekan lewat **kontrol nyata**: tombol menu di toolbar Perpustakaan
+  membuka drawer yang memuat Novel, Manga, Backup, dan Restore. Menekan Backup
+  membuka `ACTION_CREATE_DOCUMENT` dengan tipe `application/json`, nama berkas
+  berakhiran `.json`, dan kode permintaan `REQUEST_BACKUP`; menekan Restore
+  membuka `ACTION_OPEN_DOCUMENT` dengan kode permintaan yang berbeda. Item drawer
+  tanpa listener akan tampak sama seperti yang berfungsi, jadi setiap tes menekan
+  itemnya. Ekspor menulis dokumen sungguhan ke stream terdaftar yang memuat titik
+  baca, dan dokumen itu dipulihkan kembali lewat `onActivityResult` ke penyimpanan
+  kosong. Picker yang dibatalkan tidak menyentuh progres, dan berkas yang tidak
+  bisa dibuka dilaporkan sebagai "Gagal: …" alih-alih diam.
 
 - **DownloadsNavigationTest** (11, Robolectric) — alur nyata dari `MainActivity`:
   menekan ikon download merender halaman Unduhan (bukan layar kosong), halaman

@@ -498,4 +498,76 @@ public class DownloadUiTest {
                 android.util.TypedValue.COMPLEX_UNIT_DIP, value,
                 activity.getResources().getDisplayMetrics()));
     }
+
+    // ------------------------------------------------------ reading progress label
+
+    /**
+     * A started chapter says how far it has been read, as a plain sentence.
+     *
+     * <p>The label used to be the bare percentage glued to the download state on the
+     * same line, which is what produced "67%Mengunduh…" on the reported screenshot.
+     * The percentage now lives in its own view, so this test reads it on its own.
+     */
+    @Test
+    public void aStartedChapterSaysHowFarItHasBeenRead() {
+        Activity activity = activity();
+        new Prefs(activity).scoped(NOVEL).setProgress(CH1, 67);
+
+        LinearLayout content = buildDetail(activity, catalog(), true);
+
+        View read = content.findViewWithTag("chapter_read:" + CH1);
+        assertNotNull("label progres baca harus ada", read);
+        assertEquals("67% dibaca", ((TextView) read).getText().toString());
+    }
+
+    /** A chapter read to the end says so in words, not as a number above 95. */
+    @Test
+    public void aFinishedChapterSaysSelesaiDibaca() {
+        Activity activity = activity();
+        new Prefs(activity).scoped(NOVEL).setProgress(CH1, 100);
+
+        LinearLayout content = buildDetail(activity, catalog(), true);
+
+        View read = content.findViewWithTag("chapter_read:" + CH1);
+        assertNotNull("label selesai harus ada", read);
+        assertEquals("Selesai dibaca", ((TextView) read).getText().toString());
+    }
+
+    /** An untouched chapter shows no reading label at all; 0% is not a state. */
+    @Test
+    public void anUnopenedChapterShowsNoReadingLabel() {
+        Activity activity = activity();
+
+        LinearLayout content = buildDetail(activity, catalog(), true);
+
+        assertNull("chapter yang belum dibuka tidak boleh punya label progres",
+                content.findViewWithTag("chapter_read:" + CH1));
+    }
+
+    /**
+     * Reading progress and offline state are two different facts and must stay two
+     * different views. Concatenating them is the reported bug, and a single view
+     * carrying both strings would bring it back.
+     */
+    @Test
+    public void progressAndDownloadStateNeverShareOneLabel() {
+        Activity activity = activity();
+        new Prefs(activity).scoped(NOVEL).setProgress(CH1, 67);
+
+        LinearLayout content = buildDetail(activity, catalog(), true);
+
+        View read = content.findViewWithTag("chapter_read:" + CH1);
+        View status = content.findViewWithTag("download_status:" + CH1);
+        assertNotNull(read);
+        assertNotNull(status);
+        assertTrue("dua view terpisah", read != status);
+
+        String readText = ((TextView) read).getText().toString();
+        String statusText = ((TextView) status).getText().toString();
+        assertFalse("label baca tidak memuat status unduhan", readText.contains(statusText));
+        assertFalse("status unduhan tidak memuat persen", statusText.contains("%"));
+        // The reader scrolls right past this row: the two facts must not run together
+        // as one string even if a future layout puts them on one line.
+        assertFalse("jangan pernah menyambung", (readText + statusText).contains("67%Belum"));
+    }
 }

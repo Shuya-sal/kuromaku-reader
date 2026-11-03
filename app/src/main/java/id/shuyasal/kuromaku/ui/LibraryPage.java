@@ -476,12 +476,22 @@ public final class LibraryPage {
         row.addView(label, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        if (finished) {
-            row.addView(Ui.label(context, "selesai", 11, palette.muted));
-        } else if (started) {
-            row.addView(Ui.label(context, progress + "%", 11, palette.accent));
+        // Keep reading progress separate from offline state; never concatenate labels.
+        LinearLayout states = new LinearLayout(context);
+        states.setOrientation(LinearLayout.VERTICAL);
+        states.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        states.setPadding(Ui.dp(context, 8), 0, Ui.dp(context, 8), 0);
+        if (finished || started) {
+            TextView read = Ui.label(context, finished ? "Selesai dibaca" : progress + "% dibaca",
+                    10, finished ? palette.muted : palette.accent);
+            read.setGravity(Gravity.END);
+            // Tagged so a test can read this label without guessing at the layout:
+            // the bug this replaces was the progress percentage and the download
+            // state sharing one line, which showed up as "67%Mengunduh…".
+            read.setTag("chapter_read:" + chapter.url);
+            states.addView(read);
         }
-
+        row.addView(states);
         if (downloadListener != null && downloadState != null) {
             addChapterDownload(row, chapter);
         }
@@ -533,7 +543,9 @@ public final class LibraryPage {
         TextView statusView = Ui.label(context, status, 10,
                 state == DownloadStatusStore.SAVED ? palette.accent : palette.muted);
         statusView.setTag("download_status:" + chapter.url);
-        statusView.setPadding(0, 0, Ui.dp(context, 8), 0);
+        statusView.setPadding(Ui.dp(context, 6), 0, Ui.dp(context, 8), 0);
+        statusView.setMaxWidth(Ui.dp(context, 92));
+        statusView.setMaxLines(2);
         row.addView(statusView);
 
         View action;

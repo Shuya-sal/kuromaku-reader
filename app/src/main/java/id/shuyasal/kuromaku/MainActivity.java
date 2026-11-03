@@ -16,6 +16,13 @@ import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.PopupMenu;
+import android.app.Dialog;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
+import android.content.SharedPreferences;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -35,6 +42,7 @@ import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
 import id.shuyasal.kuromaku.data.Library;
 import id.shuyasal.kuromaku.data.Novel;
+import id.shuyasal.kuromaku.data.ReadingBackup;
 import id.shuyasal.kuromaku.net.CatalogLoader;
 import id.shuyasal.kuromaku.net.NovelUrl;
 import id.shuyasal.kuromaku.parser.NovelDiscovery;
@@ -221,15 +229,7 @@ public class MainActivity extends AppCompatActivity {
         sectionMenu = Ui.iconButton(this, R.drawable.ic_menu, "Buka menu Novel dan Manga", palette);
         sectionMenu.setContentDescription("Menu Novel dan Manga");
         sectionMenu.setTag("section_menu");
-        sectionMenu.setOnClickListener(v -> {
-            PopupMenu menu = new PopupMenu(this, sectionMenu);
-            menu.getMenu().add("Novel ✓");
-            menu.getMenu().add("Manga").setOnMenuItemClickListener(item -> {
-                startActivity(new Intent(this, MangaActivity.class));
-                return true;
-            });
-            menu.show();
-        });
+        sectionMenu.setOnClickListener(v -> showSectionDrawer());
         toolbarRow.addView(sectionMenu, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
@@ -346,6 +346,130 @@ public class MainActivity extends AppCompatActivity {
         if (content != null) {
             content.setPadding(Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14),
                     Ui.dp(this, 32) + bottom);
+        }
+    }
+
+    static final int REQUEST_BACKUP = 7121;
+    static final int REQUEST_RESTORE = 7122;
+
+    /** A modal left-side drawer with a dimmed scrim; no tiny popup menu. */
+    private void showSectionDrawer() {
+        Dialog drawer = new Dialog(this);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(Ui.dp(this, 20), Ui.dp(this, 30), Ui.dp(this, 20), Ui.dp(this, 24));
+        panel.setBackgroundColor(palette.surface);
+        TextView heading = Ui.label(this, "Kuromaku Reader", 21, palette.text);
+        panel.addView(heading);
+        addDrawerItem(panel, "Novel  ✓", "drawer_novel", () -> { drawer.dismiss(); showLibrary(); });
+        addDrawerItem(panel, "Manga", "drawer_manga", () -> {
+            drawer.dismiss(); startActivity(new Intent(this, MangaActivity.class));
+        });
+        View separator = new View(this);
+        separator.setBackgroundColor(palette.divider);
+        LinearLayout.LayoutParams sep = new LinearLayout.LayoutParams(-1, Ui.dp(this, 1));
+        sep.setMargins(0, Ui.dp(this, 16), 0, Ui.dp(this, 16));
+        panel.addView(separator, sep);
+        addDrawerItem(panel, "Backup progres membaca", "drawer_backup", () -> {
+            drawer.dismiss();
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            intent.putExtra(Intent.EXTRA_TITLE, "kuromaku-reading-backup.json");
+            startActivityForResult(intent, REQUEST_BACKUP);
+        });
+        addDrawerItem(panel, "Restore progres membaca", "drawer_restore", () -> {
+            drawer.dismiss();
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("application/json");
+            startActivityForResult(intent, REQUEST_RESTORE);
+        });
+        drawer.setContentView(panel);
+        android.view.Window window = drawer.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            android.view.WindowManager.LayoutParams params = window.getAttributes();
+            params.gravity = Gravity.START | Gravity.TOP;
+            params.width = (int) (getResources().getDisplayMetrics().widthPixels * 0.82f);
+            params.height = android.view.WindowManager.LayoutParams.MATCH_PARENT;
+            params.dimAmount = 0.55f;
+            window.setAttributes(params);
+        }
+        drawer.show();
+        if (drawer.getWindow() != null) {
+            android.view.Window window2 = drawer.getWindow();
+            window2.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.82f), -1);
+            View panelView = window2.getDecorView();
+            // The resting position is written explicitly, never left to the default.
+            // Leaving it implicit made "animations off" and "animation that never
+            // ran" indistinguishable, and the second one parks the drawer off screen
+            // where nothing is visible and nothing can be tapped.
+            boolean slide = Motion.enabled(this);
+            panelView.setTranslationX(
+                    slide ? -getResources().getDisplayMetrics().widthPixels : 0f);
+            if (slide) {
+                panelView.animate().translationX(0)
+                        .setDuration(Motion.DURATION_MS).start();
+            }
+        }
+    }
+
+    private void addDrawerItem(LinearLayout panel, String title, String tag, Runnable action) {
+        TextView item = Ui.label(this, title, 17, palette.text);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(Ui.dp(this, 12), Ui.dp(this, 16), Ui.dp(this, 12), Ui.dp(this, 16));
+        item.setTag(tag);
+        item.setOnClickListener(v -> action.run());
+        panel.addView(item, new LinearLayout.LayoutParams(-1, Ui.dp(this, 64)));
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        // The format and the type tags live in ReadingBackup so they can be tested
+        // without an activity: a restore that drops a type silently resets progress,
+        // and that is exactly the failure a backup feature must not have.
+        try {
+            if (requestCode == REQUEST_BACKUP) {
+                SharedPreferences store = getSharedPreferences(Prefs.FILE_NAME, MODE_PRIVATE);
+                String document = ReadingBackup.export(store);
+                try (OutputStream out = getContentResolver().openOutputStream(data.getData())) {
+                    if (out == null) throw new java.io.IOException("Berkas tujuan tidak bisa dibuka");
+                    out.write(document.getBytes(StandardCharsets.UTF_8));
+                }
+                Toast.makeText(this, "Backup progres berhasil disimpan", Toast.LENGTH_LONG).show();
+            } else if (requestCode == REQUEST_RESTORE) {
+                byte[] bytes;
+                try (InputStream in = getContentResolver().openInputStream(data.getData());
+                     java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+                    if (in == null) throw new java.io.IOException("Berkas backup tidak bisa dibuka");
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, count);
+                        // Stop reading rather than hold an unbounded file in memory.
+                        if (out.size() > ReadingBackup.MAX_BYTES) {
+                            throw new java.io.IOException("Berkas backup terlalu besar");
+                        }
+                    }
+                    bytes = out.toByteArray();
+                }
+                SharedPreferences store = getSharedPreferences(Prefs.FILE_NAME, MODE_PRIVATE);
+                int restored = ReadingBackup.restore(store, new String(bytes, StandardCharsets.UTF_8));
+                Toast.makeText(this, restored + " progres dipulihkan", Toast.LENGTH_LONG).show();
+                // No catalogue reload needed: progress is read from the store while
+                // rendering, so going back to the shelf shows the restored bookmark
+                // immediately. Clearing the catalogue cache here would force a
+                // network fetch and make a successful restore fail when offline.
+                showLibrary();
+            }
+        } catch (Exception error) {
+            String reason = error.getMessage();
+            Toast.makeText(this, "Gagal: " + (reason == null ? error.getClass().getSimpleName() : reason),
+                    Toast.LENGTH_LONG).show();
         }
     }
 

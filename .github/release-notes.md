@@ -6,7 +6,32 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.19.2** (versionCode 42)
+* Versi: **2.20** (versionCode 43)
+* **Drawer bagian dan backup progres membaca (2.20).** Tombol menu di
+  toolbar Perpustakaan sekarang membuka **drawer samping** bergaya modal
+  (bukan popup kecil) yang memuat **Novel**, **Manga**, **Backup progres
+  membaca**, dan **Restore progres membaca**. Drawer terbuka selebar 82%
+  layar dengan latar diredupkan dan animasi geser 220 ms. Fitur **Manga**
+  dari 2.19 tetap sama, hanya jalan masuknya kini drawer.
+* **Backup progres membaca adalah berkas milik pembaca.** Progres
+  disimpan di satu berkas preferensi sebagai peta datar bertipe campuran
+  (bookmark `String`, posisi gulir `int`, persen `int`, akordeon
+  `Set<String>`). Berkas backup menulis **setiap nilai beserta tipenya**,
+  lalu memulihkannya sesuai tipe itu: nilai `int` yang kembali sebagai
+  teks akan mengosongkan progres tanpa pesan apa pun, dan itu justru
+  kegagalan yang harus dicegah fitur ini. Ekspor memakai
+  `ACTION_CREATE_DOCUMENT` dengan nama `kuromaku-reading-backup.json`,
+  impor memakai `ACTION_OPEN_DOCUMENT`; keduanya lewat pemilih berkas
+  Android, jadi berkasnya bisa disimpan ke Drive, kartu SD, atau dikirim
+  sendiri — tidak ada server yang terlibat.
+* **Restore menolak sebelum menulis.** Berkas asing (format berbeda),
+  berkas terpotong, dokumen kosong, dan berkas di atas 5 MB ditolak
+  **sebelum satu kunci pun** masuk ke penyimpanan, jadi percobaan yang
+  gagal tidak bisa memindahkan pembaca ke chapter yang tidak pernah
+  dibuka. Cadangan satu novel tidak menghapus bookmark novel lain. Kunci
+  bertipe tak dikenal (dari versi lebih baru) dilewati satu per satu,
+  sisanya tetap dipulihkan dan jumlahnya dilaporkan lewat toast
+  ("N progres dipulihkan").
 * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
   Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
   katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -148,6 +173,26 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   domain dilonggarkan jadi `contains`) dengan pemulihan diverifikasi
   `md5`. Run pertama hanya 2/4 — dua mutasi bertahan hijau, jadi kedua tes
   ditulis ulang sampai mutasinya gagal, lalu run diulang 4/4.
+* **Uji mutasi 2.20: 18/18 tertangkap**, semuanya pada berkas hidup
+  dengan `md5` dipulihkan sesudah setiap mutasi. Yang diuji: tipe `int`
+  ditulis sebagai `string`, himpunan akordeon ditulis sebagai string
+  biasa, pemeriksaan format dimatikan saat restore, berkas kebesaran
+  diterima, kunci bertipe asing dipaksa jadi string, restore tidak
+  menulis apa pun, `float` dipulihkan sebagai `int`, item drawer tidak
+  bisa ditekan, entri backup membuka pemilih berkas yang salah, entri
+  restore memakai kode permintaan backup, hasil restore tidak dilaporkan,
+  label persen baca dihapus, persen ditulis tanpa kata (kembali ke
+  "67%Mengunduh"), dan chapter yang sedang dibaca tidak diberi label.
+  Empat mutasi animasi drawer menyusul setelahnya: `Motion.enabled`
+  diganti `true` (animasi berjalan walau *Remove animations* aktif),
+  posisi awal dibuat 0 (drawer tidak pernah bergeser), posisi diam dibuat
+  di luar layar (drawer tak terlihat dan tak bisa ditekan), dan durasi
+  diganti 40 ms (di bawah jendela 180–250 ms). Run animasi pertama hanya
+  **3/4**: mutasi durasi lolos karena `HeaderAndMotionTest` hanya menguji
+  **konstanta** `Motion.DURATION_MS`, bukan angka yang dipakai call site.
+  Tes diperbaiki membaca `decor.animate().getDuration()` — animator yang
+  benar-benar dijalankan — lalu run diulang **4/4**.
+  Setiap mutasi membuat tes bernama gagal — bukan sekadar build rusak.
 * **Fitur Cover Volume & Indikator Unduhan (2.18).** Dua keluhan dari
   laporan: volume novel yang ditambahkan lewat URL (Yarikon) hanya
   menampilkan placeholder "Vol 1", "Vol 2", "Vol 3", dan baris unduhan
@@ -191,7 +236,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
   selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
   tidak pernah muncul selama masih ada chapter belum lengkap.
-* **318 unit test lulus**, 0 gagal (30 kelas). `VolumeCoversAndDownloadStateTest`
+* **340 unit test lulus**, 0 gagal (32 kelas). `VolumeCoversAndDownloadStateTest`
   (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
   memicu laporan — dan mengukur UI pada layar 320 dp.
   `RingProgressMotionTest` (5 tes) menguji cincin progres langsung:

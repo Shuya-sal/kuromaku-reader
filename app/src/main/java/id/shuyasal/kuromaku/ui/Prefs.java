@@ -19,7 +19,8 @@ public final class Prefs {
     public static final int THEME_DARK = 1;
     public static final int THEME_SEPIA = 2;
 
-    private static final String FILE = "kuromaku_reader";
+    /** The preference file that holds theme, bookmarks and per-chapter progress. */
+    public static final String FILE_NAME = "kuromaku_reader";
 
     private static final String KEY_THEME = "theme";
     private static final String KEY_FONT = "font_size";
@@ -42,7 +43,7 @@ public final class Prefs {
 
     public Prefs(Context context, String novelId) {
         this.context = context.getApplicationContext();
-        this.prefs = this.context.getSharedPreferences(FILE, Context.MODE_PRIVATE);
+        this.prefs = this.context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE);
         this.prefix = novelId == null || novelId.isEmpty() ? "" : novelId + ":";
     }
 
