@@ -57,6 +57,14 @@ public final class AddNovelPage {
         /** User pressed "Batal" on a preview. */
         default void onCancelPreview() {
         }
+
+        /** User confirmed a hand-picked set of chapter links. */
+        default void onApplySelection(java.util.List<String> urls) {
+        }
+
+        /** User asked to see every link the parser found. */
+        default void onTogglePicking() {
+        }
     }
 
     /** Everything the page draws. Mutable holder owned by the activity. */
@@ -68,6 +76,10 @@ public final class AddNovelPage {
         public NovelDiscovery.Result preview;
         /** True when this exact novel is already on the shelf. */
         public boolean duplicate;
+        /** True while the full link list is open for hand-picking. */
+        public boolean picking;
+        /** URLs the user ticked; seeded with the ones the parser accepted. */
+        public final java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>();
     }
 
     private static final String MISSING = "Tidak tercantum di halaman sumber";
@@ -254,6 +266,8 @@ public final class AddNovelPage {
         box.addView(top);
 
         box.addView(counts(preview));
+        box.addView(diagnostics(preview));
+        if (state.picking || preview.needsConfirmation) box.addView(picker(preview));
         box.addView(metadata(preview));
         box.addView(synopsis(preview));
         box.addView(warnings(preview));
@@ -441,6 +455,168 @@ public final class AddNovelPage {
         return column;
     }
 
+    /**
+     * What the parser saw, in numbers.
+     *
+     * <p>Three lines, because "no chapters found" alone tells the user nothing:
+     * how many links the article held, how many were recognised, and why the rest
+     * were dropped. The rejected list is capped and says so.
+     */
+    private View diagnostics(NovelDiscovery.Result preview) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setTag("add_novel_diagnostics");
+        column.setPadding(0, Ui.dp(context, 10), 0, 0);
+
+        TextView heading = Ui.label(context, "Diagnostik tautan", 11, palette.text);
+        heading.setTypeface(null, Typeface.BOLD);
+        column.addView(heading);
+
+        TextView found = Ui.label(context,
+                "Tautan ditemukan di artikel: " + preview.linksFound, 11, palette.muted);
+        found.setTag("add_novel_links_found");
+        found.setPadding(0, Ui.dp(context, 3), 0, 0);
+        column.addView(found);
+
+        TextView accepted = Ui.label(context,
+                "Dikenali sebagai chapter: " + preview.linksAccepted, 11,
+                preview.linksAccepted > 0 ? palette.text : palette.accent);
+        accepted.setTag("add_novel_links_accepted");
+        accepted.setPadding(0, Ui.dp(context, 2), 0, 0);
+        column.addView(accepted);
+
+        java.util.List<NovelDiscovery.Candidate> rejected = preview.rejected();
+        if (!rejected.isEmpty()) {
+            TextView why = Ui.label(context,
+                    "Ditolak: " + rejected.size() + " tautan", 11, palette.muted);
+            why.setTag("add_novel_links_rejected");
+            why.setPadding(0, Ui.dp(context, 2), 0, 0);
+            column.addView(why);
+
+            int shown = 0;
+            for (NovelDiscovery.Candidate candidate : rejected) {
+                if (shown++ >= 6) break;
+                String text = candidate.text.isEmpty() ? "(tanpa teks)" : candidate.text;
+                TextView line = Ui.label(context,
+                        "• " + trim(text, 40) + " — " + candidate.reason, 10, palette.muted);
+                line.setTag("add_novel_rejection");
+                line.setPadding(Ui.dp(context, 6), Ui.dp(context, 2), 0, 0);
+                column.addView(line);
+            }
+            if (rejected.size() > shown) {
+                TextView more = Ui.label(context,
+                        "… dan " + (rejected.size() - shown) + " tautan lain", 10, palette.muted);
+                more.setPadding(Ui.dp(context, 6), Ui.dp(context, 2), 0, 0);
+                column.addView(more);
+            }
+        }
+
+        if (preview.needsConfirmation) {
+            TextView ask = Ui.label(context,
+                    "Belum ada yang bisa dipastikan sebagai chapter. Centang tautan yang benar "
+                            + "di bawah, lalu tekan “Pakai pilihan ini”.", 11, palette.accent);
+            ask.setTag("add_novel_needs_confirmation");
+            ask.setPadding(0, Ui.dp(context, 8), 0, 0);
+            column.addView(ask);
+        }
+
+        Button toggle = Ui.chip(context,
+                state.picking ? "Sembunyikan daftar tautan" : "Pilih tautan manual", palette);
+        toggle.setTag("add_novel_pick_toggle");
+        toggle.setMinHeight(Ui.dp(context, Ui.TOUCH_DP));
+        toggle.setOnClickListener(v -> listener.onTogglePicking());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, Ui.dp(context, 8), 0, 0);
+        toggle.setLayoutParams(params);
+        column.addView(toggle);
+        return column;
+    }
+
+    /**
+     * The links the parser found, each one a checkbox.
+     *
+     * <p>This exists because the alternative — guessing — is worse. When no link
+     * matches a known chapter pattern, the user sees the actual list and decides;
+     * nothing is saved from this list until "Pakai pilihan ini" is pressed, and a
+     * link that is not on the page can never be selected.
+     */
+    private View picker(NovelDiscovery.Result preview) {
+        LinearLayout column = new LinearLayout(context);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setTag("add_novel_picker");
+        column.setPadding(0, Ui.dp(context, 8), 0, 0);
+
+        java.util.List<NovelDiscovery.Candidate> selectable = preview.selectableCandidates();
+        TextView heading = Ui.label(context,
+                "Tautan yang bisa dipakai (" + selectable.size() + " dari "
+                        + preview.candidates.size() + ")", 11, palette.text);
+        heading.setTypeface(null, Typeface.BOLD);
+        column.addView(heading);
+
+        if (selectable.isEmpty()) {
+            TextView none = Ui.label(context,
+                    "Tidak ada tautan yang bisa dipilih di halaman ini.", 11, palette.muted);
+            none.setPadding(0, Ui.dp(context, 4), 0, 0);
+            column.addView(none);
+            return column;
+        }
+
+        int shown = 0;
+        for (NovelDiscovery.Candidate candidate : selectable) {
+            if (shown++ >= 80) break;
+            android.widget.CheckBox box = new android.widget.CheckBox(context);
+            box.setTag("add_novel_candidate");
+            String text = candidate.text.isEmpty()
+                    ? trim(tail(candidate.url), 46) : trim(candidate.text, 46);
+            box.setText(text + (candidate.volume > 0 ? " · Vol " + candidate.volume : ""));
+            box.setTextSize(11);
+            box.setTextColor(palette.text);
+            box.setChecked(state.selected.contains(candidate.url));
+            box.setMinHeight(Ui.dp(context, Ui.TOUCH_DP));
+            final String url = candidate.url;
+            box.setOnCheckedChangeListener((button, checked) -> {
+                if (checked) state.selected.add(url);
+                else state.selected.remove(url);
+            });
+            column.addView(box);
+        }
+
+        Button apply = Ui.chip(context, "Pakai pilihan ini", palette);
+        apply.setTag("add_novel_apply_selection");
+        apply.setMinHeight(Ui.dp(context, Ui.TOUCH_DP));
+        apply.setTypeface(null, Typeface.BOLD);
+        apply.setOnClickListener(v -> listener.onApplySelection(
+                new java.util.ArrayList<>(state.selected)));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, Ui.dp(context, 8), 0, 0);
+        apply.setLayoutParams(params);
+        column.addView(apply);
+
+        TextView note = Ui.label(context,
+                "Tautan navigasi, iklan, dan postingan novel lain tidak ditampilkan di sini. "
+                        + "Hanya tautan yang tercentang yang dipakai, dan novel tidak disimpan "
+                        + "sebelum Tuan menekan “Simpan ke Perpustakaan”.", 10, palette.muted);
+        note.setPadding(0, Ui.dp(context, 6), 0, 0);
+        column.addView(note);
+        return column;
+    }
+
+    private static String trim(String text, int limit) {
+        if (text == null) return "";
+        String value = text.trim();
+        return value.length() > limit ? value.substring(0, limit - 1) + "…" : value;
+    }
+
+    private static String tail(String url) {
+        if (url == null) return "";
+        String path = url;
+        int query = path.indexOf('?');
+        if (query >= 0) path = path.substring(0, query);
+        return path.substring(path.lastIndexOf('/') + 1);
+    }
+
     private View actions() {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -456,8 +632,13 @@ public final class AddNovelPage {
         save.setTag("add_novel_save");
         save.setMinHeight(Ui.dp(context, Ui.TOUCH_DP));
         save.setTypeface(null, Typeface.BOLD);
-        save.setEnabled(!state.duplicate);
-        save.setAlpha(state.duplicate ? 0.5f : 1f);
+        // Nothing is saved without a verified chapter list: an empty novel on the
+        // shelf is worse than a refusal, so the only button that writes is disabled
+        // while the catalogue is empty or the picker has not been applied.
+        boolean blocked = state.duplicate
+                || state.preview == null || state.preview.chapterCount() == 0;
+        save.setEnabled(!blocked);
+        save.setAlpha(blocked ? 0.5f : 1f);
         save.setOnClickListener(v -> listener.onSave());
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(

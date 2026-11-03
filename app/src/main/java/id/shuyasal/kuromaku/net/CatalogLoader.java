@@ -3,9 +3,11 @@ package id.shuyasal.kuromaku.net;
 import org.json.JSONException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import id.shuyasal.kuromaku.data.Catalog;
+import id.shuyasal.kuromaku.data.FeedEntry;
 import id.shuyasal.kuromaku.data.LibraryBuilder;
 import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Volume;
@@ -15,11 +17,21 @@ import id.shuyasal.kuromaku.parser.NovelDiscovery;
 /**
  * Builds one novel's catalogue from its own source shape.
  *
- * <p>Monogatari publishes a Blogger label, so its chapters come from the JSON
- * feed and are grouped by the volume printed in each title. Magical★Explorer has
- * no single label: its landing page lists "Volume N" followed by that volume's
- * chapter links, so those links are used as they are. Neither path invents a
- * chapter and neither can return another novel's posts.
+ * <p>Three shapes exist, and a user-added novel can be any of them:
+ *
+ * <ul>
+ *   <li><b>feed</b> — a Blogger label (Monogatari). Every post carrying the label
+ *       is a chapter; the volume is printed in each title.</li>
+ *   <li><b>landing</b> — a post that lists "Volume N" headings followed by that
+ *       volume's links (Magical★Explorer).</li>
+ *   <li><b>discovered</b> — whatever a pasted address turns out to be. A dated
+ *       article is scraped link by link; a label address is read through its feed,
+ *       with the page itself used only for the description and metadata.</li>
+ * </ul>
+ *
+ * <p>Neither path invents a chapter and neither can return another novel's posts:
+ * the feed is scoped to one label, and the scraper rejects links whose slug does
+ * not belong to the series on the page.
  */
 public final class CatalogLoader {
 
@@ -56,14 +68,23 @@ public final class CatalogLoader {
         if (novel == null) throw new IOException("Novel tidak dikenal.");
         Catalog catalog;
         NovelDiscovery.Result discovery = null;
+        String extra = null;
+
         if (novel.catalogMode == Novel.CATALOG_FEED) {
             catalog = fromFeed(novel);
         } else if (novel.catalogMode == Novel.CATALOG_LANDING) {
             catalog = fromLanding(novel);
+        } else if (NovelUrl.isLabel(novel.landingUrl)) {
+            // A label address: chapters from the feed, description from the page.
+            Loaded labelled = fromLabel(novel);
+            catalog = labelled.catalog;
+            discovery = labelled.discovery;
+            extra = labelled.warning;
         } else {
             discovery = inspectFor(novel);
             catalog = new Catalog(novel.id, discovery.volumes);
         }
+
         Catalog withCovers = catalog.withCovers(novel.id);
 
         int volumes = 0;
@@ -73,7 +94,7 @@ public final class CatalogLoader {
         String summary = withCovers.size() + " chapter · " + withCovers.volumes.size()
                 + " volume (" + volumes + " berisi chapter)";
         String warning = withCovers.size() == 0
-                ? "Tidak ada chapter yang ditemukan pada halaman katalog." : null;
+                ? "Tidak ada chapter yang ditemukan pada halaman katalog." : extra;
         return new Loaded(withCovers, summary, warning, discovery);
     }
 
@@ -98,16 +119,95 @@ public final class CatalogLoader {
     }
 
     /**
-     * Catalogue of a user-added novel.
+     * Catalogue of a novel whose address is a Blogger label.
      *
-     * <p>The page is read again on every refresh, which is what makes a newly
-     * published chapter appear after "Muat Ulang" without touching the stored
-     * novel's identity, title or reading progress.
+     * <p>The label's JSON feed is the catalogue: it is paged by the app until
+     * Blogger returns nothing, so all 44 chapters appear even though the HTML
+     * listing only prints twenty per page. The label page is then read once, only
+     * for the description — and a failure there is reported, not swallowed, because
+     * a novel with chapters but no cover should say so.
      */
-    private static Catalog fromDiscovery(Novel novel) throws IOException {
-        return new Catalog(novel.id, inspectFor(novel).volumes);
+    private static Loaded fromLabel(Novel novel) throws IOException, JSONException {
+        String label;
+        try {
+            label = NovelUrl.label(novel.landingUrl);
+        } catch (NovelUrl.Invalid error) {
+            throw new IOException(error.getMessage(), error);
+        }
+        FeedClient.Result feed = FeedClient.fetchLabel(label);
+        if (feed.entries.isEmpty()) {
+            throw new IOException("Label “" + label + "” tidak memiliki postingan. "
+                    + "Pastikan nama labelnya benar dan masih dipakai di blog sumber.");
+        }
+        Catalog catalog = LibraryBuilder.build(novel.id, feed.entries);
+
+        List<String> warnings = new ArrayList<>();
+        warnings.add(feed.entries.size() + " chapter diambil dari feed label “" + label + "”.");
+        if (feed.pagesRead > 1) {
+            warnings.add("Feed dibaca " + feed.pagesRead + " halaman; daftar chapter lengkap.");
+        }
+        String extra = feed.isComplete() ? null : feed.warning;
+        if (feed.warning != null) warnings.add(feed.warning);
+
+        NovelDiscovery.Result page = null;
+        try {
+            String html = Fetcher.get().page(novel.landingUrl);
+            page = NovelDiscovery.describe(html, novel.landingUrl);
+        } catch (NovelDiscovery.Unreadable error) {
+            warnings.add("Deskripsi tidak terbaca dari halaman label: " + error.getMessage());
+        } catch (Exception error) {
+            warnings.add("Halaman label gagal dimuat; metadata dibiarkan kosong.");
+        }
+
+        NovelDiscovery.Result discovery = describeLabelPage(novel.landingUrl, page, label, warnings);
+        NovelDiscovery.Result withChapters = NovelDiscovery.catalogueFromFeed(
+                discovery.sourceUrl, discovery.title, discovery.titleJp, discovery.author,
+                discovery.illustrator, discovery.genres, discovery.status, discovery.coverUrl,
+                discovery.coverRatio, discovery.synopsis, catalog.volumes, warnings);
+
+        return new Loaded(catalog, "", extra, withChapters);
     }
 
+
+    /**
+     * Description of a label address, as far as the label page can honestly give it.
+     *
+     * <p>A label listing prints chapter posts, not the novel's own description post,
+     * so whatever picture it carries is a chapter illustration — using it as the
+     * series cover would be a silent lie. Metadata is therefore kept only when the
+     * page actually printed labelled fields, and the resulting gap is stated in the
+     * warnings with the one thing the user can do about it.
+     */
+    private static NovelDiscovery.Result describeLabelPage(String url, NovelDiscovery.Result page,
+                                                           String label, List<String> warnings) {
+        // The label name is the novel's name as the translator typed it. The page's
+        // own heading is the newest chapter's title ("… Volume 3 Afterword"), so
+        // using it would label the whole novel after one chapter.
+        String title = label;
+        boolean described = page != null && (!page.author.isEmpty()
+                || !page.illustrator.isEmpty() || !page.genres.isEmpty());
+        if (!described) {
+            if (page != null && !page.coverUrl.isEmpty()) {
+                warnings.add("Halaman label tidak memuat deskripsi novel, jadi cover tidak "
+                        + "diambil dari ilustrasi chapter. Kartu memakai placeholder.");
+            }
+            warnings.add("Untuk cover, penulis, dan sinopsis, tambahkan novel ini lewat URL "
+                    + "artikelnya, bukan URL label.");
+        }
+        return NovelDiscovery.catalogueFromFeed(
+                url,
+                title,
+                page == null || !described ? "" : page.titleJp,
+                page == null || !described ? "" : page.author,
+                page == null || !described ? "" : page.illustrator,
+                page == null || !described ? "" : page.genres,
+                page == null || !described ? "" : page.status,
+                page == null || !described ? "" : page.coverUrl,
+                page == null || !described ? 0.70f : page.coverRatio,
+                page == null || !described ? new String[0] : page.synopsis,
+                null,
+                warnings);
+    }
     /** The page read as a catalogue, with a plain-language failure. */
     private static NovelDiscovery.Result inspectFor(Novel novel) throws IOException {
         try {
@@ -118,18 +218,21 @@ public final class CatalogLoader {
     }
 
     /**
-     * Fetches and reads a catalogue URL without storing anything.
+     * Fetches and reads an address without storing anything.
      *
      * <p>Used when the user adds a novel and when an existing one is refreshed, so
-     * the parse the preview shows is exactly the parse the reader will use. The
-     * fetch goes through {@link Fetcher}, which is what lets the whole add/refresh
-     * path be tested offline.
+     * the parse the preview shows is exactly the parse the reader will use. A label
+     * address goes through its feed; anything else is scraped from the page.
+     * The fetch goes through {@link Fetcher}, which is what lets the whole
+     * add/refresh path be tested offline.
      *
      * @throws IOException                when the page cannot be downloaded
      * @throws NovelDiscovery.Unreadable  when the page is not a readable catalogue
      */
     public static NovelDiscovery.Result inspect(String normalisedUrl)
             throws IOException, NovelDiscovery.Unreadable {
+        if (NovelUrl.isLabel(normalisedUrl)) return inspectLabel(normalisedUrl);
+
         String html;
         try {
             html = Fetcher.get().page(normalisedUrl);
@@ -145,5 +248,95 @@ public final class CatalogLoader {
             throw new IOException("Halaman katalog kosong atau tidak dapat diunduh.");
         }
         return NovelDiscovery.parse(html, normalisedUrl);
+    }
+
+    /** Preview of a label address: feed for chapters, page for the description. */
+    static NovelDiscovery.Result inspectLabel(String normalisedUrl)
+            throws IOException, NovelDiscovery.Unreadable {
+        String label;
+        try {
+            label = NovelUrl.label(normalisedUrl);
+        } catch (NovelUrl.Invalid error) {
+            throw new NovelDiscovery.Unreadable(error.getMessage());
+        }
+
+        FeedClient.Result feed;
+        try {
+            feed = FeedClient.fetchLabel(label, url -> {
+                // One seam for both the real client and the fixture source: a
+                // checked Exception from the source becomes an IOException here so
+                // the feed pager only has to handle one failure shape.
+                try {
+                    return Fetcher.get().page(url);
+                } catch (IOException error) {
+                    throw error;
+                } catch (Exception error) {
+                    throw new IOException(error.getMessage() == null
+                            ? error.getClass().getSimpleName() : error.getMessage(), error);
+                }
+            });
+        } catch (IOException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new IOException(error.getMessage() == null
+                    ? error.getClass().getSimpleName() : error.getMessage(), error);
+        }
+        if (feed.entries.isEmpty()) {
+            throw new NovelDiscovery.Unreadable("Label “" + label + "” tidak memiliki postingan. "
+                    + "Periksa ejaan nama label di URL, atau pakai URL artikel novelnya.");
+        }
+        // A label feed returns every post carrying that label, and that includes the
+        // series description post — the one whose title is the novel's own name. It is
+        // not a chapter: counting it put the description at the end of Volume 0.
+        List<FeedEntry> chapterEntries = new ArrayList<>();
+        int descriptionPosts = 0;
+        for (FeedEntry entry : feed.entries) {
+            if (LibraryBuilder.isChapterPost(entry.title)) chapterEntries.add(entry);
+            else descriptionPosts++;
+        }
+        if (chapterEntries.isEmpty()) {
+            throw new NovelDiscovery.Unreadable("Label “" + label + "” hanya berisi "
+                    + descriptionPosts + " postingan deskripsi dan tidak satu pun chapter. "
+                    + "Pakai URL artikel novelnya.");
+        }
+        Catalog catalog = LibraryBuilder.build("", chapterEntries);
+
+        List<String> warnings = new ArrayList<>();
+        warnings.add(chapterEntries.size() + " chapter diambil dari feed label “" + label + "”"
+                + (feed.pagesRead > 1 ? " (" + feed.pagesRead + " halaman feed)." : "."));
+        if (descriptionPosts > 0) {
+            warnings.add(descriptionPosts + " postingan deskripsi novel tidak dihitung sebagai "
+                    + "chapter, karena isinya bukan bagian dari cerita.");
+        }
+        // The feed listed two posts with the same volume and the same chapter title; the
+        // builder keeps one. Saying "43 chapter" while the list shows 42 is the kind of
+        // off-by-one that makes a user think a chapter went missing, so it is spelled out.
+        int catalogued = 0;
+        for (Volume volume : catalog.volumes) catalogued += volume.chapterCount();
+        int merged = chapterEntries.size() - catalogued;
+        if (merged > 0) {
+            warnings.add(merged + " judul chapter terbit lebih dari sekali di feed dan digabung, "
+                    + "supaya tidak ada chapter ganda di daftar.");
+        }
+        if (feed.warning != null) warnings.add(feed.warning);
+        warnings.add("Halaman label menampilkan 20 postingan per halaman; aplikasi membaca "
+                + "seluruh feed, jadi jumlah di atas adalah jumlah sebenarnya.");
+
+        NovelDiscovery.Result page = null;
+        try {
+            String html = Fetcher.get().page(normalisedUrl);
+            page = NovelDiscovery.describe(html, normalisedUrl);
+        } catch (NovelDiscovery.Unreadable error) {
+            warnings.add("Deskripsi tidak ditemukan di halaman label: " + error.getMessage());
+        } catch (Exception error) {
+            warnings.add("Halaman label gagal dimuat; cover dan metadata dibiarkan kosong.");
+        }
+
+        NovelDiscovery.Result described = describeLabelPage(normalisedUrl, page, label, warnings);
+        return NovelDiscovery.catalogueFromFeed(
+                described.sourceUrl, described.title, described.titleJp, described.author,
+                described.illustrator, described.genres, described.status, described.coverUrl,
+                described.coverRatio, described.synopsis, catalog.volumes, warnings,
+                feed.entries.size());
     }
 }

@@ -25,6 +25,14 @@ public final class LibraryBuilder {
 
     private static final Pattern VOLUME = Pattern.compile("[Vv]olume\\s*(\\d+)");
     private static final Pattern CHAPTER = Pattern.compile("chapter\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
+    /** Interlude I / II / III — the numeral is part of the identity. */
+    private static final Pattern INTERLUDE =
+            Pattern.compile("interlude\\s*([ivxl]+|\\d+)", Pattern.CASE_INSENSITIVE);
+    /** Anything that reads as a chapter, used to tell a chapter post from a landing post. */
+    private static final Pattern CHAPTER_POST = Pattern.compile(
+            "chapter\\s*\\d+|prolog|prologue|interlude|epilog|epilogue|afterword|illustra"
+                    + "|short\\s*story|side\\s*story|ilustrasi",
+            Pattern.CASE_INSENSITIVE);
 
     /** Reading order inside one volume. Lower sorts first. */
     static final int ORDER_PROLOG = 10;
@@ -99,6 +107,21 @@ public final class LibraryBuilder {
         return new Catalog(volumes);
     }
 
+    /**
+     * True when a feed post is a chapter rather than the novel's description post.
+     *
+     * <p>A label feed returns everything tagged with that label, and that includes
+     * the series landing post — the one whose title is the novel's own name and
+     * which carries the cover, author and synopsis. It has no volume and no chapter
+     * wording, so counting it as a chapter would put the description at the end of
+     * the book as something to read.
+     */
+    public static boolean isChapterPost(String title) {
+        if (title == null) return false;
+        if (extractVolume(title) > 0) return true;
+        return CHAPTER_POST.matcher(title).find();
+    }
+
     /** Volume number from the title, 0 when the title has none. */
     public static int extractVolume(String title) {
         if (title == null) return 0;
@@ -129,6 +152,13 @@ public final class LibraryBuilder {
         if (numbered != null) return numbered;
 
         if (text.contains("prolog") || text.contains("prologue")) return "Prolog";
+        Matcher interlude = INTERLUDE.matcher(text);
+        if (interlude.find()) {
+            // "Interlude III" and "Interlude II" are different chapters. Dropping the
+            // numeral labelled all three the same, and the duplicate guard below then
+            // merged them — three chapters became one.
+            return "Interlude " + interlude.group(1).toUpperCase(Locale.ROOT);
+        }
         if (text.contains("interlude")) return "Interlude";
         if (text.contains("bonus")) return "Bonus Story";
         if (text.contains("epilog") || text.contains("epilogue")) return "Epilog";

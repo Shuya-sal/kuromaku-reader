@@ -33,6 +33,12 @@ public final class FeedClient {
     private static final String FEED =
             "https://kaoritranslation.blogspot.com/feeds/posts/summary/-/Monogatari%20no%20Kuromaku";
 
+    /** Feed of any label, encoded the way Blogger expects it. */
+    public static String feedUrl(String labelName) {
+        return "https://kaoritranslation.blogspot.com/feeds/posts/summary/-/"
+                + NovelUrl.encode(labelName == null ? "" : labelName.trim()) + "?alt=json";
+    }
+
     /** Requested page size. Blogger may return fewer; we never assume it. */
     static final int PAGE_SIZE = 25;
 
@@ -71,6 +77,30 @@ public final class FeedClient {
     }
 
     public static Result fetchEntries(Fetcher fetcher) throws IOException, JSONException {
+        return fetch(FEED, fetcher);
+    }
+
+    /**
+     * Every post carrying {@code labelName}, paged until Blogger returns an empty
+     * page.
+     *
+     * <p>This is the catalogue a label address gets, and the reason a label page is
+     * worth supporting: its HTML listing shows twenty posts and hides the rest
+     * behind pagination, while the feed can be paged deterministically and returns
+     * only that label's posts — never a sidebar link, never another novel's
+     * chapter.
+     */
+    public static Result fetchLabel(String labelName, Fetcher fetcher)
+            throws IOException, JSONException {
+        return fetch(feedUrl(labelName), fetcher);
+    }
+
+    public static Result fetchLabel(String labelName) throws IOException, JSONException {
+        return fetchLabel(labelName, Http::get);
+    }
+
+    /** Pages one feed URL until it runs out, counting what Blogger actually sent. */
+    static Result fetch(String feedUrl, Fetcher fetcher) throws IOException, JSONException {
         List<FeedEntry> entries = new ArrayList<>();
         Set<String> seenUrls = new LinkedHashSet<>();
 
@@ -80,8 +110,8 @@ public final class FeedClient {
         int blankStreak = 0;
 
         while (pagesRead < MAX_REQUESTS) {
-            String url = FEED + "?alt=json&max-results=" + PAGE_SIZE
-                    + "&start-index=" + startIndex;
+            String url = feedUrl + (feedUrl.contains("?") ? "&" : "?")
+                    + "max-results=" + PAGE_SIZE + "&start-index=" + startIndex;
             String body;
             try {
                 body = fetcher.get(url);

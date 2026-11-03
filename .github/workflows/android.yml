@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.9 (APK)
+          name: Kuromaku Reader 2.10 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.9** (versionCode 29)
+            * Versi: **2.10** (versionCode 30)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -129,7 +129,7 @@ jobs:
               novel berdasarkan id punya fallback "novel pertama", sehingga novel
               yang baru dihapus bisa muncul kembali sebagai novel lain sambil
               membawa progres dan unduhannya.
-            * **240 unit test lulus**, 0 gagal (23 kelas). Termasuk: URL tidak valid
+            * **261 unit test lulus**, 0 gagal (24 kelas). Termasuk: URL tidak valid
               ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
               URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
               berformat berbeda (entry-content, heading h4, ordered list, label
@@ -141,6 +141,32 @@ jobs:
             * Uji mutasi: lima bug di atas dikembalikan satu per satu dan setiap
               kali ada tes yang gagal — tes ini terbukti menangkap bug, bukan
               sekadar hijau.
+            * **Bug 2.10 yang diperbaiki** — dua URL dari laporan:
+              (1) URL label `/search/label/...` ditolak sebelum diunduh karena jenis
+              alamat ketiga memang belum ada; sekarang label dibaca lewat feed JSON
+              per-label dengan pagination (feed Yariko: 44 postingan / 2 halaman),
+              judul novel diambil dari nama label, dan cover tidak dipinjam dari
+              ilustrasi chapter. (2) Artikel `/2026/03/yariko...` berisi 47 tautan
+              dan 43 chapter, tapi dilaporkan "tidak ada tautan chapter" karena
+              pembersih boilerplate membuang `div.widget` sebelum artikel dicari —
+              padahal `div.post-body` adalah keturunan `div.widget.Blog`, jadi
+              artikelnya ikut terhapus. Sekarang artikel dicari dulu, baru dibersihkan,
+              dan hanya di dalam artikel. (3) Tautan yang sudah ditolak tidak bisa
+              lagi dicuci menjadi kandidat manual. (4) `Interlude I/II/III` tidak lagi
+              runtuh jadi satu chapter. (5) Postingan deskripsi novel tidak dihitung
+              sebagai chapter.
+            * **Diagnostik tautan di preview**: jumlah tautan ditemukan, jumlah yang
+              dikenali sebagai chapter, dan alasan setiap tautan ditolak. Bila belum
+              ada yang bisa dipastikan, daftar tautan yang bisa dipakai ditampilkan
+              dengan kotak centang; novel disimpan setelah **Pakai pilihan ini**.
+            * **Hasil parse terukur**: artikel Yariko 43 chapter / 3 volume; label
+              Yariko 42 chapter / 3 volume; Magical★Explorer tetap 141 chapter /
+              14 volume; Monogatari tetap 111 chapter / 7 volume.
+            * **Uji mutasi 2.10**: kelima bug di atas dikembalikan satu per satu dan
+              setiap kali ada tes bernama yang gagal (`everyRejectedLinkCarriesItsReason`,
+              `aLabelCatalogueComesFromThePagedFeed`,
+              `aLinkThatWasNotOnThePageCannotBeSelected`, tiga variasi,
+              `aFeedPostThatDescribesTheNovelIsNotAChapter`).
             * Seluruh fitur 2.8 dipertahankan: download offline per chapter/volume,
               WorkManager, penulisan atomik, halaman Unduhan dengan status
               Belum/Mengunduh/Tersimpan/Gagal, header dengan WindowInsets yang

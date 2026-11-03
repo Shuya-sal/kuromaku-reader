@@ -21,42 +21,123 @@ import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Volume;
 
 /**
- * Reads a novel straight from a Kaori Translation catalogue page, without knowing
- * which novel it is.
+ * Reads a novel straight from a source page, without knowing which novel it is.
  *
  * <p>The two novels that ship with the app each got their own parser because
  * their pages differ. A novel the user adds by URL has no such luxury, so this
  * class works from what the pages have in common and reports honestly when it
- * cannot:
+ * cannot.
+ *
+ * <h3>What went wrong before (2.9) and why</h3>
+ *
+ * <p>Two reported URLs failed for two unrelated reasons, and neither was a matter
+ * of "the parser needs to be more flexible":
+ *
+ * <ol>
+ *   <li><b>Label pages were refused before they were ever fetched.</b>
+ *       {@code /search/label/Nama%20Novel} was rejected as "bukan halaman
+ *       artikel". That threw away the most reliable catalogue the source has:
+ *       its JSON feed lists every post carrying the label and nothing else.</li>
+ *   <li><b>The article body was deleted before parsing.</b> The boilerplate strip
+ *       removed every {@code .widget}, and on this template the article lives in
+ *       {@code div.widget.Blog#Blog1 > div.blog-posts > article > div.post-body}.
+ *       Removing the widget removed the article with it, leaving ~40 characters of
+ *       page chrome — so a page with 45 perfectly good chapter links reported
+ *       "Tidak ada tautan chapter yang dikenali".</li>
+ * </ol>
+ *
+ * <h3>How a catalogue is recognised now</h3>
  *
  * <ul>
- *   <li><b>Metadata</b> is read from labelled lines ("Author :", "Illustrator :",
- *       "Genre :", "Japanese Tittle :", "Status :") and from the article's own
- *       heading. A field the page does not print stays empty — it is never filled
- *       with a guess, and the preview says which ones are missing.</li>
- *   <li><b>Chapters</b> are the article links inside the post body that either
- *       read like a chapter ("Chapter 12", "Prolog", "Epilog", "Afterword",
- *       "Illustrasi") or point at a slug containing {@code chapter-N} /
- *       {@code volume-N}. Navigation, sidebars, share widgets, label pages, the
- *       front page and other series' posts are excluded.</li>
- *   <li><b>Volumes</b> come from the "Volume N" heading above a link, then from
- *       the link text, then from the slug. A catalogue that never states volumes
- *       keeps its chapters in one unnamed volume rather than inventing numbers.</li>
- *   <li><b>Warnings</b> list what could not be mapped, so the preview can say
- *       "3 tautan tidak dapat dipetakan" instead of silently dropping them.</li>
+ *   <li>The article is located <em>first</em>, then cleaned <em>inside</em>, so no
+ *       ancestor of the article can ever be removed.</li>
+ *   <li>Every anchor in the article is collected — lists, tables, buttons and
+ *       anchors with no visible text included — because a catalogue is often a
+ *       bare list of links.</li>
+ *   <li>A link is a chapter when its text or slug says so ("Chapter 12", "Bab 3",
+ *       "Ch. 4", "Vol. 2 Chapter 1", "Prolog", "Epilog", "Afterword",
+ *       "Illustrasi", "Interlude III"), or when it sits inside a volume group with
+ *       at least three such links and belongs to the same series. A specific
+ *       chapter wording is therefore <em>not</em> required when the grouping
+ *       itself is unambiguous.</li>
+ *   <li>Navigation, share widgets, label pages, feeds, static pages and other
+ *       series' posts are rejected, each with a recorded reason.</li>
+ *   <li>When nothing is recognised confidently, the result is not thrown away:
+ *       the preview lists every candidate link so the user can pick the real
+ *       chapters. Nothing is stored until then.</li>
  * </ul>
- *
- * <p>This is a heuristic reader, not a guarantee. Pages that hide the chapter list
- * behind JavaScript, use a different source, or print chapters as plain text
- * without links will be refused with a readable message instead of being stored
- * as an empty novel.
  */
 public final class NovelDiscovery {
 
-    /** Thrown when the page cannot be understood as a catalogue. */
+    /** Thrown when the page cannot be understood as a catalogue at all. */
     public static final class Unreadable extends Exception {
         public Unreadable(String message) {
             super(message);
+        }
+    }
+
+    /** One link the parser considered, accepted or not. */
+    public static final class Candidate {
+        public final String url;
+        public final String text;
+        public final int volume;
+        public final boolean accepted;
+        /** Why it was accepted, or why it was rejected. Never empty. */
+        public final String reason;
+        /** Position in the article, which is the order the translator laid out. */
+        public final int index;
+        /**
+         * True when the user may pick this link by hand.
+         *
+         * <p>Two kinds of rejection exist. A link that is not a post of this novel at
+         * all — navigation, a share widget, a label page, another series' chapter — is
+         * never selectable: the user asking for "the real chapters" must not be able
+         * to import an ad. A link that is a post of this series but whose text does
+         * not say "chapter" is exactly what the picker is for, so it stays
+         * selectable while unverified.
+         */
+        public final boolean selectable;
+
+        Candidate(String url, String text, int volume, boolean accepted, String reason,
+                  int index) {
+            this(url, text, volume, accepted, reason, index, accepted || softRejection(reason));
+        }
+
+        /**
+         * Full form: {@code selectable} is passed in rather than derived.
+         *
+         * <p>The second pass rewrites a rejected link's reason to "sendiri di grup
+         * volume", which reads like uncertainty even for a link that was refused as
+         * another series or as the page itself. Deriving selectability from the
+         * rewritten text therefore made every rejected link pickable; the verdict has
+         * to survive the rewrite.
+         */
+        Candidate(String url, String text, int volume, boolean accepted, String reason,
+                  int index, boolean selectable) {
+            this.url = url;
+            this.text = text;
+            this.volume = volume;
+            this.accepted = accepted;
+            this.reason = reason;
+            this.index = index;
+            this.selectable = selectable;
+        }
+
+        /**
+         * True when the reason only means "not proven to be a chapter" rather than
+         * "not a chapter of this novel". Only these may be picked by hand.
+         */
+        private static boolean softRejection(String reason) {
+            if (reason == null) return false;
+            // "dalam grup volume" = a post of this series whose text is not chapter-like.
+            // "tidak berpola chapter" = same thing before the volume group check.
+            // Anything else ("milik novel lain", "menunjuk halaman ini sendiri",
+            // "bukan tautan postingan", "halaman label/feed") is a verdict, not doubt.
+            return reason.contains("tidak berpola chapter") || "dalam grup volume".equals(reason);
+        }
+
+        Candidate(String url, String text, int volume, boolean accepted, String reason) {
+            this(url, text, volume, accepted, reason, 0);
         }
     }
 
@@ -77,9 +158,22 @@ public final class NovelDiscovery {
         /** Non-fatal problems: unmapped links, missing metadata, missing volumes. */
         public final List<String> warnings;
 
+        /** Links found inside the article, before any filtering. */
+        public final int linksFound;
+        /** Links that became chapters. */
+        public final int linksAccepted;
+        /** Every link considered, with the reason it was taken or dropped. */
+        public final List<Candidate> candidates;
+        /**
+         * True when the parser found links but is not sure enough to call them
+         * chapters: the preview must ask the user to choose.
+         */
+        public final boolean needsConfirmation;
+
         Result(String sourceUrl, String title, String titleJp, String fullTitle, String author,
                String illustrator, String genres, String status, String coverUrl, float coverRatio,
-               String[] synopsis, List<Volume> volumes, List<String> warnings) {
+               String[] synopsis, List<Volume> volumes, List<String> warnings, int linksFound,
+               int linksAccepted, List<Candidate> candidates, boolean needsConfirmation) {
             this.sourceUrl = sourceUrl;
             this.title = title;
             this.titleJp = titleJp;
@@ -93,6 +187,10 @@ public final class NovelDiscovery {
             this.synopsis = synopsis;
             this.volumes = volumes;
             this.warnings = warnings;
+            this.linksFound = linksFound;
+            this.linksAccepted = linksAccepted;
+            this.candidates = candidates;
+            this.needsConfirmation = needsConfirmation;
         }
 
         public int chapterCount() {
@@ -110,6 +208,24 @@ public final class NovelDiscovery {
             return total;
         }
 
+        /** Candidate links that were rejected, for the diagnostics panel. */
+        public List<Candidate> rejected() {
+            List<Candidate> out = new ArrayList<>();
+            for (Candidate candidate : candidates) {
+                if (!candidate.accepted) out.add(candidate);
+            }
+            return out;
+        }
+
+        /** Links the user may pick by hand: the ones that could be chapters. */
+        public List<Candidate> selectableCandidates() {
+            List<Candidate> out = new ArrayList<>();
+            for (Candidate candidate : candidates) {
+                if (candidate.selectable) out.add(candidate);
+            }
+            return out;
+        }
+
         /** Human list of metadata fields the page did not provide. */
         public List<String> missingMetadata() {
             List<String> missing = new ArrayList<>();
@@ -124,12 +240,21 @@ public final class NovelDiscovery {
     }
 
     /** Classes that hold page chrome rather than the article. */
-    private static final String[] BOILERPLATE = {
-            "nav", "header", "footer", "aside", ".navbar", ".menu", ".sidebar", "#sidebar",
-            ".widget", ".share", ".post-share-buttons", ".blog-pager", ".comments",
-            ".related-posts", ".popular-posts", ".breadcrumb", ".post-footer", ".site-header",
-            ".site-footer", ".ad", ".adsbygoogle", "script", "style", "noscript"
+    private static final String[] ARTICLE_CHROME = {
+            "script", "style", "noscript", "iframe", "ins", ".adsbygoogle", ".ad",
+            ".share", ".post-share-buttons", ".post-footer", ".comments", ".comment-form",
+            ".related-posts", ".related-bottom", ".popular-posts", ".blog-pager",
+            ".breadcrumb", ".post-pagination", ".toc-overlay", ".post-labels"
     };
+
+    /** Text that ends the catalogue: everything after it is site chrome. */
+    private static final String[] TRAILING_MARKERS = {
+            "related posts", "postingan terkait", "artikel terkait", "you might also like",
+            "rekomendasi", "komentar", "comments", "bagikan", "share this"
+    };
+
+    /** Path shapes that are never a chapter of the novel being read. */
+    private static final String[] NON_CHAPTER_PATHS = {"/search/", "/feeds/", "/p/", "/label/"};
 
     private static final Pattern LABEL_LINE = Pattern.compile(
             "^([A-Za-z][A-Za-z .]{2,24})\\s*[:：]\\s*(.+)$");
@@ -141,15 +266,18 @@ public final class NovelDiscovery {
     /** A bare word that may be a label when the next line is just ":". */
     private static final Pattern LABEL_WORD = Pattern.compile("^[A-Za-z][A-Za-z .]{2,24}$");
 
-    private static final Pattern VOLUME_IN_TEXT =
-            Pattern.compile("(?:^|\\b)volume\\s*(\\d{1,2})(?:\\b|$)", Pattern.CASE_INSENSITIVE);
+    /** A volume heading written as its own line: "Volume 3", "Vol. 2", "BAB 4". */
+    private static final Pattern VOLUME_HEADING_LINE = Pattern.compile(
+            "^\\s*(?:volume|vol)\\.?\\s*(\\d{1,2})\\s*[:\\-]?\\s*$", Pattern.CASE_INSENSITIVE);
 
-    /** Slug of a chapter post: ...-chapter-12, ...-volume-3, ...-epilog ... */
-    private static final Pattern CHAPTER_SLUG =
-            Pattern.compile("(chapter|volume|prolog|epilog|afterword|ilustrasi|illustrasi|interlude)",
-                    Pattern.CASE_INSENSITIVE);
+    /** "Volume 3" as a link's whole text: a volume landing page, not a chapter. */
+    private static final Pattern VOLUME_ONLY_TEXT = Pattern.compile(
+            "^\\s*(?:volume|vol)\\.?\\s*\\d{1,2}\\s*$", Pattern.CASE_INSENSITIVE);
 
     private static final Pattern IMAGE_SIZE = Pattern.compile("/(s|w)(\\d{2,4})(?:-h\\d+)?/");
+
+    /** Blogger dated post path, also used to spot the novel's own posts. */
+    private static final Pattern DATED_POST = Pattern.compile("/20\\d\\d/\\d\\d/");
 
     private NovelDiscovery() {
     }
@@ -157,16 +285,17 @@ public final class NovelDiscovery {
     /**
      * Preview built from a novel that is already stored.
      *
-     * <p>Used when the user pastes a URL that is already on the shelf: the page is
-     * not fetched again, and the preview shows the stored metadata together with
-     * whatever catalogue the session already holds. The warning makes clear that
-     * this is a stored copy, not a fresh read, so nobody mistakes it for a fetch
-     * that just succeeded.
+     * <p>Used when the user pastes an address that is already on the shelf: the
+     * page is not fetched again, and the preview shows the stored metadata together
+     * with whatever catalogue the session already holds. The warning makes clear
+     * that this is a stored copy, not a fresh read.
      */
     public static Result fromStored(Novel novel, List<Volume> volumes) {
         List<Volume> safeVolumes = volumes == null ? new ArrayList<Volume>() : volumes;
         List<String> warnings = new ArrayList<>();
         warnings.add("Data ini berasal dari perpustakaan, bukan hasil pembacaan ulang halaman.");
+        int count = 0;
+        for (Volume volume : safeVolumes) count += volume.chapterCount();
         return new Result(
                 novel.landingUrl == null ? "" : novel.landingUrl,
                 novel.title,
@@ -180,36 +309,61 @@ public final class NovelDiscovery {
                 novel.coverRatio,
                 novel.synopsis,
                 safeVolumes,
-                warnings);
+                warnings,
+                count,
+                count,
+                new ArrayList<Candidate>(),
+                false);
     }
 
     /**
      * Parses a catalogue page.
      *
      * @param html the fetched page
-     * @param url  the normalised catalogue URL, used as the base for relative links
-     * @throws Unreadable when no chapter can be recognised
+     * @param url  the normalised address, used as the base for relative links
+     * @throws Unreadable when the article cannot be found, or when nothing at all
+     *                    looks like a chapter link
      */
     public static Result parse(String html, String url) throws Unreadable {
+        return analyse(html, url, true);
+    }
+
+    /**
+     * Reads the article's metadata and links without insisting on a chapter list.
+     *
+     * <p>Needed for a label address: its chapters come from the JSON feed, so the
+     * page itself is only useful for the description, cover and metadata. Reporting
+     * "no chapters" for such a page would be true but useless.
+     *
+     * @throws Unreadable only when the article body cannot be found at all
+     */
+    public static Result describe(String html, String url) throws Unreadable {
+        return analyse(html, url, false);
+    }
+
+    private static Result analyse(String html, String url, boolean requireChapters)
+            throws Unreadable {
         if (html == null || html.trim().isEmpty()) {
             throw new Unreadable("Halaman katalog kosong atau tidak dapat diunduh.");
         }
         Document document = org.jsoup.Jsoup.parse(html, url == null ? "" : url);
-        stripBoilerplate(document);
 
+        // The article is located BEFORE anything is removed: on this template the
+        // post body is a descendant of div.widget.Blog, so stripping widgets first
+        // deleted the article itself and left ~40 characters of page chrome.
         Element body = articleBody(document);
         if (body == null) {
             throw new Unreadable("Bagian artikel novel tidak ditemukan di halaman itu. "
-                    + "Pastikan URL menunjuk ke halaman novel, bukan halaman label atau beranda.");
+                    + "Pastikan alamat menunjuk ke halaman novel, bukan halaman beranda.");
         }
+        cleanArticle(body);
 
         List<String> warnings = new ArrayList<>();
         List<Node> nodes = flatten(body);
+        String pageStem = stem(url);
 
-        // Everything above the chapter list is the description; everything from
-        // the first "Volume N" heading or chapter link onwards is the list itself.
-        // Splitting there is what keeps an illustration or a volume cover from
-        // being mistaken for the series artwork.
+        // Everything above the chapter list is the description; everything from the
+        // first volume heading or first chapter-shaped link onwards is the list.
         int listStart = chapterListStart(nodes, url);
         List<Node> head = listStart > 0 ? nodes.subList(0, listStart) : nodes;
 
@@ -217,35 +371,35 @@ public final class NovelDiscovery {
         Map<String, String> fields = labelledFields(headText);
         String title = title(document, body, fields);
         String titleJp = first(fields, "japanese tittle", "japanese title", "judul jepang",
-                "japanese");
+                "judul lain", "japanese");
         String author = first(fields, "author", "penulis");
-        String illustrator = first(fields, "illustrator", "ilustrator");
+        String illustrator = first(fields, "illustrator", "ilustrator", "artist", "artis");
         String genres = first(fields, "genre", "genres");
         String status = first(fields, "status");
         String cover = coverUrl(body);
         float ratio = coverRatio(body, cover);
         String[] synopsis = synopsis(headText, warnings);
 
-        Map<Integer, List<Chapter>> grouped = new LinkedHashMap<>();
-        Set<Integer> headings = new LinkedHashSet<>();
-        Set<String> seen = new LinkedHashSet<>();
-        int unmapped = 0;
-        int unknownVolume = 0;
-        // Volume heading currently in effect. Local, never static: two parses
-        // running at once must not share it.
-        int pendingVolume = 0;
-        // Blogger splits a heading across nodes: "Volume&nbsp;" lands in one span
-        // and "2" in the next. Accumulate text until something else interrupts it,
-        // otherwise Volume 2 and everything after it would pile up under Volume 1.
-        StringBuilder buffer = new StringBuilder();
+        // No list detected means the whole article is a candidate area: reporting
+        // "0 tautan" for a page full of links would be a lie, and the count is what
+        // tells the user whether this is a one-chapter post or an unreadable page.
+        boolean listDetected = listStart < nodes.size();
+        int scanFrom = listDetected ? listStart : 0;
+        int listEnd = catalogueEnd(nodes, scanFrom);
 
-        for (Node node : nodes) {
+        // Pass 1: collect every anchor in the catalogue area.
+        List<Link> links = new ArrayList<>();
+        StringBuilder buffer = new StringBuilder();
+        int pendingVolume = 0;
+        Set<Integer> headings = new LinkedHashSet<>();
+        for (int i = 0; i < nodes.size(); i++) {
+            Node node = nodes.get(i);
             if (node instanceof TextNode) {
                 buffer.append(((TextNode) node).text());
                 int heading = ChapterNaming.volumeHeading(buffer.toString());
                 if (heading > 0) {
                     headings.add(heading);
-                    pendingVolume = heading;
+                    if (i >= scanFrom && i < listEnd) pendingVolume = heading;
                     buffer.setLength(0);
                 } else if (!ChapterNaming.looksLikeVolumeStart(buffer.toString())) {
                     buffer.setLength(0);
@@ -254,43 +408,439 @@ public final class NovelDiscovery {
             }
             if (!(node instanceof Element)) continue;
             Element element = (Element) node;
-            if ("img".equals(element.tagName())) {
-                buffer.setLength(0);
-                continue;
-            }
             if (!"a".equals(element.tagName())) continue;
             buffer.setLength(0);
+            if (i < scanFrom || i >= listEnd) continue;
+            links.add(new Link(absolute(element), ChapterNaming.tidy(element.text()),
+                    pendingVolume, i));
+        }
 
-            String href = absolute(element);
-            if (href.isEmpty()) {
-                if (looksLikeChapterText(element.text())) unmapped++;
+        // Pass 2: decide which of them are chapters.
+        String dominant = dominantStem(links, pageStem);
+        List<Candidate> candidates = new ArrayList<>();
+        List<Chapter> chapters = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        int groupLinks = 0;
+        int currentGroup = -1;
+        for (Link link : links) {
+            if (link.volume != currentGroup) {
+                currentGroup = link.volume;
+                groupLinks = 0;
+            }
+            groupLinks++;
+            String reason = rejection(link, url, pageStem, dominant);
+            if (reason == null) {
+                reason = "chapter dikenali dari teks/URL";
+            }
+            boolean accepted = !reason.startsWith("ditolak");
+            if (!accepted && link.volume > 0 && plausibleChapterText(link.text)
+                    && isSoftRejection(reason)) {
+                // No chapter wording, but it sits inside a volume group: accept it
+                // once the group itself is clearly a list (checked below).
+                //
+                // Only a *soft* rejection is promoted here. A link refused because it
+                // is navigation, a non-post, or another series stays refused: rewriting
+                // its reason to "dalam grup volume" used to launder a "Baca juga
+                // review sebelumnya" link into a chapter candidate, which is how the
+                // manual picker ended up offering links that must never be imported.
+                reason = "dalam grup volume";
+            }
+            candidates.add(new Candidate(link.url, link.text, link.volume, accepted, reason,
+                    link.index));
+            if (!accepted) continue;
+            if (!seen.add(link.url)) continue;
+            chapters.add(new Chapter(link.text, ChapterNaming.label(
+                    link.text.isEmpty() ? slugTail(link.url) : link.text),
+                    link.url, "", link.index, link.volume));
+        }
+
+        // A volume group is only trusted when it holds several links: one stray
+        // "dalam grup volume" link is a mention, not a list.
+        int groupCount = 0;
+        int[] perVolume = new int[32];
+        for (Candidate candidate : candidates) {
+            if (!"dalam grup volume".equals(candidate.reason)) continue;
+            int volume = Math.max(0, Math.min(31, candidate.volume));
+            perVolume[volume]++;
+        }
+        List<Candidate> confirmed = new ArrayList<>();
+        List<Chapter> finalChapters = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            boolean take = candidate.accepted;
+            if ("dalam grup volume".equals(candidate.reason)) {
+                int volume = Math.max(0, Math.min(31, candidate.volume));
+                take = perVolume[volume] >= 3;
+            }
+            confirmed.add(new Candidate(candidate.url, candidate.text, candidate.volume, take,
+                    take ? candidate.reason : "ditolak: sendiri di grup volume, bukan daftar",
+                    candidate.index, take || candidate.selectable));
+            if (take) {
+                groupCount++;
+                finalChapters.add(new Chapter(candidate.text, ChapterNaming.label(
+                        candidate.text.isEmpty() ? slugTail(candidate.url) : candidate.text),
+                        candidate.url, "", candidate.index, candidate.volume));
+            }
+        }
+
+        List<Volume> volumes = groupByVolume(finalChapters, headings);
+        int accepted = groupCount;
+
+        // No chapter found, but the page still gives a reason to think it is a list:
+        // do not throw it away, hand the links to the preview so the user can pick.
+        // A review post with two "Baca juga" links is not a list, and offering it as
+        // one would be the same guess in a different costume.
+        boolean needsConfirmation = accepted == 0 && looksLikeUnlabelledList(confirmed);
+        if (accepted == 0 && !needsConfirmation && requireChapters) {
+            String shapes = links.isEmpty()
+                    ? "Tidak ada satu pun tautan di dalam artikel."
+                    : "Ditemukan " + links.size() + " tautan di dalam artikel, tetapi tidak ada "
+                    + "yang berpola chapter (Chapter/Bab/Ch/Vol/Prolog/Epilog/Ilustrasi) dan "
+                    + "tidak ada pengelompokan volume yang bisa dipakai.";
+            throw new Unreadable("Tidak ada tautan chapter yang dikenali di halaman itu. "
+                    + shapes + " Halaman ini mungkin artikel satu chapter atau beranda blog.");
+        }
+
+        if (accepted > 0) {
+            warnings.add("Ditemukan " + links.size() + " tautan di artikel; " + accepted
+                    + " dikenali sebagai chapter, " + (links.size() - accepted) + " ditolak.");
+        } else {
+            warnings.add("Ditemukan " + links.size() + " tautan, tetapi belum ada yang bisa "
+                    + "dipastikan sebagai chapter. Pilih tautan yang benar di bawah.");
+        }
+        int unmapped = 0;
+        for (Node node : nodes.subList(Math.min(listStart, nodes.size()), nodes.size())) {
+            if (node instanceof TextNode
+                    && ChapterNaming.isRecognised(((TextNode) node).text())
+                    && !hasNearbyAnchor(nodes, node)) {
+                unmapped++;
+            }
+        }
+        if (unmapped > 0) {
+            warnings.add(unmapped + " teks chapter tidak memiliki tautan dan tidak dimasukkan.");
+        }
+        int unknownVolume = 0;
+        for (Chapter chapter : finalChapters) if (chapter.volume <= 0) unknownVolume++;
+        if (unknownVolume > 0) {
+            warnings.add(unknownVolume + " chapter tidak menyebut volume; dikelompokkan sebagai "
+                    + "\"Volume lain\" karena halaman tidak menulis nomornya.");
+        }
+        if (author.isEmpty() && illustrator.isEmpty() && genres.isEmpty()) {
+            warnings.add("Metadata tidak tertulis di halaman; kolom yang kosong dibiarkan kosong.");
+        }
+        if (title.isEmpty()) {
+            warnings.add("Judul tidak ditemukan di halaman; judul diambil dari alamat.");
+            title = slugTail(url);
+        }
+        if (cover.isEmpty()) {
+            warnings.add("Cover tidak ditemukan; kartu memakai placeholder.");
+        }
+
+        return new Result(url == null ? "" : url, title, titleJp, title, author, illustrator,
+                genres, status, cover, ratio, synopsis, volumes, warnings, links.size(),
+                accepted, confirmed, needsConfirmation);
+    }
+
+    /**
+     * Result for a catalogue that came from a Blogger label feed rather than from
+     * scraped links.
+     *
+     * <p>Nothing is scraped here, so there are no candidates and no rejected links:
+     * {@code linksFound} and {@code linksAccepted} both report the number of posts
+     * the feed returned, and the warning says so in words. The metadata may be
+     * empty when the label page did not expose it — that is stated, not invented.
+     */
+    public static Result catalogueFromFeed(String sourceUrl, String title, String titleJp,
+                                           String author, String illustrator, String genres,
+                                           String status, String coverUrl, float coverRatio,
+                                           String[] synopsis, List<Volume> volumes,
+                                           List<String> warnings) {
+        return catalogueFromFeed(sourceUrl, title, titleJp, author, illustrator, genres, status,
+                coverUrl, coverRatio, synopsis, volumes, warnings, -1);
+    }
+
+    /**
+     * Same, with the number of posts the feed held before filtering.
+     *
+     * <p>{@code linksFound} has to report what was actually found, not what survived:
+     * a feed of 44 posts that yields 32 chapters is "44 ditemukan, 32 dipakai", and
+     * reporting "32 ditemukan" hides the twelve that were dropped.
+     */
+    public static Result catalogueFromFeed(String sourceUrl, String title, String titleJp,
+                                           String author, String illustrator, String genres,
+                                           String status, String coverUrl, float coverRatio,
+                                           String[] synopsis, List<Volume> volumes,
+                                           List<String> warnings, int postsFound) {
+        List<Volume> safeVolumes = volumes == null ? new ArrayList<Volume>() : volumes;
+        List<String> safeWarnings = warnings == null ? new ArrayList<String>() : warnings;
+        int count = 0;
+        for (Volume volume : safeVolumes) count += volume.chapterCount();
+        return new Result(sourceUrl == null ? "" : sourceUrl,
+                title == null ? "" : title,
+                titleJp == null ? "" : titleJp,
+                title == null ? "" : title,
+                author == null ? "" : author,
+                illustrator == null ? "" : illustrator,
+                genres == null ? "" : genres,
+                status == null ? "" : status,
+                coverUrl == null ? "" : coverUrl,
+                coverRatio > 0 ? coverRatio : 0.70f,
+                synopsis == null ? new String[0] : synopsis,
+                safeVolumes, safeWarnings, postsFound < 0 ? count : postsFound, count,
+                new ArrayList<Candidate>(), false);
+    }
+
+    /**
+     * Rebuilds a catalogue from links the user picked by hand.
+     *
+     * <p>The candidates come from the parse that just ran, so the selection can
+     * only ever contain links that were actually on the page. Volume numbers and
+     * reading order are kept as parsed; nothing is invented.
+     */
+    public static Result reselect(Result base, List<String> urls) throws Unreadable {
+        if (base == null) throw new Unreadable("Tidak ada pratinjau untuk dipilih.");
+        Set<String> wanted = new LinkedHashSet<>(urls == null ? new ArrayList<String>() : urls);
+        List<Chapter> chapters = new ArrayList<>();
+        Set<Integer> headings = new LinkedHashSet<>();
+        for (Candidate candidate : base.candidates) {
+            if (!wanted.contains(candidate.url)) continue;
+            // A URL that was never on the page, or that was rejected as navigation,
+            // another series or a non-post, is ignored even when it is in the list:
+            // the picker chooses among real candidates, it does not import links.
+            if (!candidate.selectable) continue;
+            chapters.add(new Chapter(candidate.text, ChapterNaming.label(
+                    candidate.text.isEmpty() ? slugTail(candidate.url) : candidate.text),
+                    candidate.url, "", candidate.index, candidate.volume));
+            if (candidate.volume > 0) headings.add(candidate.volume);
+        }
+        if (chapters.isEmpty()) {
+            throw new Unreadable("Tidak ada tautan yang dipilih, jadi belum ada chapter "
+                    + "yang bisa disimpan.");
+        }
+        List<String> warnings = new ArrayList<>(base.warnings);
+        warnings.add(chapters.size() + " tautan dipilih manual oleh pengguna.");
+        return new Result(base.sourceUrl, base.title, base.titleJp, base.fullTitle, base.author,
+                base.illustrator, base.genres, base.status, base.coverUrl, base.coverRatio,
+                base.synopsis, groupByVolume(chapters, headings), warnings, base.linksFound,
+                chapters.size(), base.candidates, false);
+    }
+
+    // ------------------------------------------------------------- link classes
+
+    /** One anchor inside the catalogue area. */
+    private static final class Link {
+        final String url;
+        final String text;
+        final int volume;
+        final int index;
+
+        Link(String url, String text, int volume, int index) {
+            this.url = url;
+            this.text = text;
+            this.volume = volume;
+            this.index = index;
+        }
+    }
+
+    /**
+     * Why this link is not a chapter, or {@code null} when the text or slug says it
+     * is one.
+     */
+    private static String rejection(Link link, String pageUrl, String pageStem, String dominant) {
+        String href = link.url;
+        if (href == null || href.isEmpty()) return "ditolak: tautan tanpa alamat";
+        String lower = href.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("javascript:") || lower.startsWith("mailto:")
+                || lower.startsWith("#") || lower.startsWith("data:")) {
+            return "ditolak: bukan tautan halaman";
+        }
+        if (isSamePage(href, pageUrl)) return "ditolak: menunjuk halaman ini sendiri";
+        for (String path : NON_CHAPTER_PATHS) {
+            if (lower.contains(path)) return "ditolak: halaman label/feed/statis, bukan chapter";
+        }
+        if (VOLUME_ONLY_TEXT.matcher(link.text).matches()) {
+            return "ditolak: tautan volume, bukan chapter";
+        }
+        boolean recognised = ChapterNaming.isRecognised(link.text)
+                || ChapterNaming.isRecognised(slugTail(href));
+        if (recognised) {
+            if (!sameSeries(href, pageStem, dominant)) {
+                return "ditolak: milik novel lain (nama URL berbeda)";
+            }
+            return null;
+        }
+        if (!DATED_POST.matcher(lower).find()) {
+            return "ditolak: bukan tautan postingan";
+        }
+        if (!sameSeries(href, pageStem, dominant)) {
+            return "ditolak: milik novel lain (nama URL berbeda)";
+        }
+        return "ditolak: teks tidak berpola chapter";
+    }
+
+    /**
+     * True when the only thing wrong with a link is that nobody called it a chapter.
+     *
+     * <p>A post of this series whose text reads "Bagian Pembuka" may still be a
+     * chapter of a list — that is uncertainty, and the picker exists for it. A link
+     * that is navigation, a static page, another series, or not a post at all is not
+     * uncertain, it is wrong; those reasons are never rewritten.
+     */
+    private static boolean isSoftRejection(String reason) {
+        return "ditolak: teks tidak berpola chapter".equals(reason);
+    }
+
+    /** True when the link clearly belongs to the same series as the page. */
+    private static boolean sameSeries(String href, String pageStem, String dominant) {
+        String stem = stem(href);
+        if (stem.isEmpty()) return false;
+        if (!dominant.isEmpty() && overlap(stem, dominant) >= 0.5f) return true;
+        if (!pageStem.isEmpty() && overlap(stem, pageStem) >= 0.5f) return true;
+        // A single-word slug ("prolog.html") inherits the page's series by default.
+        return stem.indexOf('-') < 4 && !dominant.isEmpty() && overlap(stem, dominant) >= 0.34f;
+    }
+
+    /** The slug the majority of recognised chapter links share. */
+    private static String dominantStem(List<Link> links, String pageStem) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Link link : links) {
+            if (!ChapterNaming.isRecognised(link.text)
+                    && !ChapterNaming.isRecognised(slugTail(link.url))) continue;
+            String stem = stem(link.url);
+            if (stem.isEmpty()) continue;
+            Integer current = counts.get(stem);
+            counts.put(stem, current == null ? 1 : current + 1);
+        }
+        String best = "";
+        int bestCount = 0;
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            if (entry.getValue() > bestCount) {
+                best = entry.getKey();
+                bestCount = entry.getValue();
+            }
+        }
+        return best.isEmpty() ? pageStem : best;
+    }
+
+    /** Slug of a post without Blogger's numeric suffix: {@code ...-mob_28} → {@code ...-mob}. */
+    static String stem(String url) {
+        if (url == null || url.isEmpty()) return "";
+        String path = url;
+        int query = path.indexOf('?');
+        if (query >= 0) path = path.substring(0, query);
+        int hash = path.indexOf('#');
+        if (hash >= 0) path = path.substring(0, hash);
+        String name = path.substring(path.lastIndexOf('/') + 1);
+        if (name.endsWith(".html")) name = name.substring(0, name.length() - 5);
+        name = name.toLowerCase(Locale.ROOT);
+        name = name.replaceAll("_\\d{1,4}$", "");
+        return name;
+    }
+
+    /** Share of words two slugs have in common, 0..1. */
+    static float overlap(String left, String right) {
+        if (left == null || right == null || left.isEmpty() || right.isEmpty()) return 0f;
+        Set<String> a = new LinkedHashSet<>(java.util.Arrays.asList(left.split("[-_]+")));
+        Set<String> b = new LinkedHashSet<>(java.util.Arrays.asList(right.split("[-_]+")));
+        a.remove("");
+        b.remove("");
+        if (a.isEmpty() || b.isEmpty()) return 0f;
+        int shared = 0;
+        for (String word : a) if (b.contains(word)) shared++;
+        return shared / (float) Math.min(a.size(), b.size());
+    }
+
+    /** Text that could be a chapter, even without the usual wording. */
+    private static boolean plausibleChapterText(String text) {
+        if (text == null) return false;
+        String tidy = ChapterNaming.tidy(text);
+        if (tidy.isEmpty() || tidy.length() > 60) return false;
+        if (VOLUME_ONLY_TEXT.matcher(tidy).matches()) return false;
+        // Navigation words that show up inside a volume group on some templates.
+        String lower = tidy.toLowerCase(Locale.ROOT);
+        return !(lower.equals("beranda") || lower.equals("home") || lower.equals("lanjut")
+                || lower.equals("sebelumnya") || lower.equals("selanjutnya")
+                || lower.equals("next") || lower.equals("previous") || lower.equals("toc"));
+    }
+
+    /**
+     * True when a page with no recognised chapter still looks like a catalogue.
+     *
+     * <p>Two signals, both structural rather than a guess about wording: a volume
+     * heading was seen, or several links share one slug stem (a coherent list
+     * rather than unrelated "read also" targets).
+     */
+    private static boolean looksLikeUnlabelledList(List<Candidate> candidates) {
+        Map<String, Integer> stems = new LinkedHashMap<>();
+        int usable = 0;
+        for (Candidate candidate : candidates) {
+            if (candidate.accepted) continue;
+            if (candidate.volume > 0) return true;
+            String stem = stem(candidate.url);
+            if (stem.isEmpty()) continue;
+            usable++;
+            Integer count = stems.get(stem);
+            stems.put(stem, count == null ? 1 : count + 1);
+        }
+        if (usable < 3) return false;
+        for (Map.Entry<String, Integer> entry : stems.entrySet()) {
+            if (entry.getValue() >= 3) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasNearbyAnchor(List<Node> nodes, Node textNode) {
+        int at = nodes.indexOf(textNode);
+        if (at < 0) return false;
+        int from = Math.max(0, at - 2);
+        int to = Math.min(nodes.size(), at + 3);
+        for (int i = from; i < to; i++) {
+            Node node = nodes.get(i);
+            if (node instanceof Element && "a".equals(((Element) node).tagName())) return true;
+        }
+        return false;
+    }
+
+    /** Anchors after the catalogue: "Related Posts" and friends end the list. */
+    private static int catalogueEnd(List<Node> nodes, int from) {
+        for (int i = Math.max(0, from); i < nodes.size(); i++) {
+            Node node = nodes.get(i);
+            String text;
+            if (node instanceof TextNode) {
+                text = ((TextNode) node).text();
+            } else if (node instanceof Element) {
+                String tag = ((Element) node).tagName();
+                if ("a".equals(tag) || "img".equals(tag)) continue;
+                text = ((Element) node).ownText();
+            } else {
                 continue;
             }
-            if (isSamePage(href, url)) continue;
-            String text = ChapterNaming.tidy(element.text());
-            if (!isChapterLink(text, href)) continue;
-            if (!seen.add(href)) continue;
+            String lower = ChapterNaming.tidy(text).toLowerCase(Locale.ROOT);
+            if (lower.isEmpty() || lower.length() > 40) continue;
+            for (String marker : TRAILING_MARKERS) {
+                if (lower.equals(marker) || lower.startsWith(marker)) return i;
+            }
+        }
+        return nodes.size();
+    }
 
-            int volume = pendingVolume > 0 ? pendingVolume : volumeFrom(text, href);
-            if (volume <= 0) unknownVolume++;
-            String label = ChapterNaming.label(text.isEmpty() ? slugTail(href) : text);
-            int order = ChapterNaming.order(text, label);
-
-            Chapter chapter = new Chapter(text, label, href, "", order, volume);
-            List<Chapter> list = grouped.get(volume);
+    private static List<Volume> groupByVolume(List<Chapter> chapters, Set<Integer> headings) {
+        Map<Integer, List<Chapter>> grouped = new LinkedHashMap<>();
+        for (Chapter chapter : chapters) {
+            List<Chapter> list = grouped.get(chapter.volume);
             if (list == null) {
                 list = new ArrayList<>();
-                grouped.put(volume, list);
+                grouped.put(chapter.volume, list);
             }
             list.add(chapter);
         }
         List<Volume> volumes = new ArrayList<>();
         for (Map.Entry<Integer, List<Chapter>> entry : grouped.entrySet()) {
-            List<Chapter> chapters = entry.getValue();
-            chapters.sort((left, right) -> left.order != right.order
+            List<Chapter> list = entry.getValue();
+            // The page's own order is the reading order; the link index is that order.
+            list.sort((left, right) -> left.order != right.order
                     ? left.order - right.order
                     : left.label.compareToIgnoreCase(right.label));
-            volumes.add(new Volume(entry.getKey(), chapters));
+            volumes.add(new Volume(entry.getKey(), list));
         }
         for (int heading : headings) {
             if (!grouped.containsKey(heading)) volumes.add(new Volume(heading, new ArrayList<>()));
@@ -301,34 +851,7 @@ public final class NovelDiscovery {
             if (leftUnknown != rightUnknown) return leftUnknown ? 1 : -1;
             return left.number - right.number;
         });
-
-        int total = 0;
-        for (Volume volume : volumes) total += volume.chapterCount();
-        if (total == 0) {
-            throw new Unreadable("Tidak ada tautan chapter yang dikenali di halaman itu. "
-                    + "Halaman ini mungkin artikel biasa, atau daftar chapternya dimuat "
-                    + "dengan JavaScript sehingga tidak bisa dibaca aplikasi.");
-        }
-        if (author.isEmpty() && illustrator.isEmpty() && genres.isEmpty()) {
-            warnings.add("Metadata tidak tertulis di halaman; kolom yang kosong dibiarkan kosong.");
-        }
-        if (unmapped > 0) {
-            warnings.add(unmapped + " teks chapter tidak memiliki tautan dan tidak dimasukkan.");
-        }
-        if (unknownVolume > 0) {
-            warnings.add(unknownVolume + " chapter tidak menyebut volume; dikelompokkan sebagai "
-                    + "\"Volume lain\" karena halaman tidak menulis nomornya.");
-        }
-        if (title.isEmpty()) {
-            warnings.add("Judul tidak ditemukan di halaman; judul diambil dari URL.");
-            title = slugTail(url);
-        }
-        if (cover.isEmpty()) {
-            warnings.add("Cover tidak ditemukan; kartu memakai placeholder.");
-        }
-
-        return new Result(url == null ? "" : url, title, titleJp, title, author, illustrator,
-                genres, status, cover, ratio, synopsis, volumes, warnings);
+        return volumes;
     }
 
     // ------------------------------------------------------------------ metadata
@@ -346,9 +869,6 @@ public final class NovelDiscovery {
         for (String rawLine : text.split("\n")) {
             String line = ChapterNaming.tidy(rawLine);
             if (line.isEmpty()) continue;
-            // A bold label ends its own line, so the colon and the value arrive
-            // next: "Penulis" then ": Penulis Uji". Rejoin them, otherwise every
-            // field written with <b> would read as its own value.
             if (line.startsWith(":") && !lines.isEmpty()) {
                 String previous = lines.get(lines.size() - 1);
                 lines.set(lines.size() - 1, ChapterNaming.tidy(previous + " " + line));
@@ -367,7 +887,6 @@ public final class NovelDiscovery {
                 continue;
             }
 
-            // "Author:" / "Author" + ":" — the value is on the next line.
             String label = null;
             if (LABEL_ONLY.matcher(line).matches()) {
                 label = line.substring(0, line.lastIndexOf(':')).trim();
@@ -394,34 +913,34 @@ public final class NovelDiscovery {
 
     /** Debug helper for tests: the labelled fields exactly as parsed. */
     public static String debugFields(String html, String url) {
-        org.jsoup.nodes.Document document = org.jsoup.Jsoup.parse(html, url);
-        stripBoilerplate(document);
+        Document document = org.jsoup.Jsoup.parse(html, url);
         Element body = articleBody(document);
         if (body == null) return "{}";
-        java.util.List<Node> nodes = flatten(body);
+        cleanArticle(body);
+        List<Node> nodes = flatten(body);
         int start = chapterListStart(nodes, url);
         return labelledFields(textOf(start > 0 ? nodes.subList(0, start) : nodes)).toString();
     }
 
     /** Debug helper for tests: the description text as it is parsed. */
     public static String debugHeadText(String html, String url) {
-        org.jsoup.nodes.Document document = org.jsoup.Jsoup.parse(html, url);
-        stripBoilerplate(document);
+        Document document = org.jsoup.Jsoup.parse(html, url);
         Element body = articleBody(document);
         if (body == null) return "";
-        java.util.List<Node> nodes = flatten(body);
+        cleanArticle(body);
+        List<Node> nodes = flatten(body);
         int start = chapterListStart(nodes, url);
         return textOf(start > 0 ? nodes.subList(0, start) : nodes);
     }
 
     /** Debug helper for tests: every image in the article with its declared size. */
     public static String debugImages(String html, String url) {
-        org.jsoup.nodes.Document document = org.jsoup.Jsoup.parse(html, url);
-        stripBoilerplate(document);
+        Document document = org.jsoup.Jsoup.parse(html, url);
         Element body = articleBody(document);
         if (body == null) return "";
+        cleanArticle(body);
         StringBuilder out = new StringBuilder();
-        for (org.jsoup.nodes.Element image : body.select("img")) {
+        for (Element image : body.select("img")) {
             out.append(declaredWidth(image)).append('x').append(declaredHeight(image))
                     .append(' ').append(imageSource(image)).append('\n');
         }
@@ -436,20 +955,34 @@ public final class NovelDiscovery {
         return "";
     }
 
-    /** Article heading, falling back to the document title and then the URL. */
+    /** Article heading, falling back to the document title and then the address. */
     private static String title(Document document, Element body, Map<String, String> fields) {
+        // Inside the article first: on a template whose <header> prints the site
+        // name in an <h1>, a document-wide "first h1" would title the novel after
+        // the blog.
+        String[] inside = {"h1.post-title", "h3.post-title", "h1.entry-title", "h2.entry-title",
+                "h1", "h2"};
+        for (String selector : inside) {
+            Elements found = body.select(selector);
+            if (found.isEmpty()) continue;
+            String text = ChapterNaming.tidy(found.first().text());
+            if (!text.isEmpty() && text.length() <= 200) return text;
+        }
+
         String[] selectors = {
                 "h1.post-title", "h3.post-title", "h1.entry-title", "h2.entry-title",
                 ".post-title", "article h1", "article h2", "h1"
         };
         for (String selector : selectors) {
-            Elements found = document.select(selector);
-            if (found.isEmpty()) continue;
-            String text = ChapterNaming.tidy(found.first().text());
-            if (!text.isEmpty() && text.length() <= 200) return text;
+            for (Element candidate : document.select(selector)) {
+                if (insideChrome(candidate)) continue;
+                String text = ChapterNaming.tidy(candidate.text());
+                if (text.isEmpty() || text.length() > 200) continue;
+                return text;
+            }
         }
-        String alternate = first(fields, "alternate tittle", "alternate title");
-        if (!alternate.isEmpty()) return alternate;
+        String alternate = first(fields, "alternate tittle", "alternate title", "judul lain");
+        if (!alternate.isEmpty()) return head(alternate, 200);
 
         Element meta = document.selectFirst("meta[property=og:title]");
         if (meta != null) {
@@ -467,6 +1000,24 @@ public final class NovelDiscovery {
         return "";
     }
 
+    /** True when the element belongs to page chrome rather than the article. */
+    private static boolean insideChrome(Element element) {
+        for (Element parent : element.parents()) {
+            String tag = parent.tagName();
+            if ("header".equals(tag) || "nav".equals(tag) || "footer".equals(tag)
+                    || "aside".equals(tag)) return true;
+        }
+        return false;
+    }
+
+    /** First line of a multi-line value, trimmed to a sane title length. */
+    private static String head(String value, int limit) {
+        int newline = value.indexOf('\n');
+        String first = newline > 0 ? value.substring(0, newline) : value;
+        first = ChapterNaming.tidy(first);
+        return first.length() > limit ? first.substring(0, limit - 1) + "…" : first;
+    }
+
     private static String stripSiteName(String title) {
         String[] separators = {" | ", " - ", " – "};
         for (String separator : separators) {
@@ -479,12 +1030,10 @@ public final class NovelDiscovery {
     /**
      * Cover artwork: the first portrait picture in the article.
      *
-     * <p>Two mistakes are avoided here. The description normally opens with a
-     * wide promotional banner, so "the first image" is wrong; and a volume's
-     * illustrations are wide, so "the largest image" is wrong too. The series
-     * cover is the first picture that is taller than it is wide, which is true on
-     * both source layouts. Pictures nested inside a link are included, because
-     * that is exactly how these pages wrap their covers.
+     * <p>"First image" is wrong (descriptions open with a wide promotional
+     * banner); "largest image" is wrong too (volume illustrations are wide). The
+     * cover is the first picture taller than it is wide, and pictures nested inside
+     * a link count, because that is how these pages wrap their covers.
      */
     static String coverUrl(Element body) {
         String firstImage = "";
@@ -556,19 +1105,6 @@ public final class NovelDiscovery {
         return 0;
     }
 
-    private static int number(String... values) {
-        for (String value : values) {
-            if (value == null || value.trim().isEmpty()) continue;
-            try {
-                int parsed = Integer.parseInt(value.replaceAll("[^0-9]", ""));
-                if (parsed > 0) return parsed;
-            } catch (NumberFormatException ignored) {
-                // next
-            }
-        }
-        return 0;
-    }
-
     /** Blogger size upgrade: a thumbnail is useless as a cover. */
     static String upgrade(String url) {
         if (url == null || url.isEmpty()) return "";
@@ -592,7 +1128,8 @@ public final class NovelDiscovery {
         int from = text.indexOf('\n', start);
         if (from < 0) return new String[0];
         int end = text.length();
-        int list = indexOfAny(text.substring(from), "list volume", "daftar volume", "volume 1");
+        int list = indexOfAny(text.substring(from), "list volume", "daftar volume", "volume 1",
+                "vol 1");
         if (list > 0) end = from + list;
 
         List<String> paragraphs = new ArrayList<>();
@@ -600,6 +1137,7 @@ public final class NovelDiscovery {
             String line = ChapterNaming.tidy(raw);
             if (line.isEmpty()) continue;
             if (line.length() < 25 && paragraphs.isEmpty()) continue;
+            if (ChapterNaming.isRecognised(line)) break;
             paragraphs.add(line);
             if (paragraphs.size() >= 12) break;
         }
@@ -622,10 +1160,6 @@ public final class NovelDiscovery {
     /**
      * Index of the first node that belongs to the chapter list: a volume heading
      * or a chapter-shaped link. Everything before it is the description.
-     *
-     * <p>Returns {@code nodes.size()} when the page has no list at all, so the
-     * whole article is treated as description and the missing list is reported by
-     * the caller instead of being confused with a cover.
      */
     static int chapterListStart(List<Node> nodes, String pageUrl) {
         StringBuilder buffer = new StringBuilder();
@@ -641,16 +1175,17 @@ public final class NovelDiscovery {
             }
             if (!(node instanceof Element)) continue;
             Element element = (Element) node;
-            if ("img".equals(element.tagName())) {
+            if (!"a".equals(element.tagName())) {
                 buffer.setLength(0);
                 continue;
             }
-            if (!"a".equals(element.tagName())) continue;
             buffer.setLength(0);
             String href = absolute(element);
             if (href.isEmpty() || isSamePage(href, pageUrl)) continue;
             String text = ChapterNaming.tidy(element.text());
-            if (isChapterLink(text, href)) return i;
+            if (ChapterNaming.isRecognised(text) || ChapterNaming.isRecognised(slugTail(href))) {
+                return i;
+            }
         }
         return nodes.size();
     }
@@ -676,8 +1211,6 @@ public final class NovelDiscovery {
                     out.append('\n');
                     continue;
                 }
-                // Anchors and images are leaves in the flattened list, so their own
-                // text is the only chance to capture it.
                 if ("a".equals(tag) || "img".equals(tag)) out.append(element.text()).append('\n');
             }
         }
@@ -686,50 +1219,63 @@ public final class NovelDiscovery {
 
     // ---------------------------------------------------------------- structure
 
-    private static void stripBoilerplate(Document document) {
-        for (String selector : BOILERPLATE) {
-            document.select(selector).remove();
+    /**
+     * Removes page chrome <em>inside</em> the article.
+     *
+     * <p>Deliberately never called on the document: the article on this template is
+     * a descendant of {@code div.widget.Blog}, so removing widgets document-wide
+     * deleted the article and every chapter link with it. Cleaning happens on the
+     * body element only, and no ancestor of the body is touched.
+     */
+    private static void cleanArticle(Element body) {
+        for (String selector : ARTICLE_CHROME) {
+            Elements found = body.select(selector);
+            for (Element element : found) {
+                if (element == body) continue;
+                if (containsArticle(element)) continue;
+                element.remove();
+            }
         }
     }
 
+    /** True when removing this element would remove the article body itself. */
+    private static boolean containsArticle(Element element) {
+        return element.selectFirst("div.post-body, div.entry-content") != null;
+    }
+
+    /** Text an article must hold before {@code <body>} itself is accepted as one. */
+    private static final int MIN_ARTICLE_TEXT = 120;
+
+    /**
+     * The element holding the article, or {@code null} when the page has none.
+     *
+     * <p>The last resort — the whole {@code <body>} — is only accepted when it
+     * actually reads like an article. A page whose body is nothing but a nav bar
+     * with a "Chapter 1" link would otherwise be parsed as a catalogue with one
+     * chapter, which is exactly the false positive the preview must never show.
+     */
     private static Element articleBody(Document document) {
         String[] selectors = {
                 "div.post-body.entry-content", "div.post-body", "div.entry-content",
-                "article .post-body", "article", "main", "div#content", "body"
+                "article .post-body", "article", "main", "div#content"
         };
         for (String selector : selectors) {
-            Element found = document.selectFirst(selector);
-            if (found != null && !found.text().trim().isEmpty()) return found;
-        }
-        return null;
-    }
-
-    /** Plain text with one line per block, so labels stay on their own line. */
-    private static String bodyText(Element body) {
-        StringBuilder out = new StringBuilder();
-        collectText(body, out);
-        return out.toString();
-    }
-
-    private static void collectText(Node node, StringBuilder out) {
-        for (Node child : node.childNodes()) {
-            if (child instanceof TextNode) {
-                out.append(((TextNode) child).text()).append('\n');
-            } else if (child instanceof Element) {
-                Element element = (Element) child;
-                String tag = element.tagName();
-                if ("script".equals(tag) || "style".equals(tag) || "noscript".equals(tag)) continue;
-                if ("br".equals(tag)) {
-                    out.append('\n');
-                    continue;
-                }
-                collectText(element, out);
-                if ("p".equals(tag) || "div".equals(tag) || "li".equals(tag)
-                        || "h1".equals(tag) || "h2".equals(tag) || "h3".equals(tag)) {
-                    out.append('\n');
-                }
+            Elements found = document.select(selector);
+            for (Element candidate : found) {
+                if (candidate.text().trim().isEmpty()) continue;
+                return candidate;
             }
         }
+        Element body = document.body();
+        if (body == null) return null;
+        String text = ChapterNaming.tidy(body.text());
+        if (text.length() < MIN_ARTICLE_TEXT) return null;
+        // A body whose every word sits inside nav/header/footer is page chrome.
+        int chrome = 0;
+        for (Element part : body.select("nav, header, footer, aside")) {
+            chrome += ChapterNaming.tidy(part.text()).length();
+        }
+        return chrome >= text.length() * 3 / 4 ? null : body;
     }
 
     private static List<Node> flatten(Element root) {
@@ -761,41 +1307,22 @@ public final class NovelDiscovery {
 
     private static boolean isSamePage(String href, String url) {
         if (href == null || url == null) return false;
-        return href.replaceAll("/+$", "").equals(url.replaceAll("/+$", ""));
+        String left = href.replaceAll("/+$", "").replaceAll("\\?.*$", "");
+        String right = url.replaceAll("/+$", "").replaceAll("\\?.*$", "");
+        return left.equals(right);
     }
 
     /** True when the link is part of this novel rather than site chrome. */
     static boolean isChapterLink(String text, String href) {
         if (href == null || href.isEmpty()) return false;
-        if (!href.contains("/20")) return false; // Blogger dated post path
         String lower = href.toLowerCase(Locale.ROOT);
-        if (lower.contains("/search/") || lower.contains("/feeds/") || lower.contains("/p/")) {
-            return false;
+        for (String path : NON_CHAPTER_PATHS) {
+            if (lower.contains(path)) return false;
         }
-        if (looksLikeChapterText(text)) return true;
-        return CHAPTER_SLUG.matcher(href).find();
-    }
-
-    private static boolean looksLikeChapterText(String text) {
-        if (text == null) return false;
-        String tidy = ChapterNaming.tidy(text);
-        if (tidy.isEmpty() || tidy.length() > 80) return false;
-        return CHAPTER_SLUG.matcher(tidy).find();
-    }
-
-    /** Volume number from the link text, then from the slug. */
-    private static int volumeFrom(String text, String href) {
-        if (text != null) {
-            Matcher matcher = VOLUME_IN_TEXT.matcher(text);
-            if (matcher.find()) {
-                try {
-                    return Integer.parseInt(matcher.group(1));
-                } catch (NumberFormatException ignored) {
-                    // fall through to the slug
-                }
-            }
-        }
-        return ChapterNaming.volumeFromUrl(href);
+        if (VOLUME_ONLY_TEXT.matcher(text == null ? "" : text).matches()) return false;
+        if (ChapterNaming.isRecognised(text)) return true;
+        if (!DATED_POST.matcher(lower).find()) return false;
+        return ChapterNaming.isRecognised(slugTail(href));
     }
 
     /** Last path segment, used as a label when the anchor has no text. */

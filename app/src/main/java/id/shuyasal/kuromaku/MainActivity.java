@@ -707,7 +707,51 @@ public class MainActivity extends AppCompatActivity {
                 repaintAddPage(false);
                 scroller.post(() -> scroller.scrollTo(0, 0));
             }
+
+            @Override
+            public void onTogglePicking() {
+                addState.picking = !addState.picking;
+                if (addState.picking && addState.preview != null && addState.selected.isEmpty()) {
+                    // Start from what the parser already accepted, so the user only
+                    // has to correct it instead of rebuilding the list by hand.
+                    for (NovelDiscovery.Candidate candidate : addState.preview.candidates) {
+                        if (candidate.accepted) addState.selected.add(candidate.url);
+                    }
+                }
+                repaintAddPage(true);
+            }
+
+            @Override
+            public void onApplySelection(java.util.List<String> urls) {
+                applySelection(urls);
+            }
         };
+    }
+
+    /**
+     * Rebuilds the preview from the links the user ticked.
+     *
+     * <p>The URLs are matched against the candidates the parser produced for this
+     * exact page, so a link that was never on the page cannot be introduced here.
+     * When nothing is ticked the preview is left as it was and the user is told
+     * why, rather than being shown an empty catalogue.
+     */
+    private void applySelection(java.util.List<String> urls) {
+        NovelDiscovery.Result base = addState.preview;
+        if (base == null) return;
+        try {
+            NovelDiscovery.Result picked = NovelDiscovery.reselect(base, urls);
+            addState.preview = picked;
+            addState.selected.clear();
+            addState.selected.addAll(urls);
+            addState.picking = true;
+            addState.duplicate = library().byUrl(picked.sourceUrl) != null;
+            repaintAddPage(true);
+            Toast.makeText(this, picked.chapterCount() + " chapter dipakai dari pilihan Tuan.",
+                    Toast.LENGTH_SHORT).show();
+        } catch (NovelDiscovery.Unreadable error) {
+            Toast.makeText(this, error.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     /**
@@ -738,6 +782,10 @@ public class MainActivity extends AppCompatActivity {
         addState.error = "";
         addState.preview = null;
         addState.duplicate = false;
+        // A new address means a new list: keeping the previous ticks would apply
+        // one page's links to another page.
+        addState.selected.clear();
+        addState.picking = false;
         repaintAddPage(false);
 
         new Thread(() -> {

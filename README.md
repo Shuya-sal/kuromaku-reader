@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.9
+# Kuromaku Reader 2.10
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -45,6 +45,13 @@ Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
 perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
 unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
 **Fitur Pengelolaan Novel Dinamis (2.9)**.
+
+Versi 2.10 memperbaiki **parser Tambah Novel** pada dua kegagalan yang dilaporkan:
+URL Blogger `/search/label/...` ditolak sebelum diunduh, dan artikel katalog
+`/2026/03/yariko...` ditolak dengan "Tidak ada tautan chapter yang dikenali"
+padahal artikel itu berisi 43 chapter. Keduanya bukan soal parser "terlalu ketat":
+yang pertama fitur yang belum ada, yang kedua artikelnya dihapus oleh pembersih
+boilerplate sebelum dibaca. Detail akar masalah di bagian **BUG 7 (2.10)**.
 
 ## Fitur (baru di 2.5)
 
@@ -420,6 +427,130 @@ memang ingin "novel mana saja" memakai `first()`.
 Setelah dipulihkan, suite penuh **239 tes, 0 gagal**, dan penanda `MUTATION` di
 `app/src/main` berjumlah nol.
 
+## BUG 7 (2.10) — Dua URL dilaporkan gagal, dan keduanya bukan soal "terlalu ketat"
+
+Dua alamat dari laporan dicoba apa adanya:
+
+- `https://kaoritranslation.blogspot.com/search/label/Yarikonde%20ita%20Game%20Sekai%20no%20Akuyaku%20Mob%20ni%20Tensei%20Shimashita?m=1`
+- `https://kaoritranslation.blogspot.com/2026/03/yarikon-de-ita-game-sekai-no-akuyaku.html?m=1`
+
+### (1) URL label ditolak sebelum satu byte pun diunduh
+
+`NovelUrl` hanya mengenal dua bentuk alamat: artikel bertanggal `/20xx/xx/nama.html`
+dan beranda. Tidak ada jalur ketiga, jadi `/search/label/...` gagal di
+`normalize()` dengan pesan "Itu bukan halaman artikel" — sebelum jaringan disentuh.
+Bukan parser yang menolak: **fiturnya belum ada**.
+
+Perbaikan: label dikenali sebagai jenis ketiga (`NovelUrl.Kind.LABEL`), namanya
+di-decode dari path (`%20` → spasi), dan chapter diambil dari **feed JSON per-label**
+`/feeds/posts/summary/-/<label>?alt=json&max-results=25&start-index=N`, bukan dari
+HTML listing. HTML label hanya memuat 20 postingan per halaman; feed-nya bisa
+dipaginasi sampai habis. Untuk label Yariko, feed berisi **44 postingan dalam 2
+halaman** (25 + 19), lalu halaman ketiga kosong dan pembacaan berhenti.
+
+Halaman label tetap dipakai sekali, hanya untuk deskripsi: cover, penulis,
+ilustrator, genre, sinopsis. Judul novel diambil dari **nama label**, bukan dari
+heading halaman — heading itu judul chapter terbaru (`… Volume 3 Afterword`), dan
+memakainya akan menamai seluruh novel dengan satu chapter.
+
+### (2) Artikel Yariko kehilangan artikelnya sendiri sebelum dibaca
+
+Ini akar yang sebenarnya, dan bukan soal pola chapter. HTML aslinya berisi **47
+tautan dengan 43 chapter** dalam 3 volume. Yang terjadi:
+
+```
+div.widget.Blog#Blog1
+  └── div.blog-posts
+        └── article
+              └── div.post-body.entry-content   ← artikelnya di sini
+```
+
+Parser lama membuang boilerplate **lebih dulu** dengan `select("div.widget").remove()`,
+baru kemudian mencari artikel. Karena `div.post-body` adalah **keturunan** dari
+`div.widget.Blog`, pembersihan itu menghapus artikel beserta seluruh daftar
+chapternya, menyisakan sekitar 40 karakter chrome halaman. Parser lalu melaporkan
+"Tidak ada tautan chapter yang dikenali" — pesan yang benar untuk kondisi yang salah.
+
+Perbaikan: artikel dicari **lebih dulu** (`articleBody()`), baru dibersihkan, dan
+pembersihan hanya menyentuh elemen di dalam artikel itu (`nav`, `footer`, `.share`,
+`script`, `iframe`, iklan) — tidak lagi se-dokumen.
+
+### (3) Bug ketiga, ditemukan saat menguji: tautan yang sudah ditolak bisa dicuci
+
+Aturan "tautan di dalam grup volume dianggap chapter" ternyata menimpa alasan
+penolakan apa pun. Tautan "Baca juga review sebelumnya" ditolak dengan alasan benar,
+lalu alasannya ditulis ulang menjadi `"dalam grup volume"` — sehingga lolos ke daftar
+pilihan manual. Kalau dicentang, iklan atau review novel lain bisa tersimpan sebagai
+chapter.
+
+Perbaikan: hanya penolakan **lunak** (`teks tidak berpola chapter`) yang boleh naik
+menjadi kandidat. Navigasi, halaman statis, halaman-itu-sendiri, dan postingan novel
+lain tetap tertolak dan **tidak muncul** di pemilih. `Candidate.selectable` membawa
+keputusan itu lewat proses pengelompokan, tidak dihitung ulang dari teks alasan.
+
+### (4) Bug keempat: `Interlude I`, `II`, `III` runtuh menjadi satu chapter
+
+Label chapter dipakai sebagai kunci anti-duplikat. `LibraryBuilder` memotong
+"Interlude III" menjadi `"Interlude"`, jadi ketiganya dianggap chapter yang sama dan
+dua di antaranya dibuang. Pada feed Yariko ini menghapus satu chapter per volume
+tanpa pesan apa pun. Perbaikan: angka Romawi/arab di belakang "Interlude" ikut
+menjadi bagian label.
+
+### (5) Bug kelima: postingan deskripsi novel dihitung sebagai chapter
+
+Feed label mengembalikan **semua** postingan berlabel itu — termasuk postingan
+landing yang judulnya adalah nama novel dan isinya cover, penulis, serta sinopsis.
+Postingan itu tidak punya volume dan tidak punya kata "chapter", jadi masuk
+kelompok "Volume 0" sebagai bahan bacaan. Perbaikan: `LibraryBuilder.isChapterPost()`
+memisahkan postingan chapter dari postingan deskripsi; yang deskripsi tidak dihitung
+dan jumlahnya dilaporkan di preview.
+
+### Diagnostik dan pemilihan manual
+
+Panel **Diagnostik tautan** pada preview sekarang menyebut: jumlah tautan yang
+ditemukan, jumlah yang dikenali sebagai chapter, dan alasan setiap tautan yang
+ditolak (maksimal enam baris, sisanya diringkas). Bila belum ada satu pun yang bisa
+dipastikan, preview tidak langsung gagal: daftar tautan yang **bisa dipakai**
+ditampilkan dengan kotak centang, dan novel baru disimpan setelah Tuan menekan
+**Pakai pilihan ini**. Tautan di luar halaman tidak bisa diselundupkan ke pilihan.
+
+### Hasil parse sesudah perbaikan (data nyata, bukan perkiraan)
+
+- **Artikel Yariko** — 47 tautan, **43 chapter**, 3 volume (16 + 13 + 14), penulis
+  Natsunomi, ilustrator Shimanun, genre Comedy/Fantasy/Romance, cover potret terbaca.
+- **Label Yariko** — feed 44 postingan → **42 chapter** dalam 3 volume (15 + 13 + 14),
+  1 postingan deskripsi tidak dihitung, 1 judul kembar digabung (dilaporkan di
+  preview). Cover dan metadata sengaja kosong: halaman label tidak memuatnya.
+- **Magical★Explorer** — tetap **141 chapter, 14 volume**, tidak berubah.
+
+### Bukti tes menangkap bug — uji mutasi 2.10
+
+1. Pembersihan `div.widget` dikembalikan ke urutan lama (sebelum artikel dicari) →
+   `everyRejectedLinkCarriesItsReason` gagal.
+2. `/search/label/` ditolak lagi sebagai "bukan halaman artikel" →
+   `aLabelCatalogueComesFromThePagedFeed` gagal.
+3. Setiap tautan yang ditolak dibuat bisa dipilih (tiga variasi mutasi) →
+   `aLinkThatWasNotOnThePageCannotBeSelected` gagal pada ketiganya.
+4. Semua postingan feed dihitung sebagai chapter →
+   `aFeedPostThatDescribesTheNovelIsNotAChapter` gagal.
+5. Angka "Interlude" dibuang lagi → `aFeedPostThatDescribesTheNovelIsNotAChapter`
+   gagal (jumlah chapter berubah).
+
+Setelah semua dipulihkan: suite penuh **261 tes, 0 gagal**, penanda `MUTATION` di
+`app/src/main` berjumlah nol.
+
+### Batasan yang masih berlaku untuk 2.10
+
+- Semua pengujian memakai HTML dan feed yang **disimpan sebagai fixture**, ditambah
+  satu kali pembacaan jaringan nyata untuk memastikan angkanya. Novel lain dengan
+  tata letak berbeda belum tentu terbaca.
+- Label hanya bisa dipakai kalau nama labelnya unik. Blogger mengizinkan dua novel
+  berbagi label, dan feed tidak memberi cara memisahkannya.
+- Cover dan metadata **tidak** diambil dari halaman label (isinya ilustrasi chapter).
+  Untuk cover, tambahkan novel lewat URL artikelnya.
+- Belum diuji di perangkat: panel diagnostik, pemilih tautan, dan kotak centang hanya
+  diverifikasi lewat Robolectric.
+
 ## Perbaikan bug
 
 ### BUG 1 (2.1) — Volume 1–4 tidak muncul
@@ -632,9 +763,22 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **240 pengujian** di 23 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **261 pengujian** di 24 kelas,
 semuanya lulus:
 
+- **YarikoAndLabelTest** (21) — dua kegagalan dari laporan, dibuktikan lewat fixture
+  HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
+  dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
+  label apa pun (tidak di-hardcode); katalog label dibaca dari **dua halaman feed**
+  (44 postingan) dan menghasilkan 42 chapter dalam 3 volume; label kosong ditolak
+  alih-alih menyimpan novel kosong; halaman label tidak boleh menjadi judul/cover
+  novel; postingan deskripsi tidak dihitung sebagai chapter dan alasannya dilaporkan;
+  `Interlude I/II/III` tetap tiga chapter berbeda; artikel Yariko asli terbaca
+  43 chapter / 3 volume dengan metadata lengkap; setiap tautan yang ditolak membawa
+  alasannya; postingan satu-chapter ditolak sebagai katalog tapi tetap bisa dibaca;
+  katalog tanpa kata "chapter" ditawarkan untuk dipilih manual, dan tautan di luar
+  halaman tidak bisa dipilih; Magical★Explorer (141 chapter / 14 volume) dan
+  Monogatari (111 chapter / 7 volume) tidak berubah.
 - **DynamicCatalogueTest** (9, parser generik + normalisasi URL) — sepuluh bentuk URL
   yang tidak layak ditolak dengan pesan yang bisa dibaca; satu halaman menghasilkan
   satu identitas untuk sembilan penulisan berbeda (`?m=1`, garis miring di akhir,
@@ -925,7 +1069,7 @@ gradle testDebugUnitTest assembleDebug
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
 
-### Batasan parser generik (2.9) — diukur, bukan diperkirakan
+### Batasan parser generik (2.10) — diukur, bukan diperkirakan
 
 Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
 diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan
