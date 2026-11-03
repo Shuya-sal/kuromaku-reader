@@ -193,4 +193,44 @@ public class ChapterParserTest {
         ChapterContent content = ChapterParser.parse(page(body), URL);
         assertEquals(2, content.imageCount());
     }
+
+    /**
+     * The body wrapper is not always a {@code div}. A {@code .post-body} element
+     * inside the article must still be found by the fourth selector, otherwise the
+     * whole fallback chain is untested and could be deleted without any test going red.
+     *
+     * <p>The article deliberately carries a paragraph that is <em>not</em> chapter
+     * content: falling through to the bare {@code article} selector would pick it up
+     * and report two blocks instead of one. Without that decoy both selectors give the
+     * same answer, so the test could not tell them apart.
+     */
+    @Test
+    public void aPostBodyThatIsNotADivIsStillFoundInsideTheArticle() throws Exception {
+        String html = "<html><body><main><article class='article hentry'>"
+                + "<p>Navigasi artikel ini bukan isi chapter.</p>"
+                + "<section class='post-body'><p>Paragraf pertama cerita.</p></section>"
+                + "</article></main></body></html>";
+
+        ChapterContent content = ChapterParser.parse(html, URL);
+
+        assertEquals("hanya isi .post-body yang boleh terbaca, bukan seluruh article",
+                1, content.blocks().size());
+        assertEquals("Paragraf pertama cerita.", content.blocks().get(0).text);
+    }
+
+    /**
+     * Last resort: an article with no body wrapper at all. This is the fifth
+     * selector, and it is what a redesign of the source page would fall back to.
+     */
+    @Test
+    public void anArticleWithoutABodyWrapperStillParses() throws Exception {
+        String html = "<html><body><main><article class='article hentry'>"
+                + "<p>Paragraf pertama cerita.</p>"
+                + "</article></main></body></html>";
+
+        ChapterContent content = ChapterParser.parse(html, URL);
+
+        assertEquals(1, content.blocks().size());
+        assertEquals("Paragraf pertama cerita.", content.blocks().get(0).text);
+    }
 }

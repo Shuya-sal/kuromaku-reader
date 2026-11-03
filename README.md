@@ -1579,7 +1579,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **340 pengujian** di 32 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **342 pengujian** di 32 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1713,7 +1713,8 @@ semuanya lulus:
 - **ReaderLayoutTest** (7, Robolectric) — geometri panel navigasi, tinggi area baca, progres.
 - **FeedPaginationTest** (11) — halaman pendek tidak menghentikan crawl, Volume 1–7 bertahan
   pada ukuran halaman tidak beraturan (25/22/25/20/12/13), dedupe, peringatan crawl tidak lengkap.
-- **ChapterParserTest** (10) — teks & ilustrasi tidak hilang, urutan terjaga, iklan dibuang.
+- **ChapterParserTest** (12) — teks & ilustrasi tidak hilang, urutan terjaga, iklan dibuang,
+  dan kedua selektor cadangan (`article .post-body`, `article`) benar-benar dipakai.
 - **ScrollMathTest** (6) — progres, restore posisi, padding footer.
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
@@ -1921,8 +1922,9 @@ app/src/main/java/id/shuyasal/kuromaku/
     └── Palette.java, Prefs.java, Ui.java
 ```
 
-Kontainer artikel yang dikenali: `div.post-body.entry-content`, lalu `div.post-body`,
-`div.entry-content`, dan `article` sebagai cadangan.
+Kontainer artikel yang dikenali, berurutan dari yang paling spesifik: `div.post-body.entry-content`,
+`div.post-body`, `div.entry-content`, `article .post-body`, dan `article` sebagai cadangan terakhir.
+Kedua selektor terakhir dijaga tes masing-masing, jadi menghapus salah satunya membuat suite merah.
 
 ## Build
 
