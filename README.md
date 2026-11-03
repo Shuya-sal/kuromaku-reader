@@ -1891,6 +1891,14 @@ Kontainer artikel yang dikenali: `div.post-body.entry-content`, lalu `div.post-b
 
 ## Build
 
+**Persyaratan pemasangan: Android 8.0 (API 26) atau lebih baru.** Diukur dari APK
+yang terbit, bukan dari ingatan: `aapt2 dump badging` memberi
+`minSdkVersion:'26'` / `targetSdkVersion:'35'`. Di Android 7.1 ke bawah pemasangan
+ditolak oleh sistem, dan aplikasi tidak akan muncul sebagai pilihan. APK rilis
+ditandatangani dengan kunci **Android Debug** (`CN=Android Debug`) memakai skema
+tanda tangan **v2** saja — cukup untuk dipasang dan diperbarui di perangkat, tetapi
+bukan kunci rilis Play Store.
+
 GitHub Actions: **Actions → Build Kuromaku Reader APK** (`.github/workflows/android.yml`).
 Alur: unit test → `assembleDebug` → verifikasi APK dengan `aapt2` → artifact → rilis `latest-apk`.
 
