@@ -931,10 +931,15 @@ artikel asli yang memicu laporan — dan mengukur UI pada layar 320 dp. Uji muta
 ### Hasil rilis 2.18 (terukur)
 
 - Commit `fe519a8` di `main`; GitHub Actions run **`41623707350`** — `completed success`.
-- APK rilis di tag `latest-apk`: **5.547.084 byte**, `md5 5497eea1ea799264b399aa380ec37d71`,
-  `aapt2 dump badging` → `versionCode='38' versionName='2.18'` (exit 0).
-- Build lokal: `5.547.104 byte`, `md5 6a586fbf2886678c7461f2deaa517f94` — beda ukuran
-  karena metadata build, versi dan isi sama.
+  Commit dokumen `516bb4b` → run **`41624149137`** — `completed success`.
+- APK rilis di tag `latest-apk`: **5.547.084 byte**, `aapt2 dump badging` →
+  `versionCode='38' versionName='2.18'` (exit 0).
+- Build lokal: `5.547.104 byte` — beda ukuran karena metadata build, versi dan isi sama.
+- **`md5` APK tidak dicatat sebagai patokan.** Setiap build ulang menghasilkan byte
+  berbeda pada ukuran yang sama (`5497eea1…` untuk build `fe519a8`, `1df00ac7…` untuk
+  build `516bb4b`), jadi `md5` hanya berguna untuk membandingkan satu unduhan dengan
+  unduhan lain **dari build yang sama**. Yang menentukan versi adalah keluaran
+  `aapt2`, bukan hash.
 - Probe live pada sumber asli: Monogatari **116 chapter / 7 volume / 7 cover**;
   Magical★Explorer **141 chapter / 14 volume / 14 cover**; Yarikon lewat URL
   **43 chapter / 3 volume / 3 cover** (16+13+14).
