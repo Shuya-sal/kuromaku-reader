@@ -718,6 +718,48 @@ public class YarikoAndLabelTest {
         assertFalse("potongan judul tidak boleh bisa dipilih", stray.selectable);
     }
 
+    /**
+     * A folded numeral says so in full — being told "potongan judul" is not enough.
+     *
+     * <p>Both this and {@link #aStrayNumeralIsNamedAsAFragment} start from a bare "2",
+     * but they are different verdicts: one is folded back into the label it was torn
+     * from, the other is not. A test that only looks for {@code "potongan judul"}
+     * cannot tell them apart, because both sentences begin with those words — blurring
+     * this branch to the bare prefix left every test green. The full sentence is the
+     * only assertion that distinguishes "merged into the chapter above" from "left
+     * behind on its own", which is the whole point of the diagnostics panel.
+     */
+    @Test
+    public void aFoldedNumeralSaysItWasMergedIntoTheLinkAbove() throws Exception {
+        String html = "<html><body><div class='post-body entry-content'>"
+                + "<p><b>Author :</b> Uji</p>"
+                + "<h3>Volume 1</h3>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_1.html'>Chapter 1</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_2.html'>Chapter 2</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_3.html'>Chapter 3</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_9.html'>Interlude</a>"
+                + "<a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_10.html'>2</a></p>"
+                + "</div></body></html>";
+
+        NovelDiscovery.Result result = NovelDiscovery.parse(html,
+                "https://kaoritranslation.blogspot.com/2026/02/novel-x.html");
+
+        // The numeral is part of the chapter, not a chapter of its own.
+        assertEquals("tiga chapter + satu interlude", 4, result.chapterCount());
+        List<String> labels = new ArrayList<>();
+        for (Chapter chapter : volume(result.volumes, 1).chapters) labels.add(chapter.label);
+        assertTrue("interlude harus bergabung jadi satu label: " + labels,
+                labels.contains("Interlude II"));
+
+        assertEquals("hanya angka yang ditolak", 1, result.rejected().size());
+        NovelDiscovery.Candidate folded = result.rejected().get(0);
+        assertEquals("2", folded.text);
+        assertEquals("ditolak: potongan judul, sudah digabung ke tautan sebelumnya",
+                folded.reason);
+        assertFalse("potongan yang sudah digabung tidak boleh bisa dipilih",
+                folded.selectable);
+    }
+
     /** Whichever way the source writes the numeral, the label reads the same. */
     @Test
     public void anInterludeIsLabelledTheSameFromDigitsOrRoman() {
@@ -1091,6 +1133,45 @@ public class YarikoAndLabelTest {
             assertEquals("situs chrome harus disebut apa adanya: " + text,
                     "ditolak: halaman label/feed/statis, bukan chapter", reasonOf(result, text));
         }
+    }
+
+    /**
+     * The two remaining rejection sentences, reached without a volume group.
+     *
+     * <p>Inside a volume heading a dated post with no chapter wording is promoted to
+     * {@code "sendiri di grup volume, bukan daftar"}; outside one it keeps the reason
+     * the link itself earned. Both branches have to be reachable, otherwise the
+     * promotion silently becomes the only verdict the parser can produce and the
+     * diagnostics panel can no longer tell "this page has no volume headings" from
+     * "this link is not a post".
+     */
+    @Test
+    public void withoutAVolumeGroupTheLinkKeepsTheReasonItEarned() throws Exception {
+        // No <h3>Volume …</h3> anywhere, so nothing can be promoted into a group.
+        String noVolume = "<html><body><div class='post-body entry-content'>"
+                + "<p><b>Author :</b> Uji</p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_1.html'>Chapter 1</a></p>"
+                + "<p>Keterangan tambahan dari penerjemah.</p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_8.html'>Catatan</a></p>"
+                + "<p>Catatan penerjemah soal jadwal.</p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_9.html'>3</a></p>"
+                + "</div></body></html>";
+
+        NovelDiscovery.Result result = NovelDiscovery.parse(noVolume,
+                "https://kaoritranslation.blogspot.com/2026/02/novel-x.html");
+
+        assertEquals("satu chapter asli", 1, result.chapterCount());
+
+        // A dated post of this series whose text says nothing about chapters: the
+        // picker exists for exactly this, so it stays selectable.
+        NovelDiscovery.Candidate note = candidateOf(result, "Catatan");
+        assertEquals("ditolak: teks tidak berpola chapter", note.reason);
+        assertTrue("tautan tanpa label chapter harus tetap bisa dipilih", note.selectable);
+
+        // A bare numeral is a torn-off fragment, never a chapter and never pickable.
+        NovelDiscovery.Candidate numeral = candidateOf(result, "3");
+        assertEquals("ditolak: potongan judul chapter, bukan tautan tersendiri", numeral.reason);
+        assertFalse("potongan judul tidak boleh bisa dipilih", numeral.selectable);
     }
 
     /** One link per rejection reason the article-level parser is able to print. */

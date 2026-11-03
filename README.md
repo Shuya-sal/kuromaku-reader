@@ -1580,7 +1580,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **348 pengujian** di 32 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **350 pengujian** di 32 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1590,7 +1590,7 @@ semuanya lulus:
   hanya tautan yang mungkin chapter yang ditawarkan, centang/batal centang menentukan
   isi pilihan, dan tidak ada yang dikirim sebelum tombol ditekan. Tiga mutasi
   terbukti tertangkap.
-- **YarikoAndLabelTest** (31) — dua kegagalan dari laporan, dibuktikan lewat fixture
+- **YarikoAndLabelTest** (33) — dua kegagalan dari laporan, dibuktikan lewat fixture
   HTML dan feed asli. URL label dinormalisasi menjadi satu identitas walau diketik
   dengan `?m=1`, garis miring, `+`, atau huruf besar; alamat feed label dibangun untuk
   label apa pun (tidak di-hardcode); katalog label dibaca dari **dua halaman feed**
@@ -1603,26 +1603,34 @@ semuanya lulus:
   katalog tanpa kata "chapter" ditawarkan untuk dipilih manual, dan tautan di luar
   halaman tidak bisa dipilih; Magical★Explorer (141 chapter / 14 volume) dan
   Monogatari (111 chapter / 7 volume) tidak berubah.
-  Tiga tes 2.20 menutup celah **alasan penolakan**. Diukur langsung dari sumber:
+  Lima tes 2.20 menutup celah **alasan penolakan**. Diukur langsung dari sumber:
   parser dapat mencetak **12 kalimat** `ditolak: …` berbeda. Sebelum putaran ini
-  **nol** di antaranya dituntut utuh oleh tes; tiga disebut sebagai potongan kata
-  (`potongan judul`, `tautan gambar`, `sendiri di grup volume`) dan sisanya hanya
-  tercakup `startsWith("ditolak")` — awalan yang dipenuhi cabang mana pun, sehingga
-  sebuah cabang bisa dihapus dengan suite tetap hijau. Sekarang **8 dari 12** dituntut
-  utuh: `tautan tanpa alamat`, `bukan tautan halaman` (untuk `javascript:` dan
+  **nol** di antaranya dituntut utuh oleh tes. Diukur pada rilis sebelumnya: empat
+  hanya disebut sebagai potongan kata (`potongan judul`, `tautan gambar`, `sendiri
+  di grup volume`, `tautan volume`) dan delapan tidak disebut sama sekali; sisanya
+  paling jauh tercakup `startsWith("ditolak")` — awalan yang dipenuhi cabang mana
+  pun, sehingga sebuah cabang bisa dihapus dengan suite tetap hijau. Sekarang
+  **11 dari 12** dituntut utuh: `tautan tanpa alamat`, `bukan tautan halaman` (untuk `javascript:` dan
   `mailto:`), `menunjuk halaman ini sendiri`, `tautan volume, bukan chapter`,
   `bukan tautan postingan`, `milik novel lain (nama URL berbeda)`,
   `halaman label/feed/statis, bukan chapter` (dari `/p/`, `/search/`, dan `/feeds/`
-  sekaligus), dan `sendiri di grup volume, bukan daftar`. Sisi sebaliknya ikut
-  dijaga: tautan bertanggal yang teksnya tidak menyebut chapter tetap **bisa
-  dipilih**, sedangkan tautan yang bukan postingan tidak pernah bisa.
-  Dua kalimat masih hanya dijaga potongan katanya (`potongan judul`, `tautan gambar`)
-  dan dua belum disebut tes sama sekali (`potongan judul chapter, bukan tautan
-  tersendiri`, `teks tidak berpola chapter`) — itu batas yang tersisa, bukan klaim.
-  Bukti: **8/8 mutasi tertangkap** — tujuh cabang alasan dihapus/dikaburkan, ditambah
-  mutasi terpisah untuk kemunculan **kedua** `milik novel lain` (yang pertama
-  ditangkap tes lama, jadi cabang baru itu dibuktikan sendiri); `md5` sumber
-  dipulihkan sesudah tiap mutasi.
+  sekaligus), `sendiri di grup volume, bukan daftar`, `teks tidak berpola chapter`
+  (tautan bertanggal tanpa kata chapter di luar grup volume), `potongan judul
+  chapter, bukan tautan tersendiri` (angka telanjang), dan `potongan judul, sudah
+  digabung ke tautan sebelumnya` (angka yang dilipat kembali ke label di atasnya).
+  Sisi sebaliknya ikut dijaga: tautan bertanggal yang teksnya tidak menyebut chapter
+  tetap **bisa dipilih**, sedangkan tautan yang bukan postingan tidak pernah bisa.
+  Satu kalimat masih hanya dijaga potongan katanya (`tautan gambar, bukan chapter`)
+  — itu batas yang tersisa, bukan klaim.
+  Bukti: **13/13 mutasi tertangkap**. Sebelas kalimat dihapus atau dikaburkan satu
+  per satu; `NON_CHAPTER_PATHS` dipersempit ke `/p/` saja untuk membuktikan ketiga
+  anchor label/feed/statis; satu mutasi terpisah menghapus kemunculan **kedua**
+  `milik novel lain` (yang pertama ditangkap tes lama, jadi cabang baru itu
+  dibuktikan sendiri). `md5` sumber dipulihkan sesudah tiap mutasi. Mutasi untuk
+  `potongan judul, sudah digabung ke tautan sebelumnya` **sempat lolos** — tidak ada
+  tes yang menangkapnya, karena tes lama hanya mencari kata `potongan judul` yang
+  dipakai bersama oleh dua kalimat berbeda. Tes `aFoldedNumeralSaysItWasMerged…`
+  ditulis khusus untuk itu dan mutasinya kini tertangkap.
 - **DynamicCatalogueTest** (9, parser generik + normalisasi URL) — sepuluh bentuk URL
   yang tidak layak ditolak dengan pesan yang bisa dibaca; satu halaman menghasilkan
   satu identitas untuk sembilan penulisan berbeda (`?m=1`, garis miring di akhir,
