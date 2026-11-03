@@ -79,6 +79,18 @@ jobs:
           ls -lh "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | head -5
 
+      - name: Package source
+        run: |
+          set -e
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
+          OUT="kuromaku-reader-${VERSION}-source.zip"
+          rm -f "$OUT"
+          zip -qr "$OUT" app/src app/build.gradle.kts app/proguard-rules.pro \
+            build.gradle.kts settings.gradle.kts gradle.properties README.md .github \
+            -x "*/build/*"
+          unzip -t "$OUT" > /dev/null
+          echo "sumber: $OUT ($(stat -c%s "$OUT") byte, $(unzip -l "$OUT" | grep -c '\.java$') berkas Java)"
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -378,5 +390,7 @@ jobs:
 
             APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
             Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.
-          files: app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            app/build/outputs/apk/debug/app-debug.apk
+            kuromaku-reader-*-source.zip
           fail_on_unmatched_files: true
