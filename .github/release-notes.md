@@ -1,7 +1,3 @@
-<!-- Dipegang terpisah karena badan rilis melewati batas ekspresi 21000 karakter
-     GitHub Actions. Jangan kembalikan ke blok `body: |` di workflow: run 34 gagal
-     dengan "Exceeded max expression length 21000" dan nol job. -->
-
 Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
@@ -383,5 +379,5 @@ dengan tata letak jauh berbeda belum tentu terbaca — preview akan
 mengatakannya. Verifikasi UI masih lewat Robolectric: halaman Tambah
 Novel dan dialog hapus belum dilihat di layar perangkat sungguhan.
 
-APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
+APK debug, hasil build otomatis dari commit `@COMMIT@`.
 Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.
