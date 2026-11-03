@@ -6,6 +6,12 @@ app/build/
 # Android SDK location
 local.properties
 
+# Rendered release body, written by the "Render release notes" CI step.
+# The source of truth is .github/release-notes.md; this file is generated and
+# must never be committed, or a local build leaves a stale copy that a later
+# `git add -A` sweeps in.
+release-body.md
+
 # IDE
 .idea/
 *.iml
