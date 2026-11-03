@@ -1715,6 +1715,10 @@ semuanya lulus:
   pada ukuran halaman tidak beraturan (25/22/25/20/12/13), dedupe, peringatan crawl tidak lengkap.
 - **ChapterParserTest** (12) — teks & ilustrasi tidak hilang, urutan terjaga, iklan dibuang,
   dan kedua selektor cadangan (`article .post-body`, `article`) benar-benar dipakai.
+  Bukti tesnya menangkap: menghapus `"article .post-body"` dari `BODY_SELECTORS` memerahkan
+  `aPostBodyThatIsNotADivIsStillFoundInsideTheArticle`; menghapus `"article"` memerahkan
+  `anArticleWithoutABodyWrapperStillParses` — **2/2 tertangkap**, `md5` sumber dipulihkan
+  sesudah tiap mutasi.
 - **ScrollMathTest** (6) — progres, restore posisi, padding footer.
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
