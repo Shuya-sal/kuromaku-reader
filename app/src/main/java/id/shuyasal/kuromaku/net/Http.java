@@ -28,6 +28,28 @@ public final class Http {
 
     /** Downloads a binary resource (an illustration) with the same client. */
     public static byte[] getBytes(String url) throws IOException {
+        return getBytes(url, null);
+    }
+
+    /**
+     * Byte-level progress of one response.
+     *
+     * <p>{@code total} is the {@code Content-Length} the server declared, or a
+     * negative number when it declared none. Callers must not print a percentage
+     * when it is unknown: a made-up percentage is worse than a spinner.
+     */
+    public interface Progress {
+        void onBytes(long read, long total);
+    }
+
+    /**
+     * Downloads a binary resource, reporting how many bytes have arrived.
+     *
+     * <p>Read in chunks rather than {@code body.bytes()} so a large illustration
+     * can show real progress; the bytes are assembled exactly as before, so a
+     * caller that ignores the callback gets the same result.
+     */
+    public static byte[] getBytes(String url, Progress progress) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .header("User-Agent", USER_AGENT)
@@ -42,7 +64,19 @@ public final class Http {
             if (body == null) {
                 throw new IOException("Respons kosong dari " + url);
             }
-            return body.bytes();
+            long total = body.contentLength();
+            java.io.InputStream stream = body.byteStream();
+            java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream(
+                    total > 0 && total < Integer.MAX_VALUE ? (int) total : 8192);
+            byte[] chunk = new byte[8192];
+            long read = 0;
+            int count;
+            while ((count = stream.read(chunk)) != -1) {
+                buffer.write(chunk, 0, count);
+                read += count;
+                if (progress != null) progress.onBytes(read, total);
+            }
+            return buffer.toByteArray();
         }
     }
 

@@ -109,6 +109,23 @@ public final class LibraryPage {
 
         /** True while a volume job is running, so the page offers "Batalkan". */
         boolean isVolumeRunning(Volume volume);
+
+        /**
+         * Measured byte percentage for a chapter's current illustration, or -1.
+         *
+         * <p>-1 is not "zero": it means the server declared no size, so the page
+         * must spin instead of printing a percentage it did not measure.
+         */
+        default int bytePercent(Chapter chapter) {
+            return -1;
+        }
+
+        /** Fraction of a volume's chapters already stored, or -1 when unknown. */
+        default int volumePercent(Volume volume) {
+            int[] progress = volumeProgress(volume);
+            if (progress == null || progress[1] <= 0) return -1;
+            return Math.max(0, Math.min(100, (progress[0] * 100) / progress[1]));
+        }
     }
 
     public LibraryPage setDownload(DownloadListener listener, DownloadState state) {
@@ -479,21 +496,44 @@ public final class LibraryPage {
     }
 
     /**
-     * Download control for one chapter: a status word plus a single action.
+     * Download control for one chapter: a progress ring, a status word and one
+     * action.
      *
      * <p>The action always matches the status, so the reader never has to guess:
-     * not saved → download arrow, downloading → nothing to press (the volume job
-     * owns cancellation), saved → a delete button, failed → "Coba lagi". All of
+     * not saved → download arrow, queued/downloading/verifying → a ring (and the
+     * busy label, which never claims "Menunggu" while bytes are actually moving),
+     * saved → a delete button, partial → "Lanjutkan", failed → "Coba lagi". All of
      * them keep the 48 dp touch target the rest of the list uses.
+     *
+     * <p>The percentage lives inside its own view with its own spacing: printing
+     * it directly against the status word is what produced the "67%Mengunduh…"
+     * run-together text in the report.
      */
     private void addChapterDownload(LinearLayout row, Chapter chapter) {
         int state = downloadState.state(chapter);
         String status = downloadState.statusLabel(chapter);
 
+        boolean busy = state == DownloadStatusStore.QUEUED
+                || state == DownloadStatusStore.DOWNLOADING
+                || state == DownloadStatusStore.VERIFYING;
+        if (busy) {
+            row.addView(chapterRing(chapter, state));
+        } else if (state == DownloadStatusStore.SAVED) {
+            // A stored chapter is confirmed by a tick, not another arrow.
+            ImageView tick = new ImageView(context);
+            tick.setTag("download_tick:" + chapter.url);
+            tick.setImageDrawable(Ui.tinted(context, R.drawable.ic_check, palette.accent));
+            tick.setContentDescription("Tersimpan");
+            LinearLayout.LayoutParams tickParams = new LinearLayout.LayoutParams(
+                    Ui.dp(context, 16), Ui.dp(context, 16));
+            tickParams.setMargins(0, 0, Ui.dp(context, 8), 0);
+            row.addView(tick, tickParams);
+        }
+
         TextView statusView = Ui.label(context, status, 10,
                 state == DownloadStatusStore.SAVED ? palette.accent : palette.muted);
         statusView.setTag("download_status:" + chapter.url);
-        statusView.setPadding(0, 0, Ui.dp(context, 6), 0);
+        statusView.setPadding(0, 0, Ui.dp(context, 8), 0);
         row.addView(statusView);
 
         View action;
@@ -501,12 +541,18 @@ public final class LibraryPage {
             action = smallButton(R.drawable.ic_check, "Hapus unduhan chapter",
                     "download_delete:" + chapter.url,
                     v -> downloadListener.onDeleteChapter(chapter));
+        } else if (state == DownloadStatusStore.PARTIAL) {
+            action = smallTextButton("Lanjutkan", "download_resume:" + chapter.url,
+                    v -> downloadListener.onDownloadChapter(chapter));
         } else if (state == DownloadStatusStore.FAILED) {
             action = smallTextButton("Coba lagi", "download_retry:" + chapter.url,
                     v -> downloadListener.onDownloadChapter(chapter));
-        } else if (state == DownloadStatusStore.QUEUED
-                || state == DownloadStatusStore.DOWNLOADING) {
-            action = smallTextButton("Menunggu", "download_busy:" + chapter.url, null);
+        } else if (busy) {
+            // The ring above already says what is happening; a second button
+            // labelled "Menunggu" on a chapter that is downloading was the bug.
+            action = smallTextButton(
+                    state == DownloadStatusStore.QUEUED ? "Menunggu" : "Mengunduh",
+                    "download_busy:" + chapter.url, null);
             action.setAlpha(0.6f);
         } else {
             action = smallButton(R.drawable.ic_download, "Unduh chapter ini",
@@ -517,13 +563,58 @@ public final class LibraryPage {
     }
 
     /**
-     * Volume row controls: "Download Semua", live "x dari y chapter" progress and
-     * a "Batalkan" button while a job runs. The buttons sit under the title so a
-     * long volume label can never push them off screen on a small phone.
+     * The ring shown while a chapter downloads.
+     *
+     * <p>Its number comes from {@code bytePercent}, which the downloader fills from
+     * real bytes against {@code Content-Length}. When the size is unknown that is
+     * -1 and the ring spins with no text at all.
+     */
+    private View chapterRing(Chapter chapter, int state) {
+        LinearLayout box = new LinearLayout(context);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        box.setGravity(Gravity.CENTER_VERTICAL);
+
+        RingProgress ring = new RingProgress(context);
+        ring.setTag("download_ring:" + chapter.url);
+        ring.colors(palette.divider, palette.accent, 2);
+        int size = Ui.dp(context, 16);
+        LinearLayout.LayoutParams ringParams = new LinearLayout.LayoutParams(size, size);
+        ringParams.setMargins(0, 0, Ui.dp(context, 6), 0);
+        box.addView(ring, ringParams);
+
+        int percent = state == DownloadStatusStore.VERIFYING ? -1
+                : downloadState.bytePercent(chapter);
+        ring.setProgress(percent);
+
+        if (percent >= 0) {
+            TextView number = Ui.label(context, percent + "%", 10, palette.accent);
+            number.setTag("download_percent:" + chapter.url);
+            // Own padding on both sides: the number can never touch the status
+            // word that follows it.
+            number.setPadding(0, 0, Ui.dp(context, 8), 0);
+            box.addView(number);
+        }
+        return box;
+    }
+
+    /**
+     * Volume row controls, in the three states the design calls for.
+     *
+     * <p>Before: "Download Semua". While running: a progress ring, the measured
+     * percentage and "x dari y chapter", plus "Batalkan". When some chapters are
+     * stored but not all: the count and "Lanjutkan Download". When everything is
+     * stored: a tick and "Tersimpan semua".
+     *
+     * <p>The percentage is computed from stored chapters over the volume's total,
+     * so it is a real measurement. With no total to divide by there is no number,
+     * only the ring — a percentage invented from nothing would be a lie.
      */
     private void addVolumeDownload(LinearLayout texts, Volume volume) {
         int[] progress = downloadState.volumeProgress(volume);
         boolean running = downloadState.isVolumeRunning(volume);
+        int finished = progress == null ? 0 : progress[0];
+        int total = progress == null ? 0 : progress[1];
+        int percent = downloadState.volumePercent(volume);
 
         LinearLayout controls = new LinearLayout(context);
         controls.setOrientation(LinearLayout.HORIZONTAL);
@@ -531,38 +622,61 @@ public final class LibraryPage {
         controls.setPadding(0, Ui.dp(context, 6), 0, 0);
 
         if (running) {
-            int finished = progress == null ? 0 : progress[0];
-            int total = progress == null ? 0 : progress[1];
+            RingProgress ring = new RingProgress(context);
+            ring.setTag("volume_ring:" + volume.number);
+            ring.colors(palette.divider, palette.accent, 2);
+            int size = Ui.dp(context, 16);
+            LinearLayout.LayoutParams ringParams = new LinearLayout.LayoutParams(size, size);
+            ringParams.setMargins(0, 0, Ui.dp(context, 6), 0);
+            controls.addView(ring, ringParams);
+            // A volume with an unknown total has no honest fraction to show.
+            ring.setProgress(total > 0 ? percent : -1);
+
             TextView progressView = Ui.label(context,
-                    finished + " dari " + total + " chapter", 11, palette.accent);
+                    (percent >= 0 ? percent + "% · " : "")
+                            + finished + " dari " + total + " chapter",
+                    11, palette.accent);
             progressView.setTag("volume_progress:" + volume.number);
+            progressView.setPadding(0, 0, Ui.dp(context, 8), 0);
             controls.addView(progressView, new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
             controls.addView(smallTextButton("Batalkan", "volume_cancel:" + volume.number,
                     v -> downloadListener.onCancelVolume(volume)));
-        } else {
-            int finished = progress == null ? 0 : progress[0];
-            int total = progress == null ? 0 : progress[1];
-            if (total > 0) {
-                TextView summary = Ui.label(context,
-                        finished + " dari " + total + " tersimpan", 11,
-                        finished >= total ? palette.accent : palette.muted);
-                summary.setTag("volume_summary:" + volume.number);
-                controls.addView(summary, new LinearLayout.LayoutParams(
-                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            } else {
-                controls.addView(new android.view.View(context),
-                        new LinearLayout.LayoutParams(0, 1, 1));
-            }
-
-            boolean allSaved = total > 0 && finished >= total;
-            controls.addView(smallTextButton(
-                    allSaved ? "Tersimpan semua" : "Download Semua",
-                    "volume_download:" + volume.number,
-                    allSaved ? null : v -> downloadListener.onDownloadVolume(volume)));
-            if (allSaved) controls.getChildAt(controls.getChildCount() - 1).setAlpha(0.7f);
+            texts.addView(controls);
+            return;
         }
+
+        if (total > 0) {
+            TextView summary = Ui.label(context,
+                    finished + " dari " + total + " tersimpan", 11,
+                    finished >= total ? palette.accent : palette.muted);
+            summary.setTag("volume_summary:" + volume.number);
+            summary.setPadding(0, 0, Ui.dp(context, 8), 0);
+            controls.addView(summary, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        } else {
+            controls.addView(new android.view.View(context),
+                    new LinearLayout.LayoutParams(0, 1, 1));
+        }
+
+        boolean allSaved = total > 0 && finished >= total;
+        boolean partial = total > 0 && finished > 0 && !allSaved;
+        if (allSaved) {
+            ImageView tick = new ImageView(context);
+            tick.setTag("volume_tick:" + volume.number);
+            tick.setImageDrawable(Ui.tinted(context, R.drawable.ic_check, palette.accent));
+            tick.setContentDescription("Tersimpan semua");
+            LinearLayout.LayoutParams tickParams = new LinearLayout.LayoutParams(
+                    Ui.dp(context, 16), Ui.dp(context, 16));
+            tickParams.setMargins(0, 0, Ui.dp(context, 6), 0);
+            controls.addView(tick, tickParams);
+        }
+        controls.addView(smallTextButton(
+                allSaved ? "Tersimpan semua" : partial ? "Lanjutkan Download" : "Download Semua",
+                "volume_download:" + volume.number,
+                allSaved ? null : v -> downloadListener.onDownloadVolume(volume)));
+        if (allSaved) controls.getChildAt(controls.getChildCount() - 1).setAlpha(0.7f);
         texts.addView(controls);
     }
 

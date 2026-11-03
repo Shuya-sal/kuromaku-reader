@@ -104,9 +104,21 @@ public final class OfflineStore {
         public final long savedAt;
         public final int imageCount;
         public final List<String> imageFiles;
+        /**
+         * Illustrations the chapter needed when it was fetched.
+         *
+         * <p>Compared with {@link #imageCount} this is what tells a complete
+         * chapter from a partial one: text can arrive while a picture does not.
+         */
+        public final int imagesExpected;
 
         Entry(String url, String key, String title, int volume, long bytes, long savedAt,
               int imageCount, List<String> imageFiles) {
+            this(url, key, title, volume, bytes, savedAt, imageCount, imageFiles, imageCount);
+        }
+
+        Entry(String url, String key, String title, int volume, long bytes, long savedAt,
+              int imageCount, List<String> imageFiles, int imagesExpected) {
             this.url = url == null ? "" : url;
             this.key = key == null ? "" : key;
             this.title = title == null ? "" : title;
@@ -116,6 +128,17 @@ public final class OfflineStore {
             this.imageCount = imageCount;
             this.imageFiles = Collections.unmodifiableList(
                     imageFiles == null ? new ArrayList<String>() : imageFiles);
+            this.imagesExpected = Math.max(imageCount, imagesExpected);
+        }
+
+        /** Illustrations that were needed but could not be stored. */
+        public int missingImages() {
+            return Math.max(0, imagesExpected - imageCount);
+        }
+
+        /** True when the text and every illustration of the chapter are on disk. */
+        public boolean complete() {
+            return missingImages() == 0;
         }
     }
 
@@ -153,6 +176,21 @@ public final class OfflineStore {
         Entry entry = entry(novelId, url);
         if (entry == null) return false;
         return new File(chapterDir(novelId, url), CONTENT_FILE).isFile();
+    }
+
+    /**
+     * True when the chapter's text <em>and</em> every illustration it needed are on
+     * disk.
+     *
+     * <p>Distinct from {@link #isSaved}: a chapter whose text arrived while a
+     * picture did not is saved but incomplete, and the downloader must fetch it
+     * again rather than skip it as done.
+     */
+    public boolean isComplete(String novelId, String url) {
+        Entry entry = entry(novelId, url);
+        if (entry == null) return false;
+        if (!new File(chapterDir(novelId, url), CONTENT_FILE).isFile()) return false;
+        return entry.complete();
     }
 
     public Entry entry(String novelId, String url) {
@@ -289,6 +327,20 @@ public final class OfflineStore {
      */
     public Saved save(String novelId, String url, String title, int volume,
                       ChapterContent content, Map<String, byte[]> images) throws IOException {
+        return save(novelId, url, title, volume, content, images, images == null ? 0 : images.size());
+    }
+
+    /**
+     * Stores one chapter, recording how many illustrations it needed.
+     *
+     * <p>{@code imagesExpected} is what makes a partial chapter honest: when the
+     * text is fetched but one picture is not, the entry remembers how many were
+     * owed, so the UI can say "text stored, 1 illustration missing" instead of
+     * printing "Tersimpan" over an incomplete chapter.
+     */
+    public Saved save(String novelId, String url, String title, int volume,
+                      ChapterContent content, Map<String, byte[]> images,
+                      int imagesExpected) throws IOException {
         File dir = chapterDir(novelId, url);
         File imagesDir = imagesDir(novelId);
         if (!imagesDir.isDirectory() && !imagesDir.mkdirs()) {
@@ -359,7 +411,7 @@ public final class OfflineStore {
 
         long bytes = contentFile.length() + imageBytes;
         Entry entry = new Entry(url, keyFor(novelId, url), title, volume, bytes,
-                System.currentTimeMillis(), files.size(), files);
+                System.currentTimeMillis(), files.size(), files, imagesExpected);
         index(novelId).put(url.trim(), entry);
         writeIndex(novelId);
         return new Saved(entry, reused);
@@ -518,6 +570,7 @@ public final class OfflineStore {
                 item.put("bytes", entry.bytes);
                 item.put("savedAt", entry.savedAt);
                 item.put("images", entry.imageCount);
+                item.put("imagesExpected", entry.imagesExpected);
                 JSONArray files = new JSONArray();
                 for (String file : entry.imageFiles) files.put(file);
                 item.put("files", files);
@@ -540,7 +593,8 @@ public final class OfflineStore {
             return new Entry(item.optString("url", ""), item.optString("key", ""),
                     item.optString("title", ""), item.optInt("volume", 0),
                     item.optLong("bytes", 0), item.optLong("savedAt", 0),
-                    item.optInt("images", list.size()), list);
+                    item.optInt("images", list.size()), list,
+                    item.optInt("imagesExpected", list.size()));
         } catch (Exception error) {
             return null;
         }

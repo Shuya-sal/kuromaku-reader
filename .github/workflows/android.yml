@@ -64,7 +64,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-2.5-debug
+          name: kuromaku-reader-2.18-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -74,13 +74,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.17 (APK)
+          name: Kuromaku Reader 2.18 (APK)
           body: |
             Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
             (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
             lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.17** (versionCode 37)
+            * Versi: **2.18** (versionCode 38)
             * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
               Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
               katalog, membaca judul, cover, penulis, ilustrator, genre, status,
@@ -168,6 +168,59 @@ jobs:
               interlude memakai angka apa adanya) — **kelima-limanya tertangkap**, tidak
               ada yang lolos. Pemulihan diverifikasi lewat `md5sum` sebelum/sesudah,
               `git diff HEAD` kosong, penanda `MUTATION` nol, suite tetap 274 tes hijau.
+            * **Fitur Cover Volume & Indikator Unduhan (2.18).** Dua keluhan dari
+              laporan: volume novel yang ditambahkan lewat URL (Yarikon) hanya
+              menampilkan placeholder "Vol 1", "Vol 2", "Vol 3", dan baris unduhan
+              mencetak teks berdempetan "67%Mengunduh…" dengan tombol berlabel
+              "Menunggu" pada chapter yang justru sedang diunduh.
+              **Akar masalah cover bukan parser** — `VolumeCoverParser` sudah benar
+              sejak awal (diukur: Yarikon 3 cover, Monogatari 7, Magical★Explorer 14).
+              Yang salah adalah `Catalog.withCovers()` yang **hanya** membaca tabel
+              hardcoded tanpa entri untuk novel URL, sehingga hasilnya `null` dan UI
+              jatuh ke placeholder. Perbaikan: cover hasil parse ditempelkan langsung
+              ke volumenya dari body artikel yang sama (tanpa request tambahan) di
+              `LandingCatalogParser.withParsedCovers` dan `NovelDiscovery.withCovers`;
+              cover hasil parse **menang** atas tabel bawaan; `VolumeCovers.forVolume`
+              tidak lagi meminjam tabel Magical★Explorer untuk id asing (dulu novel
+              pengguna bisa menampilkan artwork seri lain); cover disimpan ke tabel
+              Room baru `volume_covers` (database v2, migrasi hanya menambah tabel,
+              baris novel tidak disentuh) sehingga tetap tampil dari cache tanpa
+              parsing ulang; pemilihan tautan manual tidak menghilangkan cover
+              (`reselect` + `keepCovers`); volume tanpa cover tetap tanpa cover dan
+              tidak pernah meminjam ilustrasi chapter.
+              **"67%Mengunduh…"** berasal dari dua TextView berdempetan tanpa padding
+              plus label tombol yang salah. Sekarang: view `RingProgress` (cincin
+              beranimasi 180 ms menuju nilai yang diberikan, berubah spinner bila
+              ukuran tidak diketahui, menghormati "Remove animations"), persentase
+              punya view dan jarak sendiri, status punya padding 8 dp, tombol 48 dp,
+              dan label tombol mengikuti status ("Menunggu" hanya untuk antrean,
+              "Mengunduh" untuk yang berjalan). Persentase berasal dari
+              `Http.getBytes(url, progress)` → `Fetcher.Source.image(url, progress)` →
+              `ChapterDownloader.Progress` → `DownloadStatusStore.setBytes`, jadi
+              hanya angka yang benar-benar diukur yang tampil; tanpa `Content-Length`
+              nilainya -1 dan UI hanya menampilkan spinner.
+              **Status parsial** (permintaan nomor 8) mengubah perilaku lama secara
+              sadar: dulu satu ilustrasi rusak menggagalkan seluruh chapter dan teks
+              yang sudah terunduh dibuang. Sekarang teks tetap disimpan,
+              `imagesExpected` dicatat di indeks offline sehingga chapter parsial
+              tetap parsial setelah aplikasi ditutup, `isComplete` dibedakan dari
+              `isSaved`, `VolumeJob` menandai `PARTIAL` tanpa menghitungnya selesai,
+              UI menawarkan **"Lanjutkan"**, dan gambar rusak tidak pernah ditulis
+              dengan nama `.jpg`.
+              Kartu volume: belum unduh → "Download Semua"; berjalan → cincin +
+              "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
+              selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
+              tidak pernah muncul selama masih ada chapter belum lengkap.
+            * **301 unit test lulus**, 0 gagal (28 kelas). `VolumeCoversAndDownloadStateTest`
+              (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
+              memicu laporan — dan mengukur UI pada layar 320 dp.
+            * Uji mutasi 2.18: **12 mutasi pada berkas hidup** (cover tidak ditempel,
+              semua volume memakai cover pertama, tabel menimpa hasil parse, novel
+              asing meminjam tabel Magical, persentase volume dipalsukan, "Tersimpan
+              semua" padahal belum, persentase menempel ke status, angka persen
+              dikarang, chapter parsial dianggap lengkap, `isComplete` disamakan
+              `isSaved`, gambar rusak tetap ditulis, progres byte tidak diteruskan) —
+              **12/12 tertangkap**, pemulihan diverifikasi `md5` sebelum/sesudah.
             * **BUG 12 (2.17) — sumber katalog Monogatari diganti ke artikel
               daftar isi sumbernya.** Gejala: Monogatari gagal dengan "Respons feed
               halaman ke-1 tidak dapat dibaca" dan daftar chapter jadi **0**, karena

@@ -4,11 +4,14 @@ import android.content.Context;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import id.shuyasal.kuromaku.db.NovelDao;
 import id.shuyasal.kuromaku.db.NovelDatabase;
 import id.shuyasal.kuromaku.db.NovelRecord;
+import id.shuyasal.kuromaku.db.VolumeCoverRecord;
 
 /**
  * The user's own shelf.
@@ -61,10 +64,13 @@ public final class Library {
     }
 
     private final NovelDao dao;
+    /** Kept for the per-volume cover table; the shelf itself reads through {@link #dao}. */
+    private final NovelDatabase database;
     private final List<Novel> novels = new ArrayList<>();
     private boolean seeded;
 
     Library(NovelDatabase database) {
+        this.database = database;
         this.dao = database.novels();
     }
 
@@ -318,6 +324,42 @@ public final class Library {
         String a = left == null ? "" : left;
         String b = right == null ? "" : right;
         return a.equals(b);
+    }
+
+    /**
+     * Stores this novel's per-volume covers so the detail page can draw its
+     * thumbnails without re-reading the catalogue page.
+     *
+     * <p>Replaced as a whole: a stale row from an older parse must never outlive
+     * the parse that produced it, or a volume would keep pointing at artwork the
+     * source no longer prints.
+     */
+    public void saveVolumeCovers(String novelId, Catalog catalog) {
+        if (novelId == null || novelId.isEmpty() || catalog == null) return;
+        List<VolumeCoverRecord> rows = new ArrayList<>();
+        for (Volume volume : catalog.volumes) {
+            VolumeCoverRecord row = new VolumeCoverRecord();
+            row.novelId = novelId;
+            row.volume = volume.number;
+            row.url = volume.coverUrl == null ? "" : volume.coverUrl;
+            row.width = volume.coverWidth;
+            row.height = volume.coverHeight;
+            rows.add(row);
+        }
+        if (rows.isEmpty()) return;
+        database.volumeCovers().deleteNovel(novelId);
+        database.volumeCovers().insertAll(rows);
+    }
+
+    /** Stored covers for one novel, keyed by volume number. Empty when none. */
+    public Map<Integer, VolumeCovers.Cover> storedVolumeCovers(String novelId) {
+        Map<Integer, VolumeCovers.Cover> covers = new LinkedHashMap<>();
+        if (novelId == null || novelId.isEmpty()) return covers;
+        for (VolumeCoverRecord row : database.volumeCovers().byNovel(novelId)) {
+            if (row.url == null || row.url.trim().isEmpty()) continue;
+            covers.put(row.volume, new VolumeCovers.Cover(row.url, row.width, row.height));
+        }
+        return covers;
     }
 
     private static String pick(String preferred, String fallback) {

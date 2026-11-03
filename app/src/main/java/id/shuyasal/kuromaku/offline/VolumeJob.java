@@ -31,16 +31,26 @@ public final class VolumeJob {
         public final int total;
         public final boolean cancelled;
         public final List<String> failures;
+        /** Chapters whose text is stored but at least one illustration is not. */
+        public final List<String> partial;
 
-        Result(int finished, int total, boolean cancelled, List<String> failures) {
+        Result(int finished, int total, boolean cancelled, List<String> failures,
+               List<String> partial) {
             this.finished = finished;
             this.total = total;
             this.cancelled = cancelled;
             this.failures = failures;
+            this.partial = partial;
         }
 
+        /** Every chapter is stored with all its artwork. */
         public boolean allDone() {
-            return !cancelled && failures.isEmpty() && finished >= total;
+            return !cancelled && failures.isEmpty() && partial.isEmpty() && finished >= total;
+        }
+
+        /** Some chapters can be read but are missing artwork. */
+        public boolean hasPartial() {
+            return !partial.isEmpty();
         }
     }
 
@@ -60,6 +70,7 @@ public final class VolumeJob {
         int total = chapters == null ? 0 : chapters.size();
         int finished = 0;
         List<String> failures = new ArrayList<>();
+        List<String> partial = new ArrayList<>();
         boolean cancelled = false;
 
         for (int i = 0; i < total; i++) {
@@ -70,8 +81,10 @@ public final class VolumeJob {
             }
             String key = DownloadStatusStore.key(novelId, chapter.url);
 
-            // Already complete: counted as done and never fetched again.
-            if (store.isSaved(novelId, chapter.url)) {
+            // Already complete: counted as done and never fetched again. A chapter whose
+            // text arrived but a picture did not is not complete, so it is retried
+            // instead of being skipped as if it were whole.
+            if (store.isComplete(novelId, chapter.url)) {
                 DownloadStatusStore.set(key, DownloadStatusStore.SAVED, null);
                 finished++;
                 report(progress, finished, total);
@@ -80,8 +93,33 @@ public final class VolumeJob {
 
             DownloadStatusStore.set(key, DownloadStatusStore.DOWNLOADING, null);
             try {
-                ChapterDownloader.download(context, novelId, chapter.url, volume,
-                        chapter.label, cancellation);
+                ChapterDownloader.Result result = ChapterDownloader.download(context,
+                        novelId, chapter.url, volume,
+                        chapter.label, cancellation, new ChapterDownloader.Progress() {
+                            @Override
+                            public void onImage(int percent, int imageIndex, int imageCount) {
+                                // A percentage only exists when the server declared a
+                                // size; otherwise -1 reaches the UI as a spinner.
+                                DownloadStatusStore.setBytes(key, percent,
+                                        imageIndex, imageCount);
+                            }
+
+                            @Override
+                            public void onStage(int stage) {
+                                if (stage == ChapterDownloader.STAGE_VERIFY) {
+                                    DownloadStatusStore.set(key,
+                                            DownloadStatusStore.VERIFYING, null);
+                                }
+                            }
+                        });
+                if (result.partial()) {
+                    // Text is stored, artwork is not: say so instead of printing
+                    // "Tersimpan" over a chapter that would read with holes.
+                    partial.add(chapter.url);
+                    DownloadStatusStore.set(key, DownloadStatusStore.PARTIAL,
+                            result.imagesMissing + " ilustrasi belum tersimpan");
+                    continue;
+                }
                 DownloadStatusStore.set(key, DownloadStatusStore.SAVED, null);
                 finished++;
             } catch (ChapterDownloader.CancelledException stopped) {
@@ -99,7 +137,7 @@ public final class VolumeJob {
         }
 
         DownloadStatusStore.setProgress(novelId, volume, finished, total);
-        return new Result(finished, total, cancelled, failures);
+        return new Result(finished, total, cancelled, failures, partial);
     }
 
     private static void report(Progress progress, int finished, int total) {

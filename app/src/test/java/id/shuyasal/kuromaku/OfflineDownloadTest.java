@@ -294,6 +294,50 @@ public class OfflineDownloadTest {
         assertEquals("progres pertama harus 1 chapter", 1, progress.get(0)[0]);
     }
 
+    /**
+     * Byte progress of the chapter being fetched must reach the status store.
+     *
+     * <p>The ring on the volume row reads {@code DownloadStatusStore.bytes(...)},
+     * so if the worker stops forwarding the callback the UI silently falls back to
+     * a spinner and the user loses the percentage the report asked for. The source
+     * here reports three chunks of a real picture, so the number is measured rather
+     * than assumed.
+     */
+    @Test
+    public void byteProgressOfTheRunningChapterReachesTheStatusStore() throws Exception {
+        final byte[] picture = plate("offline/plate_a.jpg");
+        Fetcher.use(new Fetcher.Source() {
+            @Override
+            public String page(String url) {
+                return article(url);
+            }
+
+            @Override
+            public byte[] image(String url) {
+                return picture;
+            }
+
+            @Override
+            public byte[] image(String url, id.shuyasal.kuromaku.net.Http.Progress progress) {
+                long total = picture.length;
+                progress.onBytes(total / 3, total);
+                progress.onBytes((total / 3) * 2, total);
+                progress.onBytes(total, total);
+                return picture;
+            }
+        });
+
+        String url = "https://kaoritranslation.blogspot.com/2026/01/v1c1.html";
+        List<Chapter> chapters = new ArrayList<>(Arrays.asList(chapter(url, "Chapter 1", 1)));
+        VolumeJob.run(context, NOVEL_A, 1, chapters, () -> false, null);
+
+        DownloadStatusStore.Bytes bytes = DownloadStatusStore.bytes(
+                DownloadStatusStore.key(NOVEL_A, url));
+        assertNotNull("progres byte harus tercatat untuk chapter yang diunduh", bytes);
+        assertEquals("progres akhir harus 100%", 100, bytes.percent);
+        assertEquals("dua ilustrasi dilaporkan", 2, bytes.imageCount);
+    }
+
     /** Skenario 6: tutup dan buka kembali aplikasi — unduhan tetap ada. */
     @Test
     public void downloadsSurviveAnAppRestart() throws Exception {
@@ -420,9 +464,19 @@ public class OfflineDownloadTest {
 
     // ------------------------------------------------------------------ integrity
 
-    /** An HTML error page where a picture should be must fail the chapter. */
+    /**
+     * An HTML error page where a picture should be no longer throws the text away.
+     *
+     * <p>Requirement 8 of the download spec asks for a <em>partial</em> chapter:
+     * the text that arrived is kept, the chapter is marked as saved-but-incomplete
+     * and the UI offers to continue. This replaces the older rule that a single
+     * broken illustration failed the whole chapter, which lost readable text.
+     * A picture is still never stored under a false name: the broken one is
+     * counted as missing instead of written to disk.
+     */
     @Test
-    public void imageThatIsNotAPictureFailsTheChapterInsteadOfSavingIt() throws Exception {
+    public void brokenIllustrationStoresTextAsPartialAndCountsTheMissingPicture()
+            throws Exception {
         String url = "https://kaoritranslation.blogspot.com/2026/01/broken.html";
         Fetcher.use(new Fetcher.Source() {
             @Override
@@ -433,19 +487,31 @@ public class OfflineDownloadTest {
 
             @Override
             public byte[] image(String target) throws Exception {
-                return "<!DOCTYPE html><html><body>rate limited</body></html>"
-                        .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                if (target.contains("broken")) {
+                    return "<!DOCTYPE html><html><body>rate limited</body></html>"
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                }
+                return plate("offline/plate_b.jpg");
             }
         });
 
-        try {
-            download(NOVEL_A, 1, url, "Chapter 1");
-            throw new AssertionError("download seharusnya gagal");
-        } catch (java.io.IOException expected) {
-            assertTrue("alasan harus menyebut HTML, dapat: " + expected.getMessage(),
-                    expected.getMessage().toLowerCase().contains("html"));
-        }
-        assertFalse("chapter tidak boleh ditandai tersimpan", store.isSaved(NOVEL_A, url));
+        ChapterDownloader.Result result =
+                ChapterDownloader.download(context, NOVEL_A, url, 1, "Chapter 1", () -> false);
+
+        assertTrue("harus dilaporkan sebagai chapter parsial", result.partial());
+        assertEquals("satu ilustrasi tidak tersimpan", 1, result.imagesMissing);
+        assertTrue("teks harus tetap tersimpan", store.isSaved(NOVEL_A, url));
+        assertFalse("chapter belum lengkap", store.isComplete(NOVEL_A, url));
+
+        OfflineStore.Entry entry = store.entry(NOVEL_A, url);
+        assertNotNull(entry);
+        assertEquals("dua ilustrasi diwajibkan", 2, entry.imagesExpected);
+        assertEquals("satu ilustrasi tersimpan", 1, entry.imageCount);
+        assertEquals(1, entry.missingImages());
+
+        // The picture that did arrive is real, the broken one never became a file.
+        assertEquals(1, entry.imageFiles.size());
+        assertTrue(store.load(NOVEL_A, url).blocks().size() > 0);
     }
 
     /** A page with no readable body must not be stored as an empty chapter. */

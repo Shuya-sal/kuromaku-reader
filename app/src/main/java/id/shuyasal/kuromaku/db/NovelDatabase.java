@@ -2,9 +2,12 @@ package id.shuyasal.kuromaku.db;
 
 import android.content.Context;
 
+import androidx.annotation.NonNull;
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
+import androidx.room.migration.Migration;
+import androidx.sqlite.db.SupportSQLiteDatabase;
 
 /**
  * The library database.
@@ -21,7 +24,8 @@ import androidx.room.RoomDatabase;
  * means the library is on screen in the first frame instead of after an async
  * round trip that would flash an empty list on every launch.
  */
-@Database(entities = {NovelRecord.class}, version = 1, exportSchema = false)
+@Database(entities = {NovelRecord.class, VolumeCoverRecord.class}, version = 2,
+        exportSchema = false)
 public abstract class NovelDatabase extends RoomDatabase {
 
     private static final String NAME = "kuromaku_library.db";
@@ -29,6 +33,30 @@ public abstract class NovelDatabase extends RoomDatabase {
     private static volatile NovelDatabase instance;
 
     public abstract NovelDao novels();
+
+    public abstract VolumeCoverDao volumeCovers();
+
+    /**
+     * Adds the per-volume cover table.
+     *
+     * <p>A real migration, not a destructive one: an existing shelf keeps every
+     * novel row, its position, reading progress and offline folders. Only the new
+     * table starts empty, and the next catalogue read fills it. Wiping the database
+     * to add a table would have thrown away the user's library to save writing
+     * three lines.
+     */
+    static final Migration ADD_VOLUME_COVERS = new Migration(1, 2) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `volume_covers` ("
+                    + "`novelId` TEXT NOT NULL, "
+                    + "`volume` INTEGER NOT NULL, "
+                    + "`url` TEXT NOT NULL, "
+                    + "`width` INTEGER NOT NULL, "
+                    + "`height` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`novelId`, `volume`))");
+        }
+    };
 
     public static NovelDatabase get(Context context) {
         if (instance == null) {
@@ -44,6 +72,7 @@ public abstract class NovelDatabase extends RoomDatabase {
     private static NovelDatabase build(Context context) {
         return Room.databaseBuilder(context, NovelDatabase.class, NAME)
                 .allowMainThreadQueries()
+                .addMigrations(ADD_VOLUME_COVERS)
                 .build();
     }
 

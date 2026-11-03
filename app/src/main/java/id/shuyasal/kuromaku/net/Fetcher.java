@@ -15,6 +15,18 @@ public final class Fetcher {
         String page(String url) throws Exception;
 
         byte[] image(String url) throws Exception;
+
+        /**
+         * Same download, reporting how many bytes have arrived.
+         *
+         * <p>A default so every existing source — including the fixture sources
+         * tests install — keeps working untouched; the real network overrides it.
+         * A source that cannot report progress simply returns the bytes, and the
+         * UI then shows a spinner instead of a percentage.
+         */
+        default byte[] image(String url, Http.Progress progress) throws Exception {
+            return image(url);
+        }
     }
 
     private static final Source NETWORK = new Source() {
@@ -26,6 +38,11 @@ public final class Fetcher {
         @Override
         public byte[] image(String url) throws Exception {
             return Http.getBytes(url);
+        }
+
+        @Override
+        public byte[] image(String url, Http.Progress progress) throws Exception {
+            return Http.getBytes(url, progress);
         }
     };
 

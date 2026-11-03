@@ -375,6 +375,15 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     CatalogLoader.Loaded loaded = CatalogLoader.load(novel);
                     Session.setCatalog(loaded.catalog);
+                    // Covers found on this parse are stored, so the detail page can
+                    // draw them without re-reading the catalogue page. A volume the
+                    // source did not describe simply has no row.
+                    try {
+                        library().saveVolumeCovers(novel.id, loaded.catalog);
+                    } catch (RuntimeException ignored) {
+                        // A full disk or a closed database must not fail the reload:
+                        // the catalogue in memory is still correct.
+                    }
                     final String warning = loaded.warning;
                     if (warning != null) {
                         main.post(() -> Toast.makeText(this, warning, Toast.LENGTH_LONG).show());
@@ -486,6 +495,18 @@ public class MainActivity extends AppCompatActivity {
                     .build();
         }
         Catalog catalog = Session.catalog(selectedNovel.id);
+        if (catalog != null) {
+            // Covers found on an earlier parse are stored, so opening the detail page
+            // still shows real artwork when the catalogue came from cache or when the
+            // source page is temporarily unreachable. Volumes that already carry a
+            // cover keep it; nothing is borrowed from another volume.
+            try {
+                catalog = catalog.withStoredCovers(
+                        library().storedVolumeCovers(selectedNovel.id));
+            } catch (RuntimeException ignored) {
+                // A database problem must not stop the page from rendering.
+            }
+        }
         // Scoped prefs: the continue button and chapter progress on this page
         // belong to this novel only.
         return new LibraryPage(this, prefs.scoped(selectedNovel.id), palette,
@@ -879,7 +900,16 @@ public class MainActivity extends AppCompatActivity {
 
         // The catalogue that was just parsed is kept, so opening the novel works
         // immediately even without a second fetch.
-        Session.setCatalog(new Catalog(result.novel.id, preview.volumes));
+        Catalog added = new Catalog(result.novel.id, preview.volumes);
+        Session.setCatalog(added);
+        // Covers found while parsing this page are stored now: waiting for a
+        // reload would leave the volume rows showing "Vol 1", "Vol 2", "Vol 3"
+        // until the user pressed Muat Ulang.
+        try {
+            library().saveVolumeCovers(result.novel.id, added);
+        } catch (RuntimeException ignored) {
+            // Storing is an optimisation; the catalogue already carries the covers.
+        }
         showingAdd = false;
         addState = new AddNovelPage.State();
         failed.clear();
@@ -1164,6 +1194,15 @@ public class MainActivity extends AppCompatActivity {
             public int[] volumeProgress(Volume volume) {
                 return DownloadQueue.volumeProgress(MainActivity.this, novel,
                         volume.number, volume.chapters);
+            }
+
+            @Override
+            public int bytePercent(Chapter chapter) {
+                // Straight from the downloader's byte counter. -1 means the
+                // server declared no size, so the page spins instead of guessing.
+                DownloadStatusStore.Bytes bytes = DownloadStatusStore.bytes(
+                        DownloadStatusStore.key(novel.id, chapter.url));
+                return bytes == null ? -1 : bytes.percent;
             }
 
             @Override

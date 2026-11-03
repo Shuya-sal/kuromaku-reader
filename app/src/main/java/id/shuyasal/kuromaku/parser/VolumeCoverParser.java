@@ -54,11 +54,23 @@ public final class VolumeCoverParser {
      * @param html full landing page HTML
      */
     public static Map<Integer, Found> parse(String html) {
-        Map<Integer, Found> covers = new LinkedHashMap<>();
-        if (html == null || html.isEmpty()) return covers;
-
+        if (html == null || html.isEmpty()) return new LinkedHashMap<>();
         Document document = org.jsoup.Jsoup.parse(html, "https://kaoritranslation.blogspot.com/");
         Element body = articleBody(document);
+        if (body == null) return new LinkedHashMap<>();
+        return parse(body);
+    }
+
+    /**
+     * Covers by volume number, from an article body that is already parsed.
+     *
+     * <p>The catalogue parser has the body in hand, so it must not pay for a
+     * second parse of the same page just to learn the covers. Reading them from
+     * the very same body also guarantees the covers and the chapters come from one
+     * document, not two fetches that could disagree.
+     */
+    public static Map<Integer, Found> parse(Element body) {
+        Map<Integer, Found> covers = new LinkedHashMap<>();
         if (body == null) return covers;
 
         List<Node> nodes = new ArrayList<>();
@@ -67,6 +79,11 @@ public final class VolumeCoverParser {
         int currentVolume = 0;
         // Set while walking the picture that belongs to currentVolume.
         boolean waitingForCover = false;
+        // True once a link has been seen under the current heading. A cover is
+        // printed *above* the chapter list, so a picture that only appears after
+        // the first link belongs to a chapter, not to the volume. Without this
+        // guard an illustration would stand in for a missing cover.
+        boolean linkSeen = false;
         // The page writes some headings as "Volume&nbsp;" in one span and the
         // number in the next, so a single text node is not enough. Without this
         // buffer volume 2 is skipped and its cover is never found.
@@ -81,6 +98,7 @@ public final class VolumeCoverParser {
                     try {
                         currentVolume = Integer.parseInt(matcher.group(1));
                         waitingForCover = true;
+                        linkSeen = false;
                         buffer.setLength(0);
                     } catch (NumberFormatException ignored) {
                         // leave as is
@@ -96,10 +114,19 @@ public final class VolumeCoverParser {
             if (!(node instanceof Element)) continue;
 
             Element element = (Element) node;
+            if ("a".equals(element.tagName()) && currentVolume > 0) {
+                // The chapter list has started for this volume.
+                linkSeen = true;
+            }
             if ("img".equals(element.tagName())) buffer.setLength(0);
             if (!"img".equals(element.tagName())) continue;
             if (currentVolume <= 0 || !waitingForCover) continue;
             if (covers.containsKey(currentVolume)) continue;
+            if (linkSeen) {
+                // First picture came after a link: it is chapter artwork.
+                waitingForCover = false;
+                continue;
+            }
 
             String url = resolve(element);
             if (url == null) continue;

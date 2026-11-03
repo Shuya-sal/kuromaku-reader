@@ -29,6 +29,29 @@ public final class DownloadStatusStore {
     public static final int SAVED = 3;
     public static final int FAILED = 4;
     public static final int CANCELLED = 5;
+    /** Text stored but at least one illustration is still missing. */
+    public static final int PARTIAL = 6;
+    /** Bytes are written and being read back to confirm they landed. */
+    public static final int VERIFYING = 7;
+
+    /**
+     * Byte progress of the chapter currently being fetched.
+     *
+     * <p>{@code percent} is -1 when the server declared no {@code Content-Length}
+     * for a picture: the UI then shows a spinner and no number, because a
+     * percentage nobody measured is a lie the reader cannot check.
+     */
+    public static final class Bytes {
+        public final int percent;
+        public final int imageIndex;
+        public final int imageCount;
+
+        Bytes(int percent, int imageIndex, int imageCount) {
+            this.percent = percent;
+            this.imageIndex = imageIndex;
+            this.imageCount = imageCount;
+        }
+    }
 
     /** Listener notified on the main thread whenever any status changes. */
     public interface Listener {
@@ -37,6 +60,7 @@ public final class DownloadStatusStore {
 
     private static final Map<String, Integer> STATE = new LinkedHashMap<>();
     private static final Map<String, String> MESSAGES = new LinkedHashMap<>();
+    private static final Map<String, Bytes> BYTES = new LinkedHashMap<>();
     private static final List<Listener> LISTENERS = new ArrayList<>();
 
     /** Progress of a running volume job: finished chapters and the total. */
@@ -74,9 +98,31 @@ public final class DownloadStatusStore {
         return message == null ? "" : message;
     }
 
+    /**
+     * Records byte progress for a running chapter.
+     *
+     * <p>Notifies listeners at most on every whole percent, so a fast connection
+     * does not rebuild the list hundreds of times.
+     */
+    public static synchronized void setBytes(String key, int percent, int imageIndex, int imageCount) {
+        Bytes previous = BYTES.get(key);
+        if (previous != null && previous.percent == percent
+                && previous.imageIndex == imageIndex && previous.imageCount == imageCount) {
+            return;
+        }
+        BYTES.put(key, new Bytes(percent, imageIndex, imageCount));
+        notifyListeners();
+    }
+
+    /** Byte progress for a chapter, or null when nothing is known. */
+    public static synchronized Bytes bytes(String key) {
+        return BYTES.get(key);
+    }
+
     public static synchronized void clear(String key) {
         STATE.remove(key);
         MESSAGES.remove(key);
+        BYTES.remove(key);
         notifyListeners();
     }
 

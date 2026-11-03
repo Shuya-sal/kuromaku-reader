@@ -105,8 +105,12 @@ public final class DownloadQueue {
                 return "Menunggu";
             case DownloadStatusStore.DOWNLOADING:
                 return "Mengunduh…";
+            case DownloadStatusStore.VERIFYING:
+                return "Memverifikasi…";
             case DownloadStatusStore.SAVED:
                 return "Tersimpan";
+            case DownloadStatusStore.PARTIAL:
+                return "Tersimpan sebagian";
             case DownloadStatusStore.FAILED:
                 return "Gagal";
             case DownloadStatusStore.CANCELLED:
@@ -114,6 +118,19 @@ public final class DownloadQueue {
             default:
                 return "Belum diunduh";
         }
+    }
+
+    /**
+     * Human note for a partial chapter: how much artwork is still missing.
+     *
+     * <p>Only printed when the stored index actually knows a picture is owed, so
+     * the page never claims "sebagian" about a chapter that is whole.
+     */
+    public static String partialNote(Context context, Novel novel, Chapter chapter) {
+        if (context == null || novel == null || chapter == null) return "";
+        OfflineStore.Entry entry = OfflineStore.get(context).entry(novel.id, chapter.url);
+        if (entry == null || entry.complete()) return "";
+        return entry.missingImages() + " ilustrasi belum tersimpan";
     }
 
     /** How many chapters of a volume are already stored. */

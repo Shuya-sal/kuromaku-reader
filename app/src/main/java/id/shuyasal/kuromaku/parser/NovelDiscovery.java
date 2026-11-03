@@ -508,6 +508,7 @@ public final class NovelDiscovery {
         }
 
         List<Volume> volumes = groupByVolume(finalChapters, headings);
+        volumes = withCovers(volumes, body);
         int accepted = groupCount;
 
         // No chapter found, but the page still gives a reason to think it is a list:
@@ -643,9 +644,13 @@ public final class NovelDiscovery {
         }
         List<String> warnings = new ArrayList<>(base.warnings);
         warnings.add(chapters.size() + " tautan dipilih manual oleh pengguna.");
+        // The covers came from the same page as the candidates, so they survive a
+        // manual reselect: picking links by hand must not downgrade artwork the
+        // parse already found into placeholders.
+        List<Volume> regrouped = keepCovers(groupByVolume(chapters, headings), base.volumes);
         return new Result(base.sourceUrl, base.title, base.titleJp, base.fullTitle, base.author,
                 base.illustrator, base.genres, base.status, base.coverUrl, base.coverRatio,
-                base.synopsis, groupByVolume(chapters, headings), warnings, base.linksFound,
+                base.synopsis, regrouped, warnings, base.linksFound,
                 chapters.size(), base.candidates, false);
     }
 
@@ -893,6 +898,68 @@ public final class NovelDiscovery {
             }
         }
         return nodes.size();
+    }
+
+    /**
+     * Attaches each volume's own cover to a catalogue read from an arbitrary page.
+     *
+     * <p>A novel added through URL has no entry in the built-in cover table, which
+     * is exactly why its volume rows used to show "Vol 1", "Vol 2", "Vol 3". The
+     * covers are read from the same parsed body as the chapters, so no extra
+     * request is made and the two cannot come from different versions of the page.
+     * A volume with no picture keeps none: the UI shows its placeholder rather than
+     * borrowing a neighbouring volume's artwork or a chapter illustration.
+     */
+    static List<Volume> withCovers(List<Volume> volumes, Element body) {
+        if (volumes == null || volumes.isEmpty() || body == null) return volumes;
+        Map<Integer, VolumeCoverParser.Found> found = VolumeCoverParser.parse(body);
+        if (found.isEmpty()) return volumes;
+        List<Volume> out = new ArrayList<>();
+        for (Volume volume : volumes) {
+            VolumeCoverParser.Found cover = found.get(volume.number);
+            out.add(cover == null
+                    ? volume
+                    : volume.withCover(cover.url, cover.width, cover.height));
+        }
+        return out;
+    }
+
+    /**
+     * Carries covers from an earlier parse of the same page onto a re-grouped list.
+     *
+     * <p>Used by {@link #reselect}: the volumes are rebuilt from the chapters the
+     * user picked, but the artwork was already found on that page and must not be
+     * lost. A volume the earlier parse had no cover for stays without one.
+     */
+    static List<Volume> keepCovers(List<Volume> volumes, List<Volume> previous) {
+        if (volumes == null || previous == null || previous.isEmpty()) return volumes;
+        Map<Integer, String[]> known = new LinkedHashMap<>();
+        for (Volume volume : previous) {
+            if (volume.hasCover()) {
+                known.put(volume.number, new String[]{volume.coverUrl,
+                        String.valueOf(volume.coverWidth), String.valueOf(volume.coverHeight)});
+            }
+        }
+        if (known.isEmpty()) return volumes;
+        List<Volume> out = new ArrayList<>();
+        for (Volume volume : volumes) {
+            String[] cover = known.get(volume.number);
+            if (cover == null || volume.hasCover()) {
+                out.add(volume);
+                continue;
+            }
+            int width = 0;
+            int height = 0;
+            try {
+                width = Integer.parseInt(cover[1]);
+                height = Integer.parseInt(cover[2]);
+            } catch (NumberFormatException ignored) {
+                width = 0;
+                height = 0;
+            }
+            out.add(volume.withCover(cover[0], width, height));
+        }
+        return out;
     }
 
     private static List<Volume> groupByVolume(List<Chapter> chapters, Set<Integer> headings) {

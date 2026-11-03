@@ -79,16 +79,46 @@ public final class Catalog {
      * Attaches verified per-volume covers. A volume with no entry in the cover
      * table is left uncovered on purpose: borrowing another volume's artwork
      * would be worse than showing a placeholder.
+     *
+     * <p>A cover already found on the novel's own catalogue page wins: the table
+     * only knows the built-in novels, so letting it overwrite a parsed cover would
+     * undo the very thing that gives a URL-added novel real artwork. The table is
+     * therefore a fallback for volumes the page did not describe.
      */
     public Catalog withCovers(String novel) {
         List<Volume> out = new ArrayList<>();
         for (Volume volume : volumes) {
+            if (volume.hasCover()) {
+                out.add(volume);
+                continue;
+            }
             VolumeCovers.Cover cover = VolumeCovers.forVolume(novel, volume.number);
             out.add(cover == null
                     ? volume
                     : volume.withCover(cover.url, cover.width, cover.height));
         }
         return new Catalog(this.novelId.isEmpty() ? novel : this.novelId, out);
+    }
+
+    /**
+     * Same volumes with covers filled from the stored table where the catalogue has
+     * none. Used when rendering a catalogue that came from cache or from the stored
+     * database, so covers found earlier still show without re-parsing the page.
+     */
+    public Catalog withStoredCovers(java.util.Map<Integer, VolumeCovers.Cover> stored) {
+        if (stored == null || stored.isEmpty()) return this;
+        List<Volume> out = new ArrayList<>();
+        for (Volume volume : volumes) {
+            if (volume.hasCover()) {
+                out.add(volume);
+                continue;
+            }
+            VolumeCovers.Cover cover = stored.get(volume.number);
+            out.add(cover == null
+                    ? volume
+                    : volume.withCover(cover.url, cover.width, cover.height));
+        }
+        return new Catalog(novelId, out);
     }
 
     /** Same volumes, tagged with the novel they belong to. */

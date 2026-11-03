@@ -174,9 +174,23 @@ public final class VolumeCovers {
     private static final Map<Integer, Cover> MAGICAL = magical();
 
 
-    /** Cover for a volume, or null when the source page has none for it. */
+    /**
+     * Cover for a volume, or null when the source page has none for it.
+     *
+     * <p>Only the two built-in novels have a table. An unknown id — every novel
+     * added through a URL — gets nothing: the old fallback returned Magical★Explorer's
+     * artwork for any unrecognised id, which would have shown another series' volume
+     * covers on a user's novel whenever its own page had no picture for a volume.
+     */
     public static Cover forVolume(String novelId, int volume) {
-        Map<Integer, Cover> map = "monogatari".equals(novelId) ? MONOGATARI : MAGICAL;
+        Map<Integer, Cover> map;
+        if ("monogatari".equals(novelId)) {
+            map = MONOGATARI;
+        } else if ("magical-explorer".equals(novelId)) {
+            map = MAGICAL;
+        } else {
+            return null;
+        }
         return map.get(volume);
     }
 

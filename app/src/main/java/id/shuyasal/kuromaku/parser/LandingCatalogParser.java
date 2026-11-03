@@ -173,7 +173,30 @@ public final class LandingCatalogParser {
             if (leftUnknown != rightUnknown) return leftUnknown ? 1 : -1;
             return left.number - right.number;
         });
-        return result;
+        return withParsedCovers(result, body);
+    }
+
+    /**
+     * Attaches each volume's own cover, read from the same article body.
+     *
+     * <p>This is what makes a novel added through URL show real artwork: the
+     * cover comes from the page that was just parsed, not from a hard-coded table
+     * that only knows the built-in novels. A volume whose cover cannot be found
+     * stays without one and the UI keeps its placeholder — borrowing the next
+     * picture, or the chapter's illustration, would be a guess.
+     */
+    static List<Volume> withParsedCovers(List<Volume> volumes, Element body) {
+        if (volumes == null || volumes.isEmpty() || body == null) return volumes;
+        java.util.Map<Integer, VolumeCoverParser.Found> found = VolumeCoverParser.parse(body);
+        if (found.isEmpty()) return volumes;
+        List<Volume> out = new ArrayList<>();
+        for (Volume volume : volumes) {
+            VolumeCoverParser.Found cover = found.get(volume.number);
+            out.add(cover == null
+                    ? volume
+                    : volume.withCover(cover.url, cover.width, cover.height));
+        }
+        return out;
     }
 
     /** Article container, same selectors as the chapter parser. */

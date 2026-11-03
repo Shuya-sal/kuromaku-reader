@@ -81,6 +81,14 @@ public class DownloadWorker extends Worker {
             DownloadNotifier.cancel(getApplicationContext());
             return Result.failure();
         }
+        if (result.hasPartial()) {
+            // Text is on disk; artwork is not. Retrying the whole job would refetch
+            // the chapters that are only missing a picture, which is exactly what
+            // "Lanjutkan Download" is for — so the job ends here and the UI offers it.
+            DownloadStatusStore.setProgress(novelId, volume, result.finished, result.total);
+            DownloadNotifier.done(getApplicationContext(), title, result.finished, result.total);
+            return Result.failure();
+        }
         if (!result.failures.isEmpty()) {
             // Retry with backoff; chapters that already succeeded are skipped on
             // the next run, so only what is missing is requested again.
