@@ -380,7 +380,7 @@ public class DownloadUiTest {
 
         Activity activity = activity();
         DownloadsPage page = new DownloadsPage(activity, Palette.of(Prefs.THEME_DARK),
-                store, downloadsListener(new ArrayList<String>(), new ArrayList<String>()));
+                store, downloadsListener(new ArrayList<String>(), new ArrayList<String>())).withNovels(Novels.all());
         LinearLayout content = page.build();
         content.measure(View.MeasureSpec.makeMeasureSpec(
                         activity.getResources().getDisplayMetrics().widthPixels,
@@ -412,7 +412,7 @@ public class DownloadUiTest {
         List<String> deletedChapters = new ArrayList<>();
         List<String> deletedVolumes = new ArrayList<>();
         DownloadsPage page = new DownloadsPage(activity, Palette.of(Prefs.THEME_DARK), store,
-                downloadsListener(deletedChapters, deletedVolumes));
+                downloadsListener(deletedChapters, deletedVolumes)).withNovels(Novels.all());
         LinearLayout content = page.build();
 
         View volumeDelete = content.findViewWithTag("delete_volume:" + NOVEL + ":1");
@@ -434,7 +434,7 @@ public class DownloadUiTest {
     public void downloadsPageShowsEmptyStateWhenNothingIsStored() {
         Activity activity = activity();
         DownloadsPage page = new DownloadsPage(activity, Palette.of(Prefs.THEME_DARK), store,
-                downloadsListener(new ArrayList<String>(), new ArrayList<String>()));
+                downloadsListener(new ArrayList<String>(), new ArrayList<String>())).withNovels(Novels.all());
         LinearLayout content = page.build();
 
         View empty = content.findViewWithTag("downloads_empty");
@@ -468,7 +468,7 @@ public class DownloadUiTest {
 
         Activity activity = activity();
         DownloadsPage page = new DownloadsPage(activity, Palette.of(Prefs.THEME_DARK), store,
-                downloadsListener(new ArrayList<String>(), new ArrayList<String>()));
+                downloadsListener(new ArrayList<String>(), new ArrayList<String>())).withNovels(Novels.all());
         LinearLayout content = page.build();
         assertNotNull(content.findViewWithTag("downloads_empty"));
         assertEquals("penyimpanan harus kembali ke nol", 0, store.totalBytes());

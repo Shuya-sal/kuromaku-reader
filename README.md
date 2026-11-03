@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.8
+# Kuromaku Reader 2.9
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -34,6 +34,17 @@ maksimal 2 pekerja paralel, retry backoff), ditulis secara **atomik**, dan
 diverifikasi sebelum chapter ditandai tersimpan. Ada halaman **Unduhan** dengan
 jumlah chapter, ukuran penyimpanan, serta hapus per chapter/volume — tanpa
 menyentuh progres membaca. Detail di bagian **Fitur Download Offline (2.7)**.
+
+Versi 2.9 menambahkan **pengelolaan novel dinamis**: novel baru bisa ditambahkan
+sendiri lewat URL halaman katalog, tidak lagi bergantung pada dua novel yang
+ditanam di dalam APK. Perpustakaan disimpan di **Room Database** dengan kunci URL
+yang sudah dinormalisasi, sehingga URL yang sama tidak pernah menjadi dua novel,
+daftar novel tetap ada setelah aplikasi ditutup atau HP direstart, dan dua novel
+lama dipertahankan saat migrasi. Setiap kartu punya **menu tiga titik** (Buka,
+Perbarui, Hapus) dan penghapusan menawarkan dua pilihan terpisah: hapus dari
+perpustakaan saja dengan unduhan serta progres tetap tersimpan, atau hapus beserta
+unduhan offline dengan centang terpisah untuk progres membaca. Detail di bagian
+**Fitur Pengelolaan Novel Dinamis (2.9)**.
 
 ## Fitur (baru di 2.5)
 
@@ -281,6 +292,134 @@ exception saat membangun halaman; tes ditambah dengan seam `MainActivity.pageFau
 yang sengaja melempar, lalu mutasi yang sama tertangkap. Setelah dipulihkan,
 **207/207** lulus.
 
+## Fitur Pengelolaan Novel Dinamis (2.9)
+
+### Tambah novel lewat URL
+
+Halaman **Perpustakaan** punya tombol **+ Tambah Novel** (tinggi minimal 48 dp)
+yang membuka halaman input URL. Alur kerjanya:
+
+1. URL dinormalisasi lebih dulu, sebelum ada permintaan jaringan. `?m=1`, garis
+   miring di akhir, parameter pelacak, `www`, dan perbedaan `http`/`https`
+   dibuang. URL yang bukan halaman artikel Kaori Translation — beranda, halaman
+   label, feed, atau situs lain — ditolak dengan pesan yang bisa dibaca.
+2. Halaman katalog diunduh dan dibaca oleh parser generik.
+3. **Preview** ditampilkan: judul, judul Jepang, cover, penulis, ilustrator,
+   genre, status, sinopsis, jumlah volume, jumlah chapter, dan daftar
+   peringatan. Metadata yang tidak tertulis di halaman ditampilkan sebagai
+   *Tidak tercantum di halaman sumber* — tidak ada yang dikarang.
+4. Tombol **Simpan ke Perpustakaan** menulis satu baris ke database. Novel yang
+   sudah ada ditolak sebagai duplikat, tombol simpan dimatikan, dan preview
+   menampilkan bahwa novel itu sudah ada.
+
+Kegagalan pengambilan menampilkan alasannya beserta tombol **Coba Lagi**;
+indikator loading tampil selama pemrosesan. Novel kosong tidak pernah disimpan.
+
+### Parser generik dan batasnya
+
+`NovelDiscovery` bekerja dari apa yang dimiliki bersama oleh halaman-halaman
+Kaori Translation, bukan dari bentuk satu novel tertentu:
+
+- **Metadata** dibaca dari baris berlabel (`Author :`, `Illustrator :`, `Genre :`,
+  `Japanese Tittle :`, `Status :`), termasuk bentuk yang labelnya ditebalkan
+  sehingga titik dua jatuh di baris berikutnya.
+- **Chapter** dikenali dari tautan di dalam badan artikel yang teksnya berbentuk
+  chapter (`Chapter 12`, `Prolog`, `Epilog`, `Afterword`, `Illustrasi`, termasuk
+  salah ejaan sumber seperti `Cahpter 2`) atau yang slug-nya mengandung
+  `chapter-N` / `volume-N`. Menu, sidebar, tombol bagikan, halaman label, beranda,
+  dan postingan novel lain dikecualikan.
+- **Volume** diambil dari heading `Volume N` di atas tautan, lalu dari teks
+  tautan, lalu dari slug. Halaman tanpa heading volume (landing Monogatari: 116
+  tautan, 0 heading) mengelompokkan chapter menurut slug-nya.
+- **Cover** adalah gambar potret pertama di seluruh artikel, termasuk yang
+  dibungkus `<a>` — cara sumber menaruh sampul. Banner lebar di awal deskripsi
+  tidak dipakai, dan rasionya diambil dari dimensi gambar itu.
+- **Peringatan** dikumpulkan, bukan disembunyikan: jumlah tautan chapter yang
+  tidak punya tautan, jumlah chapter tanpa nomor volume, dan field metadata yang
+  tidak tercantum.
+
+Yang **tidak** didukung, dan karenanya dilaporkan sebagai kegagalan alih-alih
+ditebak: daftar chapter yang dimuat dengan JavaScript, katalog yang menautkan
+halaman statis `/p/`, halaman dari host selain `kaoritranslation.blogspot.com`,
+dan tautan chapter yang tidak berada di path post bertanggal `/20xx/xx/`.
+
+### Simpan permanen, tanpa duplikat
+
+- Database: Room, entitas `NovelRecord`, versi 1, satu tabel `novels`.
+- Kunci baris adalah URL katalog ternormalisasi; `id` adalah slug URL dan dipakai
+  untuk preferensi, folder offline, dan navigasi reader. `id` ditulis sekali saat
+  novel ditambahkan dan **tidak pernah** dihitung ulang dari judul, sehingga
+  mengganti judul di sumber tidak memutus progres membaca.
+- Saat tabel masih kosong, dua novel bawaan ditulis otomatis dengan metadata
+  terverifikasinya — itu sekaligus jalur migrasi dari versi yang menanam keduanya
+  di kode.
+- **Muat Ulang** membaca ulang halaman dan memperbarui metadata, tetapi hanya
+  kolom yang benar-benar dicantumkan halaman. Kolom kosong di halaman tidak
+  menghapus nilai tersimpan, dan id, posisi, serta URL tidak berubah.
+
+### Hapus novel
+
+Menu tiga titik pada setiap kartu berisi **Buka Novel**, **Perbarui Novel**, dan
+**Hapus dari Perpustakaan**. Dialog hapus menyebut judul novel, jumlah chapter
+yang tersimpan beserta ukurannya, dan dua centang:
+
+1. **Hapus juga unduhan offline** — diaktifkan hanya bila memang ada unduhan.
+2. **Hapus juga progres membaca dan bookmark** — berlaku terpisah.
+
+Tanpa centang apa pun, hanya baris perpustakaan yang dihapus: berkas offline dan
+progres tetap di perangkat. Urutannya sengaja begitu — baris dihapus terakhir,
+supaya kegagalan saat menghapus berkas tidak meninggalkan novel yang hilang dari
+daftar tetapi datanya setengah terhapus. Semua data offline dan preferensi
+memakai namespace per novel, jadi menghapus satu novel tidak menyentuh novel lain.
+
+## BUG 6 (2.9) — Parser generik salah membaca metadata, cover, dan identitas
+
+Empat cacat ditemukan lewat **probe parser** yang dijalankan pada dua halaman asli,
+bukan dari membaca kode. Semuanya lolos kompilasi dan tidak terlihat di APK sampai
+hasil parse-nya dicetak.
+
+**(1) Teks terbaca tiga kali.** `textOf()` memanggil `Element.text()` untuk setiap
+elemen dalam daftar yang sudah diratakan, sehingga satu kalimat muncul sekali per
+tingkat leluhurnya. Akibat nyata: `Genre : Action, Adventure, ...` terbaca sebagai
+`genre = "Genre"` (labelnya sendiri jadi nilainya) dan sinopsis 10 paragraf runtuh
+menjadi satu blok. Perbaikan: hanya text node serta elemen daun (`a`, `img`) yang
+menyumbang teks.
+
+**(2) Cover memilih banner, dan cover yang dibungkus tautan tidak terbaca.**
+Aturan lama adalah "gambar pertama", sehingga banner promosi 1526×1080 dipakai
+sebagai sampul. Lebih buruk lagi: `flatten()` tidak menelusuri isi `<a>`, padahal
+sumber membungkus sampul dengan tautan — jadi cover portrait yang benar-benar ada
+tidak pernah terlihat. Perbaikan: ambil **gambar potret pertama di seluruh artikel**
+termasuk yang berada di dalam tautan, dan hitung rasio dari dimensi gambar itu.
+Sekarang menghasilkan `m3.jpg` (rasio 0,704) untuk Monogatari dan cover WordPress
+(rasio 0,705) untuk Magical — sesuai artwork aslinya.
+
+**(3) Label tebal tidak terbaca.** Halaman menulis `<b>Penulis</b> : Nilai`, sehingga
+baris `Penulis` berakhir sebelum titik dua dan nilainya jatuh ke baris berikutnya.
+Pembaca label hanya tahu bentuk `Author:` dalam satu baris. Perbaikan: baris yang
+dimulai dengan `:` digabung kembali ke baris sebelumnya sebelum label dibaca.
+
+**(4) Novel yang dihapus bisa muncul kembali sebagai novel lain.** `Library.byId()`
+punya fallback "kalau id tidak ketemu, kembalikan novel pertama". Untuk novel yang
+baru dihapus, method itu mengembalikan buku lain, sehingga unduhan dan progres novel
+terhapus bisa terbaca sebagai milik buku yang salah. Ditemukan oleh tes skenario 10,
+bukan oleh review kode. Perbaikan: `byId()` mengembalikan `null`; pemanggil yang
+memang ingin "novel mana saja" memakai `first()`.
+
+**Bukti tes menangkap bug — uji mutasi.** Empat bug dikembalikan satu per satu:
+
+1. `textOf()` kembali memanggil `Element.text()` untuk semua elemen →
+   `theGenericParserAlsoReadsTheTwoBuiltInPages` gagal.
+2. `coverUrl()` kembali memakai gambar pertama → 
+   `aCatalogueInADifferentLayoutIsReadCompletely` gagal (banner terpilih sebagai cover).
+3. `byId()` kembali berfallback ke novel pertama →
+   `deletingFromTheShelfKeepsDownloadsAndProgress` gagal.
+4. Urutan pemeriksaan ekstensi dan garis miring ditukar (URL `...judul.html/`
+   ditolak lagi) → `onePageHasOneIdentityWhateverTheSpelling` gagal.
+
+Setelah dipulihkan, suite penuh **239 tes, 0 gagal**, dan penanda `MUTATION` di
+`app/src/main` berjumlah nol.
+
 ## Perbaikan bug
 
 ### BUG 1 (2.1) — Volume 1–4 tidak muncul
@@ -488,13 +627,52 @@ InsetStabilityTest > readerToolbarKeepsItsInsetAfterThemeChange FAILED
 13 tests completed, 11 failed
 ```
 
-Setelah perbaikan dipulihkan, seluruh **207/207** tes lulus dan suite dijalankan
+Setelah perbaikan dipulihkan, seluruh **207/207** tes lulus pada versi 2.8 dan suite dijalankan
 tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **207 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **239 pengujian** di 23 kelas,
+semuanya lulus:
 
+- **DynamicCatalogueTest** (8, parser generik + normalisasi URL) — sepuluh bentuk URL
+  yang tidak layak ditolak dengan pesan yang bisa dibaca; satu halaman menghasilkan
+  satu identitas untuk sembilan penulisan berbeda (`?m=1`, garis miring di akhir,
+  parameter pelacak, `www`, `http`, huruf besar, spasi di tepi, tanpa skema);
+  artikel biasa ditolak alih-alih disimpan sebagai novel kosong; halaman tanpa badan
+  artikel ditolak; katalog berformat berbeda (`entry-content`, heading `h4`, ordered
+  list, label tebal dengan titik dua terpisah) terbaca lengkap 6 chapter dalam 2
+  volume, urutan `Prolog → Chapter 1 → Chapter 2 → Illustrasi` benar walau sumber
+  menulis "Cahpter 2", cover memilih gambar potret di dalam tautan dan bukan banner
+  lebar, tautan menu/footer bukan chapter; parser generik yang sama juga membaca
+  kedua halaman novel bawaan (7 volume Monogatari, 13 volume Magical, Volume 14
+  tanpa chapter palsu).
+- **DynamicLibraryTest** (14, Room sungguhan) — tabel kosong di-seed dua novel
+  bawaan dengan metadata terverifikasi dan mode katalog masing-masing; membuka
+  perpustakaan berulang tidak menggandakan baris; novel valid tersimpan dengan id
+  dari slug URL dan ditambahkan di urutan akhir; URL yang sama dua kali ditolak
+  sebagai duplikat tanpa menimpa judul; pemeriksaan duplikat memakai URL
+  ternormalisasi; perpustakaan tetap utuh setelah database ditutup dan dibuka ulang
+  (tiga novel, judul, penulis, cover, dan dua paragraf sinopsis); Muat Ulang
+  memperbarui judul/genre/status tetapi tidak menghapus ilustrator, cover, atau
+  sinopsis yang tidak lagi dicantumkan halaman, serta tidak mengubah id, posisi,
+  progres, dan posisi gulir; mutasi satu novel tidak menyentuh progres novel lain;
+  hapus dari perpustakaan menyisakan unduhan dan progres; hapus beserta unduhan
+  hanya menghapus berkas novel itu sementara novel lain utuh; hapus unduhan saja
+  menyisakan novel dan progresnya; setelah satu novel dihapus, katalog dan progres
+  dua novel bawaan tetap bekerja dan katalog novel terhapus dilupakan; setiap kolom
+  yang disimpan kembali utuh lewat mapper; novel kosong ditolak.
+- **DynamicDownloadTest** (7, Robolectric) — novel hasil tambah lewat URL, bukan dua
+  novel bawaan: unduh satu chapter menyimpan `content.json` di folder ber-id slug
+  dan dua berkas gambar nyata; unduh satu volume menyelesaikan semua chapternya
+  dengan gambar identik tidak disimpan dua kali; mengunduh chapter yang sama dua
+  kali tidak menambah satu pun permintaan; berkas novel baru tidak tercampur dengan
+  novel bawaan (dan sebaliknya) walau isinya mirip; chapter tersimpan tetap terbuka
+  saat sumber dibuat tidak dapat dihubungi — teks tampil, tanpa satu pun permintaan,
+  dan tanpa pesan gagal; ilustrasi dibaca dari berkas lokal (`file:`), bukan URL, dan
+  sel gambar punya kotak nyata; urutan gambar di antara paragraf dipertahankan;
+  progres novel baru terpisah dari novel bawaan; berpindah ke chapter yang belum
+  diunduh saat offline menampilkan pesan jelas alih-alih layar kosong.
 - **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
   `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
   5/5/5/8/7/7/7 gambar sesuai sumber, urutan gambar sama dengan HTML asli,
@@ -745,3 +923,34 @@ gradle testDebugUnitTest assembleDebug
   diperbarui bersama; `VolumeCoversTableTest` akan gagal bila hanya salah satunya diubah.
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
+
+### Batasan parser generik (2.9) — diukur, bukan diperkirakan
+
+Parser generik **tidak** menjamin semua URL novel bisa ditambahkan. Yang benar-benar
+diuji hanya tiga bentuk halaman: dua halaman katalog Kaori Translation yang asli, dan
+satu fixture dengan tata letak berbeda (kontainer `entry-content`, heading `h4`,
+ordered list, label tebal). Selebihnya belum diuji sama sekali.
+
+Batasan yang pasti:
+
+- **Host.** Hanya `kaoritranslation.blogspot.com` yang diterima. Novel dari situs lain
+  ditolak dengan pesan, bukan dicoba-coba.
+- **Pola tautan.** Chapter harus berada di path post bertanggal `/20xx/xx/`. Katalog
+  yang menautkan halaman statis `/p/` tidak akan terbaca sebagai chapter.
+- **Chapter tanpa tautan.** Teks "Chapter 3" tanpa `<a>` tidak dibuatkan chapter; hanya
+  dihitung sebagai peringatan pada preview.
+- **Daftar yang dimuat JavaScript.** Halaman seperti ini menghasilkan pesan
+  "tidak ada tautan chapter yang dikenali" dan novel **tidak** disimpan.
+- **Volume.** Bila halaman tidak punya heading `Volume N` dan slug-nya tidak memuat
+  `volume-N`, semua chapter masuk satu kelompok "Volume lain". Volume yang hanya punya
+  cover tanpa tautan (seperti Volume 14 Magical★Explorer) tidak dibuatkan chapter palsu.
+- **Cover.** Bila tidak ada gambar potret sama sekali, cover jatuh ke gambar pertama dan
+  preview menandainya lewat peringatan "Cover tidak ditemukan" atau lewat tampilan
+  placeholder di kartu.
+- **Metadata.** Hanya baris berlabel yang dibaca. Halaman yang menulis metadata sebagai
+  kalimat bebas akan menghasilkan kolom kosong — dan itu ditampilkan apa adanya, bukan
+  ditebak.
+- **Belum diuji di perangkat.** Halaman Tambah Novel, dialog hapus dua opsi, dan menu
+  tiga titik hanya diverifikasi lewat Robolectric (pengukuran layout), bukan di layar
+  Android sungguhan. Tampilan akhir, kecepatan Glide memuat cover dari URL baru, dan
+  perilaku pada perangkat dengan notch/gesture bar masih perlu dicoba.

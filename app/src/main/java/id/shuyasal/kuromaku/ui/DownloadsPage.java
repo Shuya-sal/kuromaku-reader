@@ -98,6 +98,8 @@ public final class DownloadsPage {
     private final Listener listener;
     /** Chapter URL → readable label, taken from the live catalogue when available. */
     private final Map<String, String> labels = new LinkedHashMap<>();
+    /** Novels whose downloads are counted; supplied by the screen. */
+    private final List<Novel> novels = new ArrayList<>();
     private Jobs jobs;
 
     public DownloadsPage(Context context, Palette palette, OfflineStore store, Listener listener) {
@@ -119,14 +121,28 @@ public final class DownloadsPage {
         return this;
     }
 
+    /**
+     * Supplies the novels to total up.
+     *
+     * <p>The page used to read the two hardcoded novels; now the shelf is the
+     * user's own, so the caller hands over the novels it actually knows. A novel
+     * that was deleted from the shelf but still has files on disk is counted
+     * through {@link OfflineStore#novelsWithContent()} in
+     * {@link #totalStoredChapters()} so nothing is hidden from the storage total.
+     */
+    public DownloadsPage withNovels(List<Novel> shelf) {
+        this.novels.clear();
+        if (shelf != null) novels.addAll(shelf);
+        return this;
+    }
+
     /** Builds the whole page. There is always something to show. */
     public LinearLayout build() {
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setTag("downloads_content");
 
-        int chapters = 0;
-        for (Novel novel : Novels.all()) chapters += store.savedCount(novel.id);
+        int chapters = totalStoredChapters();
         long total = store.totalBytes();
 
         List<Job> active = jobs == null ? new ArrayList<Job>() : safe(jobs.active());
@@ -152,11 +168,34 @@ public final class DownloadsPage {
             return content;
         }
 
-        for (Novel novel : Novels.all()) {
+        for (Novel novel : novels) {
             if (store.savedCount(novel.id) == 0) continue;
             content.addView(novelSection(novel));
         }
         return content;
+    }
+
+    /**
+     * Chapters stored on this device, counted for every novel that owns files.
+     *
+     * <p>Deliberately reads the disk rather than only the shelf: a novel removed
+     * from the library can still have downloads, and its bytes would otherwise
+     * vanish from the storage total while occupying space.
+     */
+    int totalStoredChapters() {
+        int total = 0;
+        for (Novel novel : novels) total += store.savedCount(novel.id);
+        for (String id : store.novelsWithContent()) {
+            boolean counted = false;
+            for (Novel novel : novels) {
+                if (novel.id.equals(id)) {
+                    counted = true;
+                    break;
+                }
+            }
+            if (!counted) total += store.savedCount(id);
+        }
+        return total;
     }
 
     private static List<Job> safe(List<Job> jobs) {

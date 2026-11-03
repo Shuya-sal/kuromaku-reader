@@ -61,7 +61,9 @@ public class DownloadWorker extends Worker {
             chapters.add(new Chapter(label, label, urls.get(i), "", i, volume));
         }
 
-        final String title = id.shuyasal.kuromaku.data.Novels.byId(novelId).shortTitle();
+        id.shuyasal.kuromaku.data.Novel known =
+                id.shuyasal.kuromaku.data.Library.get(getApplicationContext()).byId(novelId);
+        final String title = known == null ? "Novel" : known.shortTitle();
         VolumeJob.Result result = VolumeJob.run(getApplicationContext(), novelId, volume, chapters,
                 this::isStopped, (finished, total) -> {
                     setProgressAsync(new Data.Builder()

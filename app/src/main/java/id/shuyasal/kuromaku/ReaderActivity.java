@@ -111,7 +111,13 @@ public class ReaderActivity extends AppCompatActivity {
         palette = Palette.of(prefs.theme());
 
         novelId = getIntent().getStringExtra(EXTRA_NOVEL);
-        if (novelId == null || novelId.isEmpty()) novelId = id.shuyasal.kuromaku.data.Novels.MONOGATARI;
+        if (novelId == null || novelId.isEmpty()) {
+            // No explicit novel: fall back to the first one on the shelf rather
+            // than a hardcoded id, which may have been removed by the user.
+            id.shuyasal.kuromaku.data.Novel first =
+                    id.shuyasal.kuromaku.data.Library.get(this).first();
+            novelId = first == null ? "" : first.id;
+        }
         // Progress, bookmarks and scroll offsets are stored per novel: two books
         // can have chapters with the same name without overwriting each other.
         prefs = prefs.scoped(novelId);

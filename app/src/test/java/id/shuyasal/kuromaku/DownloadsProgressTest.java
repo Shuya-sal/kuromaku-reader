@@ -202,7 +202,7 @@ public class DownloadsProgressTest {
 
     private LinearLayout page(Activity activity) {
         DownloadsPage page = new DownloadsPage(activity, Palette.of(Prefs.THEME_DARK),
-                OfflineStore.get(activity), listener()).withJobs(jobs());
+                OfflineStore.get(activity), listener()).withNovels(Novels.all()).withJobs(jobs()).withNovels(Novels.all());
         LinearLayout content = page.build();
         int width = activity.getResources().getDisplayMetrics().widthPixels;
         content.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),

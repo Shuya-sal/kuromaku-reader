@@ -74,81 +74,86 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.8 (APK)
+          name: Kuromaku Reader 2.9 (APK)
           body: |
-            Pembaca native untuk dua novel dari Kaori Translation:
-            *Monogatari no Kuromaku* dan *Magical★Explorer*.
+            Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
+            (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
+            lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-            * Versi: **2.8** (versionCode 28)
-            * **Download offline**: chapter dan seluruh volume bisa diunduh dan
-              dibaca tanpa internet, termasuk semua ilustrasi. Teks disimpan
-              terstruktur (JSON dengan urutan blok dan posisi gambar) dan setiap
-              ilustrasi disimpan sebagai file lokal di penyimpanan internal
-              aplikasi — bukan sekadar URL.
-            * **Status per chapter**: Belum diunduh, Mengunduh, Tersimpan, dan
-              Gagal dengan tombol **Coba lagi**. Chapter yang sudah tersimpan
-              langsung dibuka dari penyimpanan lokal tanpa menyentuh jaringan.
-            * **Download Semua per volume** berjalan berurutan dengan progres
-              "x dari y chapter", tombol **Batalkan**, dan chapter yang sudah
-              lengkap dilewati sehingga tidak ada unduhan ulang atau duplikasi.
-            * **WorkManager** untuk pekerjaan yang bertahan saat aplikasi
-              ditutup, dibatasi 2 pekerja paralel agar tidak membebani sumber,
-              retry dengan backoff eksponensial, notifikasi progres volume, dan
-              tidak ada polling.
-            * **Penulisan atomik**: setiap chapter ditulis ke berkas sementara
-              lalu di-rename, jadi unduhan yang terputus tidak pernah dianggap
-              selesai. Gambar dan konten divalidasi (HTTP 200, tipe gambar
-              nyata, dimensi terbaca, minimal satu blok teks) sebelum chapter
-              ditandai tersimpan.
-            * **Identifier stabil** dari id novel + URL chapter, dengan namespace
-              folder per novel sehingga data Monogatari dan Magical★Explorer
-              tidak pernah tercampur. Berkas sementara dan gambar yatim
-              dibersihkan agar tidak ada file tak terpakai.
-            * **Halaman Unduhan**: daftar novel dan volume yang tersimpan,
-              jumlah chapter, total penggunaan penyimpanan, tombol hapus
-              chapter/volume dengan konfirmasi. Menghapus unduhan **tidak**
-              menghapus progres membaca atau bookmark.
-            * **Reader Mode offline**: memakai konten lokal bila ada, pesan jelas
-              bila offline dan chapter belum diunduh, ilustrasi tetap tampil saat
-              mode pesawat, posisi gambar di antara paragraf dipertahankan, dan
-              Sebelumnya/Berikutnya tetap bekerja untuk chapter terunduh.
-            * Pembaruan katalog dari Kaori Translation tetap berjalan: unduhan
-              offline tidak menghalangi deteksi chapter baru, dan aplikasi tidak
-              mengunduh ulang otomatis saat dibuka.
-            * **Perbaikan bug halaman blank**: menekan ikon Unduhan dulu bisa
-              meninggalkan toolbar hidup dengan seluruh isi di bawahnya hilang.
-              Akarnya dua: (1) layar mengosongkan kontennya lebih dulu lalu baru
-              membangun halaman, sehingga exception apa pun saat membangun —
-              index unduhan rusak, status chapter yang gagal dibaca — menyisakan
-              layar kosong tanpa pesan; (2) perubahan status unduhan dikirim
-              langsung dari thread worker, jadi activity membangun ulang view di
-              luar main thread dan berhenti setengah jalan. Sekarang halaman
-              dibangun lengkap lebih dulu baru ditukar, kegagalan menampilkan
-              pesan + tombol Coba lagi (bukan layar kosong), dan semua notifikasi
-              status selalu dikirim di main thread.
-            * **Halaman Unduhan selalu berisi**: keadaan kosong menampilkan ikon
-              unduhan, "Belum ada chapter yang diunduh", keterangan "Pilih chapter
-              atau volume untuk dibaca secara offline", dan tombol **Lihat
-              Chapter**. Saat berjalan tampil judul novel + volume, "x dari y
-              chapter selesai", progress bar, status chapter yang sedang diunduh,
-              dan **Batalkan**. Saat gagal tampil alasannya dan **Coba Lagi**.
-            * **Navigasi Unduhan benar**: header berjudul "Unduhan", tombol Kembali
-              dan Back Android kembali ke **Detail Novel**, dan halaman detail
-              kembali seperti semula — cover, metadata, sinopsis, daftar volume,
-              serta posisi gulirnya tetap.
-            * **Konfirmasi sebelum mengunduh banyak chapter**: "Download Semua"
-              pada volume menyebut berapa chapter yang akan diunduh dan berapa
-              yang sudah tersimpan sebelum mulai. Download chapter tunggal dan
-              indikator status per chapter tetap seperti sebelumnya.
-            * 207 unit test lulus (23 di antaranya khusus navigasi dan status
-              halaman Unduhan), termasuk unduhan ulang tanpa duplikasi, resume
-              setelah batal, penulisan atomik, data dua novel tidak tercampur,
-              hapus unduhan tidak menghapus progres, pembacaan offline tanpa satu
-              pun request, notifikasi status di main thread, dan layar tidak
-              pernah kosong meski index unduhan rusak.
-            * Seluruh fitur 2.6 dipertahankan: header dengan WindowInsets yang
-              benar, tombol Kembali 48 dp, animasi 180–250 ms, dua novel,
-              cover per volume, tema, ukuran font, dan posisi gulir.
+            * Versi: **2.9** (versionCode 29)
+            * **Pengelolaan novel dinamis**: tombol **+ Tambah Novel** di halaman
+              Perpustakaan membuka halaman input URL. Aplikasi mengunduh halaman
+              katalog, membaca judul, cover, penulis, ilustrator, genre, status,
+              sinopsis, daftar volume dan chapter, lalu menampilkan **preview**
+              sebelum Tuan menekan **Simpan ke Perpustakaan**. Metadata yang tidak
+              tertulis di halaman sumber ditampilkan sebagai "Tidak tercantum di
+              halaman sumber" — tidak ada data yang dikarang.
+            * **Parser generik**: tidak bergantung pada dua novel yang ada. Tautan
+              chapter, prolog, epilog, afterword, dan ilustrasi dikenali dari teks
+              dan slug; volume diturunkan dari heading "Volume N", lalu dari teks
+              tautan, lalu dari slug. Chapter yang tidak dapat dipetakan dihitung
+              dan dilaporkan sebagai peringatan di preview. Parser khusus dua novel
+              lama tetap dipakai sebagai fallback.
+            * **Perpustakaan permanen (Room)**: novel disimpan di database, di-key
+              oleh URL katalog yang sudah dinormalisasi (`?m=1`, garis miring di
+              akhir, `www`, dan `http/https` disamakan), jadi URL yang sama tidak
+              pernah menjadi dua novel. Dua novel bawaan di-seed otomatis saat
+              database dibuat sehingga tidak hilang saat migrasi.
+            * **Menu tiga titik per kartu novel**: Buka Novel, Perbarui Novel, Hapus
+              dari Perpustakaan. Hapus menampilkan dialog dengan dua pilihan
+              terpisah — hapus dari perpustakaan saja (unduhan dan progres tetap),
+              atau hapus beserta unduhan offline dengan centang terpisah untuk
+              menghapus progres membaca. Menghapus satu novel tidak menyentuh novel
+              lain.
+            * **Muat Ulang tidak menimpa data**: judul, metadata, cover, dan
+              sinopsis yang baru hanya menimpa bila halaman benar-benar
+              mencantumkannya. Kolom yang kosong di halaman tidak menghapus nilai
+              tersimpan, dan id novel tidak pernah dihitung ulang dari judul
+              sehingga progres membaca tetap menempel.
+            * **Integrasi penuh**: novel hasil tambah mendukung Reader Mode, semua
+              ilustrasi, download chapter, download volume, pembacaan offline,
+              progres membaca, tema gelap/terang/sepia, ukuran teks, navigasi
+              chapter, dan pembaruan katalog — bukan sekadar daftar bookmark URL
+              atau WebView.
+            * **Refusal yang bisa dibaca**: URL bukan halaman artikel, halaman
+              beranda, halaman label/feed, dan artikel biasa yang bukan katalog
+              ditolak dengan pesan jelas; novel kosong tidak pernah disimpan.
+            * **Bug yang diperbaiki di versi ini** (ditemukan lewat probe parser,
+              bukan dugaan): (1) pembacaan teks menggandakan isi satu kali per
+              tingkat elemen, sehingga genre terbaca "Genre" dan sinopsis 10
+              paragraf runtuh jadi satu blok; (2) cover memilih banner lebar
+              pertama alih-alih sampul, dan gambar yang dibungkus tautan — cara
+              sumber menaruh cover — tidak terbaca sama sekali; (3) label tebal
+              seperti "Penulis :" tidak terbaca karena baris dipecah sebelum titik
+              dua; (4) URL dengan garis miring di akhir ditolak; (5) pencarian
+              novel berdasarkan id punya fallback "novel pertama", sehingga novel
+              yang baru dihapus bisa muncul kembali sebagai novel lain sambil
+              membawa progres dan unduhannya.
+            * **239 unit test lulus**, 0 gagal (23 kelas). Termasuk: URL tidak valid
+              ditolak, satu halaman satu identitas untuk sembilan bentuk penulisan
+              URL, artikel biasa ditolak tanpa membuat novel kosong, katalog
+              berformat berbeda (entry-content, heading h4, ordered list, label
+              tebal, "Cahpter 2") terbaca lengkap, duplikat tidak menambah baris,
+              perpustakaan tetap ada setelah database ditutup dan dibuka ulang,
+              Muat Ulang tidak menghapus metadata/progres, hapus dua opsi hanya
+              menyentuh satu novel, download dan baca offline novel hasil tambah
+              beserta ilustrasinya, serta dua novel lama tetap berfungsi.
+            * Uji mutasi: lima bug di atas dikembalikan satu per satu dan setiap
+              kali ada tes yang gagal — tes ini terbukti menangkap bug, bukan
+              sekadar hijau.
+            * Seluruh fitur 2.8 dipertahankan: download offline per chapter/volume,
+              WorkManager, penulisan atomik, halaman Unduhan dengan status
+              Belum/Mengunduh/Tersimpan/Gagal, header dengan WindowInsets yang
+              benar, animasi 180–250 ms, dan dua novel bawaan.
+
+            **Batasan yang perlu diketahui**: parser generik hanya menguji halaman
+            Kaori Translation; hanya host `kaoritranslation.blogspot.com` yang
+            diterima; tautan chapter harus berpola post bertanggal `/20xx/xx/`;
+            katalog yang menautkan halaman statis `/p/` atau yang daftar chapternya
+            dimuat JavaScript akan ditolak dengan pesan, bukan ditebak. Novel
+            dengan tata letak jauh berbeda belum tentu terbaca — preview akan
+            mengatakannya. Verifikasi UI masih lewat Robolectric: halaman Tambah
+            Novel dan dialog hapus belum dilihat di layar perangkat sungguhan.
 
             APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
             Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.

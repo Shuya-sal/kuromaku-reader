@@ -30,7 +30,19 @@ public final class Novels {
     private Novels() {
     }
 
-    /** Every novel, in library order. */
+    /**
+     * The novels that ship with the app, in their original order.
+     *
+     * <p>These are <em>seeds</em>, not the library: on first launch they are
+     * written into the database, and from then on the database is the source of
+     * truth so the user can add and remove novels. Their metadata is verified from
+     * the source pages, so they never depend on the network to appear.
+     */
+    public static List<Novel> builtIns() {
+        return ALL;
+    }
+
+    /** Alias kept for older callers; returns the built-in seeds. */
     public static List<Novel> all() {
         return ALL;
     }
@@ -88,7 +100,8 @@ public final class Novels {
                 3,
                 Novel.CATALOG_FEED,
                 "monogatari",
-                "Monogatari no Kuromaku");
+                "Monogatari no Kuromaku",
+                true);
     }
 
     /**
@@ -141,6 +154,7 @@ public final class Novels {
                 2,
                 Novel.CATALOG_LANDING,
                 "ln-magical-explorer-",
-                "");
+                "",
+                true);
     }
 }

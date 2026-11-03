@@ -15,6 +15,20 @@ public final class Novel {
     /** Catalogue comes from the chapter links listed on the landing page. */
     public static final int CATALOG_LANDING = 1;
 
+    /**
+     * Catalogue discovered generically: the chapter links and volume headings are
+     * read from whatever structure the page happens to use, without a per-novel
+     * slug prefix. This is how a novel the user adds by URL is read.
+     */
+    public static final int CATALOG_DISCOVERED = 2;
+
+    /**
+     * True for the two novels that ship with the app. A built-in novel can still
+     * be removed from the library, but the app knows its verified metadata
+     * without ever fetching it, so it does not depend on the network to appear.
+     */
+    public final boolean builtIn;
+
     /** Stable id used for preferences, caching and cover lookup. */
     public final String id;
     /** Romanised title as used by the source. */
@@ -53,7 +67,18 @@ public final class Novel {
                  String translation, String sourceLabelUrl, String landingUrl,
                  String coverUrl, float coverRatio, String[] synopsis, int synopsisPreview,
                  int catalogMode, String slugPrefix, String feedLabel) {
+        this(id, title, titleJp, fullTitle, author, illustrator, genres, status, translation,
+                sourceLabelUrl, landingUrl, coverUrl, coverRatio, synopsis, synopsisPreview,
+                catalogMode, slugPrefix, feedLabel, false);
+    }
+
+    public Novel(String id, String title, String titleJp, String fullTitle,
+                 String author, String illustrator, String genres, String status,
+                 String translation, String sourceLabelUrl, String landingUrl,
+                 String coverUrl, float coverRatio, String[] synopsis, int synopsisPreview,
+                 int catalogMode, String slugPrefix, String feedLabel, boolean builtIn) {
         this.id = id;
+        this.builtIn = builtIn;
         this.title = title;
         this.titleJp = titleJp;
         this.fullTitle = fullTitle;

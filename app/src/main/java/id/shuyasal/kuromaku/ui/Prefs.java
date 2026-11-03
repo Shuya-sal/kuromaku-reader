@@ -170,4 +170,38 @@ public final class Prefs {
         prefs.edit().putStringSet(key(KEY_EXPANDED), expanded).apply();
         return nowOpen;
     }
+
+    /**
+     * Erases everything stored for this novel: progress, bookmarks, scroll
+     * positions, the last chapter and the accordion state.
+     *
+     * <p>Only this novel's keys are touched, so deleting one novel can never
+     * disturb another's reading position. This is what the "hapus progres
+     * membaca" checkbox on the delete dialog calls — and what nothing else calls:
+     * removing a novel from the shelf, or deleting its downloads, leaves progress
+     * intact on purpose.
+     */
+    public void clearNovelData() {
+        if (prefix.isEmpty()) return;
+        java.util.Map<String, ?> all = prefs.getAll();
+        SharedPreferences.Editor editor = prefs.edit();
+        int removed = 0;
+        for (String stored : all.keySet()) {
+            if (!stored.startsWith(prefix)) continue;
+            editor.remove(stored);
+            removed++;
+        }
+        if (removed > 0) editor.apply();
+    }
+
+    /** True when this scoped store holds any reading state for its novel. */
+    public boolean hasNovelData() {
+        if (prefix.isEmpty()) return false;
+        String last = prefs.getString(key(KEY_LAST_URL), "");
+        if (last != null && !last.isEmpty()) return true;
+        for (String stored : prefs.getAll().keySet()) {
+            if (stored.startsWith(prefix)) return true;
+        }
+        return false;
+    }
 }

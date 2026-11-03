@@ -32,13 +32,16 @@ import java.util.Map;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
+import id.shuyasal.kuromaku.data.Library;
 import id.shuyasal.kuromaku.data.Novel;
-import id.shuyasal.kuromaku.data.Novels;
 import id.shuyasal.kuromaku.net.CatalogLoader;
+import id.shuyasal.kuromaku.net.NovelUrl;
+import id.shuyasal.kuromaku.parser.NovelDiscovery;
 import id.shuyasal.kuromaku.offline.DownloadQueue;
 import id.shuyasal.kuromaku.offline.DownloadStatusStore;
 import id.shuyasal.kuromaku.offline.OfflineStore;
 import id.shuyasal.kuromaku.data.Volume;
+import id.shuyasal.kuromaku.ui.AddNovelPage;
 import id.shuyasal.kuromaku.ui.DownloadsPage;
 import id.shuyasal.kuromaku.ui.LibraryPage;
 import id.shuyasal.kuromaku.ui.Motion;
@@ -94,6 +97,12 @@ public class MainActivity extends AppCompatActivity {
     private Novel selectedNovel;
     /** True while the "Unduhan" page is open instead of the library list. */
     private boolean showingDownloads;
+    /** True while the "Tambah Novel" page is open. */
+    private boolean showingAdd;
+    /** State of the add page: typed URL, loading flag, error, preview. */
+    private AddNovelPage.State addState = new AddNovelPage.State();
+    /** The user's shelf: database-backed, no longer a hardcoded list. */
+    private Library library;
     /** Scroll offset of the detail page, restored when coming back from Unduhan. */
     private int detailScrollY;
     private boolean loading;
@@ -131,6 +140,12 @@ public class MainActivity extends AppCompatActivity {
         // of an empty screen with a spinner.
         render();
         loadLibraries(false);
+    }
+
+    /** Reads the shelf. Synchronous on purpose: a handful of rows, no flash. */
+    private Library library() {
+        if (library == null) library = Library.get(this);
+        return library;
     }
 
     private void buildShell() {
@@ -278,7 +293,7 @@ public class MainActivity extends AppCompatActivity {
     private String subtitleText() {
         // The novel's own name only; the application name is not repeated here.
         if (selectedNovel != null) return selectedNovel.title;
-        return Novels.all().size() + " novel · Kaori Translation";
+        return library().all().size() + " novel · Kaori Translation";
     }
 
     private void applyInsetsListener() {
@@ -356,7 +371,7 @@ public class MainActivity extends AppCompatActivity {
                 : "Memuat ulang " + selectedNovel.title + "…");
 
         new Thread(() -> {
-            for (Novel novel : Novels.all()) {
+            for (Novel novel : library().all()) {
                 try {
                     CatalogLoader.Loaded loaded = CatalogLoader.load(novel);
                     Session.setCatalog(loaded.catalog);
@@ -379,7 +394,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean allCatalogsCached() {
-        for (Novel novel : Novels.all()) {
+        for (Novel novel : library().all()) {
             if (Session.catalog(novel.id) == null) return false;
         }
         return true;
@@ -404,11 +419,15 @@ public class MainActivity extends AppCompatActivity {
         int keepScroll = pendingScrollY > 0 ? pendingScrollY : scroller.getScrollY();
 
         boolean downloads = showingDownloads;
-        backButton.setVisibility(selectedNovel == null && !downloads
+        boolean adding = showingAdd;
+        backButton.setVisibility(selectedNovel == null && !downloads && !adding
                 ? View.GONE : View.VISIBLE);
         titleText.setText(downloads ? "Unduhan"
+                : adding ? "Tambah Novel"
                 : selectedNovel == null ? "Perpustakaan" : "Detail Novel");
-        subtitleView.setText(downloads ? "Tersimpan di perangkat ini" : subtitleText());
+        subtitleView.setText(downloads ? "Tersimpan di perangkat ini"
+                : adding ? "Dari halaman katalog Kaori Translation"
+                : subtitleText());
 
         View page;
         try {
@@ -441,6 +460,7 @@ public class MainActivity extends AppCompatActivity {
     /** Name of the page currently open, for error messages. */
     private String currentPageName() {
         if (showingDownloads) return "Unduhan";
+        if (showingAdd) return "Tambah Novel";
         if (selectedNovel != null) return "Detail Novel";
         return "Perpustakaan";
     }
@@ -456,8 +476,14 @@ public class MainActivity extends AppCompatActivity {
         Runnable fault = pageFault;
         if (fault != null) fault.run();
         if (showingDownloads) return buildDownloadsPage();
+        if (showingAdd) {
+            return new AddNovelPage(this, palette, addState, addListener()).build();
+        }
         if (selectedNovel == null) {
-            return new NovelListPage(this, prefs, palette, Novels.all(), this::showNovel).build();
+            return new NovelListPage(this, prefs, palette, library().all(), this::showNovel)
+                    .withMenu(novelMenu())
+                    .withAddNovel(this::showAddNovel)
+                    .build();
         }
         Catalog catalog = Session.catalog(selectedNovel.id);
         // Scoped prefs: the continue button and chapter progress on this page
@@ -604,6 +630,17 @@ public class MainActivity extends AppCompatActivity {
      * nothing the user was looking at disappears.
      */
     private void goBackOneLevel() {
+        if (showingAdd) {
+            Motion.exitToRight(pageHost, () -> {
+                showingAdd = false;
+                addState = new AddNovelPage.State();
+                pendingScrollY = 0;
+                render();
+                scroller.post(() -> scroller.scrollTo(0, 0));
+                Motion.enterFromLeft(pageHost);
+            });
+            return;
+        }
         if (showingDownloads && selectedNovel != null) {
             closeDownloads();
             return;
@@ -624,6 +661,361 @@ public class MainActivity extends AppCompatActivity {
     /** Returns to the library list: the detail page slides right and fades out. */
     private void showLibrary() {
         goBackOneLevel();
+    }
+
+    // ------------------------------------------------------- adding and removing
+
+    /** Opens the "Tambah Novel" page with a clean state. */
+    private void showAddNovel() {
+        if (showingAdd) return;
+        keepScrollHere();
+        addState = new AddNovelPage.State();
+        addState.url = "";
+        showingAdd = true;
+        pendingScrollY = 0;
+        render();
+        scroller.post(() -> scroller.scrollTo(0, 0));
+        Motion.enterFromRight(pageHost);
+    }
+
+    /** Keeps what the user typed when the page is rebuilt for loading/error/preview. */
+    private void repaintAddPage(boolean keepScroll) {
+        if (keepScroll) keepScrollHere();
+        render();
+    }
+
+    private AddNovelPage.Listener addListener() {
+        return new AddNovelPage.Listener() {
+            @Override
+            public void onFetch(String url) {
+                startInspect(url);
+            }
+
+            @Override
+            public void onRetry() {
+                startInspect(addState.url);
+            }
+
+            @Override
+            public void onSave() {
+                savePreview();
+            }
+
+            @Override
+            public void onCancelPreview() {
+                addState = new AddNovelPage.State();
+                repaintAddPage(false);
+                scroller.post(() -> scroller.scrollTo(0, 0));
+            }
+        };
+    }
+
+    /**
+     * Reads a catalogue URL in the background and turns the result into a preview.
+     *
+     * <p>Three things are decided before any network call: the text must be a Kaori
+     * Translation article page (so a random site is refused with a readable reason
+     * rather than a mystery timeout), the URL is normalised so {@code ?m=1} and a
+     * trailing slash cannot create a second novel, and an already-shelved URL is
+     * reported as a duplicate instead of being fetched again.
+     */
+    private void startInspect(String rawUrl) {
+        final String normalised;
+        try {
+            normalised = NovelUrl.normalize(rawUrl);
+        } catch (NovelUrl.Invalid error) {
+            addState.url = rawUrl == null ? "" : rawUrl.trim();
+            addState.loading = false;
+            addState.preview = null;
+            addState.error = error.getMessage();
+            addState.duplicate = false;
+            repaintAddPage(false);
+            return;
+        }
+
+        addState.url = normalised;
+        addState.loading = true;
+        addState.error = "";
+        addState.preview = null;
+        addState.duplicate = false;
+        repaintAddPage(false);
+
+        new Thread(() -> {
+            Novel existing = library().byUrl(normalised);
+            if (existing != null) {
+                main.post(() -> {
+                    addState.loading = false;
+                    addState.duplicate = true;
+                    addState.error = "";
+                    addState.preview = previewOf(existing);
+                    repaintAddPage(false);
+                });
+                return;
+            }
+            try {
+                NovelDiscovery.Result result = CatalogLoader.inspect(normalised);
+                main.post(() -> {
+                    addState.loading = false;
+                    addState.error = "";
+                    addState.preview = result;
+                    addState.duplicate = library().byUrl(normalised) != null;
+                    repaintAddPage(false);
+                    scroller.post(() -> scroller.scrollTo(0, 0));
+                });
+            } catch (Exception error) {
+                final String reason = error.getMessage() == null
+                        ? error.getClass().getSimpleName() : error.getMessage();
+                main.post(() -> {
+                    addState.loading = false;
+                    addState.preview = null;
+                    addState.error = reason;
+                    repaintAddPage(false);
+                });
+            }
+        }).start();
+    }
+
+    /**
+     * Preview for a novel that is already on the shelf.
+     *
+     * <p>The stored metadata is shown instead of an empty page, so the user sees
+     * which book they already have. Its catalogue is read from the session copy
+     * when one is loaded, without troubling the network again.
+     */
+    private NovelDiscovery.Result previewOf(Novel existing) {
+        Catalog cached = Session.catalog(existing.id);
+        java.util.List<Volume> volumes = cached == null
+                ? new ArrayList<Volume>() : cached.volumes;
+        return NovelDiscovery.fromStored(existing, volumes);
+    }
+
+    /** Writes the previewed novel to the shelf. */
+    private void savePreview() {
+        NovelDiscovery.Result preview = addState.preview;
+        if (preview == null) return;
+
+        String id = NovelUrl.id(preview.sourceUrl);
+        Novel novel = new Novel(
+                id,
+                preview.title,
+                preview.titleJp,
+                preview.fullTitle,
+                preview.author,
+                preview.illustrator,
+                preview.genres,
+                preview.status.isEmpty() ? "Tidak dicantumkan di halaman sumber" : preview.status,
+                "Kaori Translation",
+                preview.sourceUrl,
+                preview.sourceUrl,
+                preview.coverUrl,
+                preview.coverRatio,
+                preview.synopsis,
+                Math.min(2, Math.max(1, preview.synopsis.length)),
+                Novel.CATALOG_DISCOVERED,
+                "",
+                "",
+                false);
+
+        Library.Result result = library().add(novel);
+        if (result.status == Library.Added.DUPLICATE) {
+            addState.duplicate = true;
+            Toast.makeText(this, result.message, Toast.LENGTH_LONG).show();
+            repaintAddPage(false);
+            return;
+        }
+        if (result.status == Library.Added.REFUSED) {
+            addState.error = result.message;
+            repaintAddPage(false);
+            return;
+        }
+
+        // The catalogue that was just parsed is kept, so opening the novel works
+        // immediately even without a second fetch.
+        Session.setCatalog(new Catalog(result.novel.id, preview.volumes));
+        showingAdd = false;
+        addState = new AddNovelPage.State();
+        failed.clear();
+        pendingScrollY = 0;
+        render();
+        scroller.post(() -> scroller.scrollTo(0, 0));
+        Toast.makeText(this, "“" + result.novel.title + "” ditambahkan ke perpustakaan.",
+                Toast.LENGTH_LONG).show();
+    }
+
+    /** Three-dot menu on a library card. */
+    private NovelListPage.MenuListener novelMenu() {
+        return new NovelListPage.MenuListener() {
+            @Override
+            public void onOpenNovel(Novel novel) {
+                showNovel(novel);
+            }
+
+            @Override
+            public void onRefreshNovel(Novel novel) {
+                refreshNovel(novel);
+            }
+
+            @Override
+            public void onDeleteNovel(Novel novel) {
+                confirmDeleteNovel(novel);
+            }
+        };
+    }
+
+    /**
+     * Refreshes one novel: re-reads its catalogue and its metadata, then updates
+     * the row.
+     *
+     * <p>The refresh never replaces identity: the stored id, URL and library
+     * position stay as they are, and an empty field from the page cannot erase a
+     * value that is already known. That is what keeps reading progress attached to
+     * the same novel.
+     */
+    private void refreshNovel(Novel novel) {
+        if (novel == null) return;
+        Toast.makeText(this, "Memperbarui " + novel.title + "…", Toast.LENGTH_SHORT).show();
+
+        new Thread(() -> {
+            String problem = "";
+            NovelDiscovery.Result preview = null;
+            try {
+                CatalogLoader.Loaded loaded = CatalogLoader.load(novel);
+                Session.setCatalog(loaded.catalog);
+                if (loaded.warning != null) problem = loaded.warning;
+                // The catalogue read already fetched the page; the discovery result
+                // rides along so a refresh costs exactly one request, never two.
+                preview = loaded.discovery;
+            } catch (Exception error) {
+                problem = error.getMessage() == null
+                        ? error.getClass().getSimpleName() : error.getMessage();
+            }
+
+            final String reason = problem;
+            final NovelDiscovery.Result metadata = preview;
+            main.post(() -> {
+                if (metadata != null) {
+                    library().updateMetadata(novelFrom(novel, metadata));
+                }
+                if (!reason.isEmpty()) {
+                    failed.clear();
+                    failed.add(novel.title + ": " + reason);
+                }
+                keepScrollHere();
+                render();
+            });
+        }).start();
+    }
+
+    /** Stored novel updated with whatever the page printed; empty fields are kept. */
+    private Novel novelFrom(Novel stored, NovelDiscovery.Result preview) {
+        return new Novel(
+                stored.id,
+                preview.title.isEmpty() ? stored.title : preview.title,
+                preview.titleJp.isEmpty() ? stored.titleJp : preview.titleJp,
+                preview.fullTitle.isEmpty() ? stored.fullTitle : preview.fullTitle,
+                preview.author.isEmpty() ? stored.author : preview.author,
+                preview.illustrator.isEmpty() ? stored.illustrator : preview.illustrator,
+                preview.genres.isEmpty() ? stored.genres : preview.genres,
+                stored.status,
+                stored.translation,
+                stored.sourceLabelUrl,
+                stored.landingUrl,
+                preview.coverUrl.isEmpty() ? stored.coverUrl : preview.coverUrl,
+                preview.coverRatio > 0 ? preview.coverRatio : stored.coverRatio,
+                preview.synopsis.length > 0 ? preview.synopsis : stored.synopsis,
+                stored.synopsisPreview,
+                stored.catalogMode,
+                stored.slugPrefix,
+                stored.feedLabel,
+                stored.builtIn);
+    }
+
+    /**
+     * Delete dialog with the two documented choices.
+     *
+     * <p>Two independent checkboxes, because the user asked for them separately:
+     * removing the shelf entry always keeps downloads and progress unless the
+     * boxes say otherwise, and the progress checkbox only applies when the
+     * downloads are being removed too.
+     */
+    private void confirmDeleteNovel(Novel novel) {
+        if (novel == null) return;
+        final OfflineStore store = OfflineStore.get(this);
+        final int stored = store.savedCount(novel.id);
+        final String size = OfflineStore.formatSize(store.bytesOf(novel.id));
+
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setTag("delete_novel_dialog");
+        box.setPadding(Ui.dp(this, 20), Ui.dp(this, 6), Ui.dp(this, 20), 0);
+
+        TextView message = Ui.label(this, "“" + novel.title + "” akan dihapus dari "
+                + "perpustakaan. Pilih apa yang ikut dihapus:", 13, palette.text);
+        message.setTag("delete_novel_message");
+        box.addView(message);
+
+        final android.widget.CheckBox removeOffline = new android.widget.CheckBox(this);
+        removeOffline.setText("Hapus juga unduhan offline ("
+                + (stored == 0 ? "tidak ada unduhan" : stored + " chapter · " + size) + ")");
+        removeOffline.setTag("delete_novel_offline");
+        removeOffline.setTextColor(palette.text);
+        removeOffline.setTextSize(12);
+        removeOffline.setChecked(false);
+        removeOffline.setEnabled(stored > 0);
+        removeOffline.setMinHeight(Ui.dp(this, Ui.TOUCH_DP));
+        box.addView(removeOffline);
+
+        final android.widget.CheckBox removeProgress = new android.widget.CheckBox(this);
+        removeProgress.setText("Hapus juga progres membaca dan bookmark");
+        removeProgress.setTag("delete_novel_progress");
+        removeProgress.setTextColor(palette.text);
+        removeProgress.setTextSize(12);
+        removeProgress.setChecked(false);
+        removeProgress.setMinHeight(Ui.dp(this, Ui.TOUCH_DP));
+        box.addView(removeProgress);
+
+        TextView keep = Ui.label(this,
+                "Jika tidak dicentang, unduhan dan progres membaca tetap tersimpan di "
+                        + "perangkat dan tidak mengganggu novel lain.", 11, palette.muted);
+        keep.setPadding(0, Ui.dp(this, 4), 0, Ui.dp(this, 8));
+        box.addView(keep);
+
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Hapus novel?")
+                .setView(box)
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Hapus", (dialog, which) ->
+                        deleteNovel(novel, removeOffline.isChecked(), removeProgress.isChecked()))
+                .show();
+    }
+
+    /**
+     * Performs the deletion the user chose.
+     *
+     * <p>Order matters: the shelf row is removed last, so a failure while deleting
+     * files leaves the novel visible and retryable instead of silently losing the
+     * only pointer to its content. Nothing here touches another novel: the offline
+     * store is namespaced per novel and the preferences are scoped per novel.
+     */
+    private void deleteNovel(Novel novel, boolean offline, boolean progress) {
+        if (offline) DownloadQueue.deleteNovel(this, novel);
+        if (progress) prefs.scoped(novel.id).clearNovelData();
+        library().remove(novel.id);
+        Session.forget(novel.id);
+
+        if (selectedNovel != null && selectedNovel.id.equals(novel.id)) {
+            selectedNovel = null;
+        }
+        failed.clear();
+        pendingScrollY = 0;
+        render();
+        scroller.post(() -> scroller.scrollTo(0, 0));
+
+        String detail = offline
+                ? (progress ? " beserta unduhan dan progres membaca." : " beserta unduhannya.")
+                : (progress ? " beserta progres membaca." : "; unduhan dan progres tetap tersimpan.");
+        Toast.makeText(this, "“" + novel.title + "” dihapus dari perpustakaan" + detail,
+                Toast.LENGTH_LONG).show();
     }
 
     // --------------------------------------------------------------- offline UI
@@ -756,7 +1148,7 @@ public class MainActivity extends AppCompatActivity {
     /** Builds the "Unduhan" page with real chapter labels where the catalogue has them. */
     private View buildDownloadsPage() {
         Map<String, String> labels = new LinkedHashMap<>();
-        for (Novel novel : Novels.all()) {
+        for (Novel novel : library().all()) {
             Catalog catalog = Session.catalog(novel.id);
             if (catalog == null) continue;
             for (Chapter chapter : catalog.flat()) labels.put(chapter.url, chapter.label);
@@ -839,7 +1231,7 @@ public class MainActivity extends AppCompatActivity {
                                     R.anim.kuromaku_exit_left);
                         }
                     }
-                }).withLabels(labels).withJobs(downloadJobs()).build();
+                }).withLabels(labels).withJobs(downloadJobs()).withNovels(library().all()).build();
     }
 
     /**
@@ -865,7 +1257,7 @@ public class MainActivity extends AppCompatActivity {
     private List<DownloadsPage.Job> jobsOf(boolean active) {
         List<DownloadsPage.Job> jobs = new ArrayList<>();
         OfflineStore store = OfflineStore.get(this);
-        for (Novel novel : Novels.all()) {
+        for (Novel novel : library().all()) {
             Catalog catalog = Session.catalog(novel.id);
             if (catalog == null) continue;
             for (Volume volume : catalog.volumes) {

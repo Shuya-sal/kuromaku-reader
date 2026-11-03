@@ -39,6 +39,18 @@ public final class Session {
         }
     }
 
+    /**
+     * Session catalogues are per novel; forgetting one is what happens when that
+     * novel leaves the shelf, so a later open can never walk into stale chapters.
+     */
+    public static void forget(String novelId) {
+        if (novelId == null) return;
+        synchronized (CATALOGS) {
+            CATALOGS.remove(novelId);
+            if (novelId.equals(active)) active = null;
+        }
+    }
+
     public static void clear() {
         synchronized (CATALOGS) {
             CATALOGS.clear();
