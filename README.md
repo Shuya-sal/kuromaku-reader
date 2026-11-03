@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.6
+# Kuromaku Reader 2.7
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -24,6 +24,16 @@ ikon, dan animasi navigasi 180–250 ms yang menghormati pengaturan
 Versi 2.6 memperbaiki **BUG status bar**: header bertabrakan dengan jam setelah
 tema diganti terang → gelap. Akarnya ada di pengelolaan `WindowInsets`, bukan di
 ukuran padding. Detail lengkap di bagian **BUG 4 (2.6)**.
+
+Versi 2.7 menambahkan **Download Offline**: chapter dan seluruh volume dapat
+diunduh lebih dulu, lalu dibaca tanpa internet termasuk semua ilustrasi. Teks
+disimpan sebagai JSON terstruktur yang mempertahankan urutan blok dan posisi
+gambar, sedangkan setiap ilustrasi disimpan sebagai file di penyimpanan internal
+aplikasi. Unduhan berjalan lewat **WorkManager** (bertahan saat aplikasi ditutup,
+maksimal 2 pekerja paralel, retry backoff), ditulis secara **atomik**, dan
+diverifikasi sebelum chapter ditandai tersimpan. Ada halaman **Unduhan** dengan
+jumlah chapter, ukuran penyimpanan, serta hapus per chapter/volume — tanpa
+menyentuh progres membaca. Detail di bagian **Fitur Download Offline (2.7)**.
 
 ## Fitur (baru di 2.5)
 
@@ -147,6 +157,75 @@ ukuran padding. Detail lengkap di bagian **BUG 4 (2.6)**.
 - Kegagalan feed menyebut halaman dan `start-index` yang gagal, bukan pesan generik.
 - Crawl yang tidak lengkap tetap menampilkan daftar, dengan peringatan "Hanya X dari Y postingan".
 - Aplikasi **tidak** pernah diam-diam beralih menampilkan website penuh.
+
+## Fitur Download Offline (2.7)
+
+Pengguna dapat mengunduh chapter satu per satu atau seluruh volume, lalu membaca
+tanpa koneksi. Ilustrasi ikut tersimpan, jadi chapter tetap utuh di mode pesawat.
+
+### Format penyimpanan
+
+Semua data berada di penyimpanan internal aplikasi (`getFilesDir()/offline`) dan
+di-namespace per novel, sehingga Monogatari dan Magical★Explorer tidak pernah
+tercampur:
+
+```
+offline/
+  <novelId>/
+    chapters/
+      <hash-url>.json      teks terstruktur + daftar gambar
+    images/
+      <hash-gambar>.<ext>  berkas gambar asli
+```
+
+- **Identifier stabil**: `sha256(novelId + "\n" + urlChapter)` dipotong 32 hex.
+  URL chapter adalah identitas chapter di sumber, jadi unduhan lama tetap
+  dikenali walau katalog dimuat ulang atau nomor volume berubah.
+- **Teks tidak disimpan sebagai HTML**. JSON menyimpan daftar blok berurutan:
+  `type` (`title`/`paragraph`/`image`), `text`, serta untuk gambar `url` asli,
+  `path` berkas lokal, dan `width`/`height`. Urutan blok adalah urutan baca, jadi
+  posisi gambar di antara paragraf tetap sama seperti di sumber.
+- **Gambar bukan URL**. Setiap ilustrasi diunduh ke berkas sendiri. Saat membaca
+  offline, `Block.imageSource()` mengembalikan path file, bukan URL, sehingga
+  tidak ada permintaan jaringan sama sekali. Berkas gambar yang sama dipakai
+  beberapa chapter hanya disimpan sekali (`images/` bersifat content-addressed
+  per hash URL gambar).
+- **Penulisan atomik**. JSON ditulis ke `<nama>.json.tmp`, di-`fsync`, lalu
+  di-`rename` menjadi `<nama>.json`. Chapter hanya dianggap tersimpan bila berkas
+  final ada dan bisa diparse, jadi unduhan yang terputus tidak pernah tampil
+  sebagai selesai.
+- **Validasi sebelum menandai tersimpan**: HTTP 200, `Content-Type` gambar,
+  signature JPEG/PNG/GIF/WebP yang cocok, dimensi terbaca lewat `BitmapFactory`,
+  dan minimal satu blok teks. Gambar yang gagal validasi tidak disimpan.
+- **Pembersihan**: berkas `.tmp` sisa dan gambar tanpa rujukan dibuang saat
+  penyimpanan diakses, sehingga tidak ada duplikasi atau file tak terpakai.
+- **Hapus unduhan tidak menghapus progres**. Progres baca dan bookmark tetap di
+  `SharedPreferences` (`Prefs`) dengan kunci per novel, terpisah dari berkas
+  offline.
+
+### Antrean dan batas beban sumber
+
+- **WorkManager** menjalankan pekerjaan, jadi unduhan lanjut walau aplikasi
+  ditutup, dan berhenti bila proses dimatikan sistem tanpa merusak data
+  (penulisan atomik).
+- Maksimal **2 pekerja paralel** (`DownloadQueue.MAX_PARALLEL`) agar situs sumber
+  tidak dibanjiri permintaan.
+- Retry memakai **backoff eksponensial** dari WorkManager. Tidak ada polling dan
+  tidak ada pengulangan permintaan tanpa sebab.
+- Volume berjalan **berurutan** chapter demi chapter, menampilkan `x dari y
+  chapter`, dan menyediakan **Batalkan** yang menghentikan pekerjaan secara
+  kooperatif (chapter yang sedang ditulis diselesaikan atau dibatalkan bersih).
+- Chapter yang sudah tersimpan **dilewati**, jadi menekan Download Semua lagi
+  hanya mengunduh yang belum ada.
+
+### Reader Mode offline
+
+- Reader memeriksa penyimpanan lokal lebih dulu. Bila ada, konten dibaca dari
+  berkas dan **tidak ada satu pun permintaan jaringan**.
+- Bila tidak ada internet dan chapter belum diunduh, Reader menampilkan pesan
+  jelas beserta tombol coba lagi dan tautan ke sumber asli — bukan layar kosong.
+- Ukuran font, spasi baris, tema, scrolling, posisi gulir, dan progres membaca
+  tetap memakai mekanisme 2.4–2.6 tanpa perubahan.
 
 ## Perbaikan bug
 
@@ -355,12 +434,12 @@ InsetStabilityTest > readerToolbarKeepsItsInsetAfterThemeChange FAILED
 13 tests completed, 11 failed
 ```
 
-Setelah perbaikan dipulihkan, seluruh **148/148** tes lulus dan suite dijalankan
+Setelah perbaikan dipulihkan, seluruh **185/185** tes lulus dan suite dijalankan
 tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **148 pengujian**, semuanya lulus:
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **185 pengujian**, semuanya lulus:
 
 - **ChapterImageParserTest** (11) — fixture HTML asli 7 volume disimpan di
   `app/src/test/resources/fixtures/`. Postingan Illustrasi menghasilkan
@@ -460,6 +539,56 @@ Verifikasi terhadap feed asli (dijalankan manual saat pengembangan):
 
 Verifikasi terhadap gambar asli (dijalankan manual saat pengembangan):
 **46/46 URL hasil parser** dari 7 volume diunduh → HTTP 200, `image/*`, decode valid.
+
+- **OfflineDownloadTest** (17, Robolectric) — inti penyimpanan offline:
+  chapter tersimpan lalu dibaca ulang tanpa jaringan; ilustrasi benar-benar
+  menjadi berkas lokal (bukan URL) dan ikut hilang saat dihapus; menekan unduh
+  lagi untuk chapter yang sudah ada **tidak menambah satu request pun** (dihitung
+  dari total request, bukan jumlah URL unik); gambar gagal validasi tidak
+  disimpan dan chapter ditandai gagal; HTML yang terpotong/berisi penanda iklan
+  tidak pernah disimpan; berkas `.tmp` sisa dibersihkan; menulis dua chapter
+  dengan URL sama tidak menggandakan berkas; chapter dengan URL berbeda tetapi
+  isi gambar sama hanya menyimpan satu berkas gambar; **novel A dan novel B tidak
+  pernah saling menimpa** (folder dan hash terpisah); volume berjalan berurutan
+  dan melaporkan `x dari y`; **resume setelah batal hanya mengunduh sisa chapter**;
+  membatalkan di tengah tidak meninggalkan chapter setengah jadi; unduhan ulang
+  penuh menghasilkan ukuran penyimpanan yang sama; hapus volume hanya menghapus
+  volume itu; dan menghapus seluruh unduhan mengembalikan penyimpanan ke nol.
+- **ReaderOfflineTest** (8, Robolectric) — Reader Mode offline: chapter terunduh
+  **dibuka tanpa satu pun request jaringan**; jumlah blok dan teks identik dengan
+  versi online; setiap gambar memakai `file:` lokal sehingga tampil di mode
+  pesawat dan posisinya di antara paragraf tetap sama (indeks blok dibandingkan
+  satu per satu); adaptor membaca `imageSource()` sehingga sel gambar memakai
+  berkas lokal; Sebelumnya/Berikutnya tetap bekerja antar chapter terunduh;
+  chapter yang belum diunduh saat offline menampilkan pesan jelas dan bukan layar
+  kosong; membuka ulang chapter tersimpan tidak menembak jaringan; dan progres
+  baca offline berperilaku sama dengan online (ekuivalensi, bukan angka tetap).
+- **DownloadUiTest** (12, Robolectric, 320×640dp) — kontrol unduh di halaman
+  detail: setiap baris chapter punya tombol unduh 48 dp dengan
+  `contentDescription`; label status dimulai "Belum diunduh", berubah
+  "Tersimpan" setelah tersimpan, dan tombol unduh diganti tombol hapus; chapter
+  yang gagal menampilkan **Coba lagi** yang benar-benar memicu unduh ulang;
+  tombol hapus melaporkan chapter yang benar; baris volume punya **Download
+  Semua** 48 dp yang memicu unduhan volume; progres sebagian tercetak
+  "1 dari 2 tersimpan"; halaman detail tanpa lapisan unduh tetap tampil seperti
+  sebelumnya; halaman **Unduhan** menampilkan novel, volume, jumlah chapter,
+  ukuran penyimpanan, tombol hapus chapter & volume 48 dp, keadaan kosong yang
+  menjelaskan cara mengunduh, dan kembali ke keadaan kosong setelah semua dihapus.
+
+### Bukti tes offline menangkap bug
+
+Tiga bug dikembalikan sementara untuk memastikan tes baru tidak hijau palsu:
+
+1. Reader berhenti memilih salinan lokal (`localChapter()` selalu `null`);
+2. gambar jatuh kembali ke URL walau berkas lokal ada (`imageSource()` → `imageUrl`);
+3. penjaga "sudah tersimpan" di `ChapterDownloader` dimatikan.
+
+Hasil: **7 tes gagal**, termasuk `downloadedChapterOpensWithoutTouchingTheNetwork`,
+`illustrationsAreLocalFilesWhenReadOffline`, `adapterBindsLocalImageSourceForStoredBlocks`,
+`everyIllustrationResolvesToALocalFile`, dan `readingProgressBehavesTheSameOfflineAsOnline`.
+Mutasi ketiga awalnya **lolos** karena tes menghitung jumlah URL unik, bukan jumlah
+request — tes diperbaiki menjadi menghitung total request, lalu mutasi yang sama
+menghasilkan `expected:<3> but was:<6>`. Setelah dipulihkan, **185/185** lulus.
 
 ## Arsitektur
 

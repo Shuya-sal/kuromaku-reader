@@ -138,7 +138,10 @@ public final class BlockAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             // A real reserved box, sized from the source's own pixel dimensions,
             // so the illustration is laid out whether or not the bitmap arrived.
             imageHolder.cell.setRatio(block.hasImageSize() ? block.imageRatio() : 0f);
-            imageHolder.cell.bind(block.imageUrl, palette);
+            // Downloaded chapters carry the illustration on disk: `imageSource()`
+            // returns that file so the picture renders in airplane mode instead of
+            // trying the network. Online chapters still resolve to the URL.
+            imageHolder.cell.bind(block.imageSource(), palette);
             imageHolder.cell.setOnClickListener(v -> {
                 if (onImageTap != null) onImageTap.onImageTap(block);
             });

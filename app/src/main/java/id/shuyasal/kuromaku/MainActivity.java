@@ -25,13 +25,20 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
 import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Novels;
 import id.shuyasal.kuromaku.net.CatalogLoader;
+import id.shuyasal.kuromaku.offline.DownloadQueue;
+import id.shuyasal.kuromaku.offline.DownloadStatusStore;
+import id.shuyasal.kuromaku.offline.OfflineStore;
+import id.shuyasal.kuromaku.data.Volume;
+import id.shuyasal.kuromaku.ui.DownloadsPage;
 import id.shuyasal.kuromaku.ui.LibraryPage;
 import id.shuyasal.kuromaku.ui.Motion;
 import id.shuyasal.kuromaku.ui.NovelListPage;
@@ -76,11 +83,14 @@ public class MainActivity extends AppCompatActivity {
     private TextView subtitleView;
     private Button backButton;
     private ImageButton refreshButton;
+    private ImageButton downloadsButton;
     private ImageButton themeButton;
     private ScrollView scroller;
 
     /** Novel whose detail page is open; null shows the library list. */
     private Novel selectedNovel;
+    /** True while the "Unduhan" page is open instead of the library list. */
+    private boolean showingDownloads;
     private boolean loading;
     private boolean synopsisOpen;
     /**
@@ -217,6 +227,15 @@ public class MainActivity extends AppCompatActivity {
 
         toolbarRow.addView(titles, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        // Offline library entry point: always reachable from the toolbar, and it
+        // works without a connection because the page reads local storage only.
+        downloadsButton = Ui.iconButton(this, R.drawable.ic_download,
+                "Buka unduhan offline", palette);
+        downloadsButton.setTag("open_downloads");
+        downloadsButton.setOnClickListener(v -> showDownloads());
+        toolbarRow.addView(downloadsButton, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
         refreshButton = Ui.iconButton(this, R.drawable.ic_refresh, "Muat ulang katalog", palette);
         refreshButton.setTag("refresh");
@@ -369,9 +388,12 @@ public class MainActivity extends AppCompatActivity {
         int keepScroll = pendingScrollY > 0 ? pendingScrollY : scroller.getScrollY();
         content.removeAllViews();
 
-        backButton.setVisibility(selectedNovel == null ? View.GONE : View.VISIBLE);
-        titleText.setText(selectedNovel == null ? "Perpustakaan" : "Detail Novel");
-        subtitleView.setText(subtitleText());
+        boolean downloads = showingDownloads;
+        backButton.setVisibility(selectedNovel == null && !downloads
+                ? View.GONE : View.VISIBLE);
+        titleText.setText(downloads ? "Unduhan"
+                : selectedNovel == null ? "Perpustakaan" : "Detail Novel");
+        subtitleView.setText(downloads ? "Tersimpan di perangkat ini" : subtitleText());
 
         if (!failed.isEmpty()) {
             TextView warning = Ui.label(this, "⚠ " + failed.get(0), 12, palette.accent);
@@ -380,7 +402,10 @@ public class MainActivity extends AppCompatActivity {
             content.addView(warning);
         }
 
-        if (selectedNovel == null) {
+        if (showingDownloads) {
+            content.addView(buildDownloadsPage(), new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        } else if (selectedNovel == null) {
             content.addView(new NovelListPage(this, prefs, palette, Novels.all(),
                     this::showNovel).build(), new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -390,7 +415,9 @@ public class MainActivity extends AppCompatActivity {
             // belong to this novel only.
             content.addView(new LibraryPage(this, prefs.scoped(selectedNovel.id), palette,
                     selectedNovel, catalog,
-                    synopsisOpen, detailListener(selectedNovel)).build(),
+                    synopsisOpen, detailListener(selectedNovel))
+                    .setDownload(downloadListener(selectedNovel), downloadState(selectedNovel))
+                    .build(),
                     new LinearLayout.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -478,17 +505,201 @@ public class MainActivity extends AppCompatActivity {
         Motion.enterFromRight(pageHost);
     }
 
+    /** Opens the offline library. Reads local storage only, so it works offline. */
+    private void showDownloads() {
+        if (showingDownloads) return;
+        keepScrollHere();
+        showingDownloads = true;
+        selectedNovel = null;
+        synopsisOpen = false;
+        pendingScrollY = 0;
+        render();
+        scroller.post(() -> scroller.scrollTo(0, 0));
+        Motion.enterFromRight(pageHost);
+    }
+
     /** Returns to the library list: the detail page slides right and fades out. */
     private void showLibrary() {
-        if (selectedNovel == null) return;
+        if (selectedNovel == null && !showingDownloads) return;
         Motion.exitToRight(pageHost, () -> {
             selectedNovel = null;
+            showingDownloads = false;
             synopsisOpen = false;
             pendingScrollY = 0;
             render();
             scroller.post(() -> scroller.scrollTo(0, 0));
             Motion.enterFromLeft(pageHost);
         });
+    }
+
+    // --------------------------------------------------------------- offline UI
+
+    /**
+     * Download actions offered on the detail page.
+     *
+     * <p>Only user intent lives here; the queue, retries and cancellation belong
+     * to {@link DownloadQueue}, so this activity can be destroyed mid-download.
+     */
+    private LibraryPage.DownloadListener downloadListener(final Novel novel) {
+        return new LibraryPage.DownloadListener() {
+            @Override
+            public void onDownloadChapter(Chapter chapter) {
+                DownloadQueue.enqueueChapter(MainActivity.this, novel, chapter);
+                Toast.makeText(MainActivity.this,
+                        "Mengunduh " + chapter.label + "…", Toast.LENGTH_SHORT).show();
+                repaintDownloadState();
+            }
+
+            @Override
+            public void onDeleteChapter(Chapter chapter) {
+                confirmDelete("Hapus unduhan " + chapter.label + "?",
+                        "Teks dan ilustrasi chapter ini dihapus dari perangkat. "
+                                + "Progres membaca dan bookmark tetap tersimpan.",
+                        () -> {
+                            DownloadQueue.deleteChapter(MainActivity.this, novel, chapter);
+                            // Downloads never touch progress: repaint only.
+                            repaintDownloadState();
+                        });
+            }
+
+            @Override
+            public void onDownloadVolume(Volume volume) {
+                int queued = DownloadQueue.enqueueVolume(MainActivity.this, novel,
+                        volume.number, volume.chapters);
+                Toast.makeText(MainActivity.this,
+                        queued == 0
+                                ? "Volume ini sudah tersimpan semua."
+                                : "Mengunduh " + queued + " chapter " + volume.title() + "…",
+                        Toast.LENGTH_SHORT).show();
+                repaintDownloadState();
+            }
+
+            @Override
+            public void onCancelVolume(Volume volume) {
+                DownloadQueue.cancelVolume(MainActivity.this, novel, volume.number);
+                Toast.makeText(MainActivity.this,
+                        "Unduhan " + volume.title() + " dibatalkan. Chapter yang sudah selesai "
+                                + "tetap tersimpan.", Toast.LENGTH_LONG).show();
+                repaintDownloadState();
+            }
+        };
+    }
+
+    /** Read-only view of the download layer for the detail page. */
+    private LibraryPage.DownloadState downloadState(final Novel novel) {
+        final OfflineStore store = OfflineStore.get(this);
+        return new LibraryPage.DownloadState() {
+            @Override
+            public int state(Chapter chapter) {
+                return DownloadStatusStore.resolve(novel.id, chapter.url, store);
+            }
+
+            @Override
+            public String statusLabel(Chapter chapter) {
+                return DownloadQueue.statusLabel(MainActivity.this, novel, chapter);
+            }
+
+            @Override
+            public int[] volumeProgress(Volume volume) {
+                return DownloadQueue.volumeProgress(MainActivity.this, novel,
+                        volume.number, volume.chapters);
+            }
+
+            @Override
+            public boolean isVolumeRunning(Volume volume) {
+                int[] progress = DownloadStatusStore.progress(novel.id, volume.number);
+                if (progress[1] <= 0) return false;
+                return DownloadStatusStore.state(DownloadStatusStore.key(novel.id,
+                        volume.chapters.isEmpty() ? "" : volume.chapters.get(0).url))
+                        == DownloadStatusStore.DOWNLOADING
+                        || DownloadStatusStore.state(DownloadStatusStore.key(novel.id,
+                        volume.chapters.isEmpty() ? "" : volume.chapters.get(0).url))
+                        == DownloadStatusStore.QUEUED
+                        || progressInFlight(novel, volume, progress);
+            }
+        };
+    }
+
+    /** True when any chapter of the volume is still queued or downloading. */
+    private boolean progressInFlight(Novel novel, Volume volume, int[] progress) {
+        if (progress[1] <= 0 || progress[0] >= progress[1]) return false;
+        for (Chapter chapter : volume.chapters) {
+            int state = DownloadStatusStore.state(DownloadStatusStore.key(novel.id, chapter.url));
+            if (state == DownloadStatusStore.QUEUED || state == DownloadStatusStore.DOWNLOADING) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Builds the "Unduhan" page with real chapter labels where the catalogue has them. */
+    private View buildDownloadsPage() {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (Novel novel : Novels.all()) {
+            Catalog catalog = Session.catalog(novel.id);
+            if (catalog == null) continue;
+            for (Chapter chapter : catalog.flat()) labels.put(chapter.url, chapter.label);
+        }
+
+        return new DownloadsPage(this, palette, OfflineStore.get(this),
+                new DownloadsPage.Listener() {
+                    @Override
+                    public void onDeleteChapter(Novel novel, Chapter chapter) {
+                        confirmDelete("Hapus unduhan " + chapter.label + "?",
+                                "Chapter ini dihapus dari perangkat. Progres membaca dan "
+                                        + "bookmark tetap tersimpan.",
+                                () -> {
+                                    DownloadQueue.deleteChapter(MainActivity.this, novel, chapter);
+                                    render();
+                                });
+                    }
+
+                    @Override
+                    public void onDeleteVolume(Novel novel, int volume, int chapterCount) {
+                        confirmDelete("Hapus " + chapterCount + " chapter Volume " + volume + "?",
+                                "Seluruh chapter tersimpan pada volume ini dihapus dari perangkat. "
+                                        + "Progres membaca dan bookmark tetap tersimpan.",
+                                () -> {
+                                    DownloadQueue.deleteVolume(MainActivity.this, novel, volume);
+                                    render();
+                                });
+                    }
+
+                    @Override
+                    public void onOpenStoredChapter(Novel novel, Chapter chapter) {
+                        // Opening from the offline page must not require a catalogue:
+                        // the reader resolves the stored copy first anyway.
+                        Session.setCatalog(new Catalog(novel.id,
+                                Session.catalog(novel.id) == null
+                                        ? new ArrayList<Volume>()
+                                        : Session.catalog(novel.id).volumes));
+                        Intent intent = new Intent(MainActivity.this, ReaderActivity.class);
+                        intent.putExtra(ReaderActivity.EXTRA_NOVEL, novel.id);
+                        intent.putExtra(ReaderActivity.EXTRA_URL, chapter.url);
+                        startActivity(intent);
+                        if (Motion.enabled(MainActivity.this)) {
+                            overridePendingTransition(R.anim.kuromaku_enter_right,
+                                    R.anim.kuromaku_exit_left);
+                        }
+                    }
+                }).withLabels(labels).build();
+    }
+
+    /** Repaints the current page so download status changes appear immediately. */
+    private void repaintDownloadState() {
+        if (loading) return;
+        keepScrollHere();
+        render();
+    }
+
+    /** Two-button confirmation. Deleting offline data never touches progress. */
+    private void confirmDelete(String title, String message, Runnable confirmed) {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Hapus", (dialog, which) -> confirmed.run())
+                .show();
     }
 
     private void keepScrollHere() {
@@ -538,7 +749,7 @@ public class MainActivity extends AppCompatActivity {
     /** Android Back: detail page → library list, library → leave the app. */
     @Override
     public void onBackPressed() {
-        if (selectedNovel != null) {
+        if (selectedNovel != null || showingDownloads) {
             showLibrary();
             return;
         }
@@ -556,9 +767,31 @@ public class MainActivity extends AppCompatActivity {
             rebuildShell();
             return;
         }
+        if (showingDownloads) {
+            // A download may have finished while the reader was open.
+            keepScrollHere();
+            render();
+            return;
+        }
         if (!loading && selectedNovel != null && Session.catalog(selectedNovel.id) != null) {
             keepScrollHere();
             render();
         }
+    }
+
+    /** Live download status: repaint the detail page whenever a state changes. */
+    private final DownloadStatusStore.Listener downloadWatcher =
+            this::repaintDownloadState;
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        DownloadStatusStore.addListener(downloadWatcher);
+    }
+
+    @Override
+    protected void onStop() {
+        DownloadStatusStore.removeListener(downloadWatcher);
+        super.onStop();
     }
 }

@@ -29,14 +29,29 @@ public final class Block {
     /** Intrinsic height of the illustration in px, 0 when the source omits it. */
     public final int imageHeight;
 
+    /**
+     * Absolute path of the downloaded copy of this illustration, or {@code null}
+     * when the picture lives online. When it is set the reader must load the file
+     * instead of the URL: that is what makes illustrations survive airplane mode.
+     * {@link #imageUrl} is always kept for attribution and re-download.
+     */
+    public final String imagePath;
+
     private Block(int type, String text, String imageUrl, int level,
                   int imageWidth, int imageHeight) {
+        this(type, text, imageUrl, level, imageWidth, imageHeight, null);
+    }
+
+    private Block(int type, String text, String imageUrl, int level,
+                  int imageWidth, int imageHeight, String imagePath) {
         this.type = type;
         this.text = text;
         this.imageUrl = imageUrl;
         this.level = level;
         this.imageWidth = Math.max(0, imageWidth);
         this.imageHeight = Math.max(0, imageHeight);
+        String path = imagePath == null ? "" : imagePath.trim();
+        this.imagePath = path.isEmpty() ? null : path;
     }
 
     public static Block paragraph(String text) {
@@ -65,6 +80,32 @@ public final class Block {
 
     public static Block divider() {
         return new Block(TYPE_DIVIDER, null, null, 0, 0, 0);
+    }
+
+    /**
+     * Rebuilds a block read from the offline store.
+     *
+     * <p>{@code localPath} is the downloaded illustration on disk; it is kept
+     * alongside {@code url} so the reader can render from the file and still
+     * know the original source of the picture.
+     */
+    public static Block restored(int type, String text, String url, int level,
+                                 int width, int height, String localPath) {
+        return new Block(type, text, url, level, width, height, localPath);
+    }
+
+    /** True when this illustration has a downloaded copy that can be rendered offline. */
+    public boolean hasLocalImage() {
+        return type == TYPE_IMAGE && imagePath != null;
+    }
+
+    /**
+     * What the image loader should open: the downloaded file when it exists,
+     * otherwise the remote URL. Keeps "read from disk first" in one place so no
+     * call site can accidentally prefer the network.
+     */
+    public String imageSource() {
+        return hasLocalImage() ? imagePath : imageUrl;
     }
 
     public boolean isImage() {

@@ -27,6 +27,7 @@ import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
 import id.shuyasal.kuromaku.data.Block;
 import id.shuyasal.kuromaku.net.Http;
+import id.shuyasal.kuromaku.offline.OfflineStore;
 import id.shuyasal.kuromaku.parser.ChapterContent;
 import id.shuyasal.kuromaku.parser.ChapterParser;
 import id.shuyasal.kuromaku.parser.ContentCache;
@@ -126,11 +127,55 @@ public class ReaderActivity extends AppCompatActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
 
         buildUi();
-        ChapterContent cached = ContentCache.get(chapterUrl);
+        openChapter(chapterUrl);
+    }
+
+    /**
+     * Opens a chapter with the offline copy taking priority.
+     *
+     * <p>Order is deliberate: the memory cache (fastest, same session), then the
+     * downloaded copy on disk, and only then the network. A downloaded chapter
+     * therefore opens with no connection at all, and an online one behaves exactly
+     * as before. Nothing here re-downloads anything.
+     */
+    private void openChapter(String url) {
+        ChapterContent cached = ContentCache.get(url);
         if (cached != null) {
             show(cached);
-        } else {
-            load(chapterUrl);
+            return;
+        }
+        ChapterContent stored = localChapter(url);
+        if (stored != null) {
+            ContentCache.put(url, stored);
+            show(stored);
+            return;
+        }
+        load(url);
+    }
+
+    /** Chapter from the offline store, or null when it is not downloaded. */
+    private ChapterContent localChapter(String url) {
+        try {
+            return OfflineStore.get(this).load(novelId, url);
+        } catch (Exception error) {
+            // A damaged file must not crash the reader; fall through to network.
+            return null;
+        }
+    }
+
+    /** True when this device currently has a usable connection. */
+    private boolean online() {
+        try {
+            android.net.ConnectivityManager manager =
+                    (android.net.ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (manager == null) return true;
+            android.net.Network active = manager.getActiveNetwork();
+            if (active == null) return false;
+            android.net.NetworkCapabilities caps = manager.getNetworkCapabilities(active);
+            return caps != null && caps.hasCapability(
+                    android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (Exception error) {
+            return true;
         }
     }
 
@@ -375,11 +420,20 @@ public class ReaderActivity extends AppCompatActivity {
 
         new Thread(() -> {
             try {
-                String html = Http.get(url);
+                String html = id.shuyasal.kuromaku.net.Fetcher.get().page(url);
                 ChapterContent parsed = ChapterParser.parse(html, url);
                 ContentCache.put(url, parsed);
                 runOnUiThread(() -> show(parsed));
             } catch (Exception error) {
+                // A chapter that is already stored still wins over a failed
+                // request: the connection dropping mid-open must not hide text
+                // the device already has.
+                ChapterContent stored = localChapter(url);
+                if (stored != null) {
+                    ContentCache.put(url, stored);
+                    runOnUiThread(() -> show(stored));
+                    return;
+                }
                 runOnUiThread(() -> showError(url, error));
             }
         }).start();
@@ -508,18 +562,36 @@ public class ReaderActivity extends AppCompatActivity {
         headerTitle.setText("Gagal memuat chapter");
         headerMeta.setText(describeChapter(url));
 
-        TextView heading = Ui.label(this, "Isi chapter tidak dapat diekstrak", 18, palette.text);
+        // Offline + not downloaded is the one case where the message must be
+        // explicit instead of generic: the reader needs to know the chapter is
+        // simply not on this device yet, not that the app is broken.
+        boolean offline = !online();
+        boolean downloaded = OfflineStore.get(this).isSaved(novelId, url);
+
+        TextView heading = Ui.label(this,
+                offline && !downloaded
+                        ? "Chapter ini belum diunduh"
+                        : "Isi chapter tidak dapat diekstrak", 18, palette.text);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         errorBox.addView(heading);
 
-        String reason = error instanceof ParseException
-                ? error.getMessage()
-                : "Koneksi ke sumber gagal: " + (error.getMessage() == null
-                ? error.getClass().getSimpleName() : error.getMessage());
+        String explanationText;
+        if (offline && !downloaded) {
+            explanationText = "Tidak ada koneksi internet dan chapter ini belum tersimpan di "
+                    + "perangkat. Sambungkan internet lalu unduh chapter ini (atau seluruh "
+                    + "volumenya) dari daftar chapter, setelah itu chapter bisa dibaca "
+                    + "sepenuhnya tanpa jaringan.";
+        } else {
+            String reason = error instanceof ParseException
+                    ? error.getMessage()
+                    : "Koneksi ke sumber gagal: " + (error.getMessage() == null
+                    ? error.getClass().getSimpleName() : error.getMessage());
+            explanationText = reason
+                    + "\n\nAplikasi tidak akan membuka tampilan website penuh secara diam-diam. "
+                    + "Silakan coba lagi, atau buka halaman aslinya di browser.";
+        }
 
-        TextView explanation = Ui.label(this,
-                reason + "\n\nAplikasi tidak akan membuka tampilan website penuh secara diam-diam. "
-                        + "Silakan coba lagi, atau buka halaman aslinya di browser.", 14, palette.muted);
+        TextView explanation = Ui.label(this, explanationText, 14, palette.muted);
         explanation.setPadding(0, Ui.dp(this, 10), 0, Ui.dp(this, 18));
         errorBox.addView(explanation);
 
@@ -730,13 +802,21 @@ public class ReaderActivity extends AppCompatActivity {
         progressSaved = false;
         getIntent().putExtra(EXTRA_URL, chapterUrl);
 
+        // Previous/Next must work for downloaded chapters too, so this uses the
+        // same offline-first order as opening a chapter.
         ChapterContent cached = ContentCache.get(chapterUrl);
         if (cached != null) {
             show(cached);
-        } else {
-            list.scrollToPosition(0);
-            load(chapterUrl);
+            return;
         }
+        ChapterContent stored = localChapter(chapterUrl);
+        if (stored != null) {
+            ContentCache.put(chapterUrl, stored);
+            show(stored);
+            return;
+        }
+        list.scrollToPosition(0);
+        load(chapterUrl);
     }
 
     /** Stores the exact visible block and offset, plus a coarse percentage. */
@@ -770,9 +850,12 @@ public class ReaderActivity extends AppCompatActivity {
 
     /** Opens an illustration full screen, where it can be pinched to zoom. */
     private void openIllustration(Block block) {
-        if (block == null || block.imageUrl == null || block.imageUrl.isEmpty()) return;
+        if (block == null) return;
+        // Prefer the downloaded file so the full-screen viewer works offline too.
+        String source = block.imageSource();
+        if (source == null || source.isEmpty()) return;
         Intent intent = new Intent(this, ImageViewerActivity.class);
-        intent.putExtra(ImageViewerActivity.EXTRA_URL, block.imageUrl);
+        intent.putExtra(ImageViewerActivity.EXTRA_URL, source);
         String caption = content != null && content.title() != null
                 ? content.title() : "Ilustrasi";
         intent.putExtra(ImageViewerActivity.EXTRA_CAPTION, caption);

@@ -74,65 +74,54 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.6 (APK)
+          name: Kuromaku Reader 2.7 (APK)
           body: |
             Pembaca native untuk dua novel dari Kaori Translation:
             *Monogatari no Kuromaku* dan *Magical★Explorer*.
 
-            * Versi: **2.6** (versionCode 26)
-            * **Perbaikan bug status bar**: header tidak lagi bertabrakan dengan
-              jam setelah pergantian tema. Akar masalahnya adalah dua hal di
-              pengelolaan WindowInsets — listener hanya menerapkan padding
-              "kalau nilainya berubah" (padahal ganti tema membangun ulang
-              seluruh view tree, sehingga toolbar baru mulai dari padding 0 dan
-              listener memutuskan tidak ada yang berubah), dan dispatch inset
-              kosong bisa menimpa tinggi status bar yang sudah diketahui dengan
-              0. Sekarang inset disimpan di satu objek `SystemBarInsets` yang
-              menolak pembacaan kosong, dan padding selalu diterapkan ulang
-              (idempoten, jadi tidak bisa menumpuk). Tidak ada padding-top
-              hardcoded; tinggi status bar selalu dari WindowInsets aktual.
-            * Ikon status bar mengikuti tema: gelap pada tema terang, terang
-              pada tema gelap, dan diterapkan ulang setiap kali tema berubah.
-            * **Header ringkas di seluruh halaman**: toolbar satu baris 58 dp
-              (56 dp di Reader Mode) di luar system inset, status bar inset
-              diterapkan sebagai padding di atas toolbar sehingga judul tidak
-              bertabrakan dengan jam/baterai. Judul selalu satu baris dan
-              memakai ellipsize, jadi tidak pernah membungkus dan meninggikan
-              toolbar.
-            * Halaman detail memakai judul singkat **Detail Novel**; judul
-              lengkap novel tetap di bagian konten bersama cover, metadata,
-              sinopsis, dan daftar volume. Nama aplikasi hanya muncul sekali.
-            * **Tombol Kembali** baru: rounded rectangle berikon panah kiri +
-              teks "Kembali", 48 dp, lebar ≥ 92 dp, dengan ripple sesuai tema.
-              Konsisten di detail novel, daftar chapter, Reader Mode, dan
-              penampil ilustrasi. Tombol Back Android tetap bekerja.
-            * **Muat ulang** dan **Gelap/Terang** menjadi ikon refresh dan
-              bulan/matahari berukuran 48 dp dengan contentDescription.
-            * **Animasi navigasi 180–250 ms**: fade-in + slide ringan dari kanan
-              untuk maju, slide ke kanan + fade-out untuk kembali, accordion
-              volume expand/collapse 200 ms, dan ripple pada kartu serta tombol.
-              Semuanya menghormati pengaturan Android **Remove animations**.
-            * **Novel kedua**: Magical★Explorer Eroge no Yuujin Kyara ni Tensei
-              Shitakedo, Geemu Chishiki Tsukatte Jiyuu ni Ikiru.
-            * **Cover berbeda untuk setiap volume** (rasio asli, tidak terpotong,
-              tidak tertukar, dapat diketuk untuk diperbesar). Volume tanpa
-              gambar memakai placeholder rapi.
-            * **Parser katalog khusus Magical★Explorer**: halaman katalognya
-              memuat volume + tautan chapter langsung, tanpa label Blogger.
-              Ejaan sumber "Cahpter 2" dinormalkan dan tetap di posisi kedua.
-              Teks tanpa tautan tidak pernah menjadi chapter.
-            * **Progres baca, posisi gulir, dan accordion disimpan per novel**;
-              Sebelumnya/Berikutnya tidak dapat menyeberang ke novel lain.
-            * Reader Mode dipertahankan: kotak gambar berasio tetap, zoom 1x–4x,
-              tombol Coba lagi, logging tanpa token.
-            * Tema terang / gelap / sepia, ukuran font, spasi baris.
-            * Monogatari no Kuromaku tetap lengkap: Volume 1–7, 117 chapter.
-            * 148 unit test lulus, termasuk 13 tes `InsetStabilityTest` baru:
-              ganti tema 10 kali berturut-turut, buka detail → kembali → ganti
-              tema lagi, buka ulang dengan tema gelap tersimpan, dispatch inset
-              berulang (tidak menumpuk), tinggi header tetap 56–64 dp, animasi
-              tidak menggeser toolbar, dan toolbar Reader Mode tetap benar
-              setelah ganti tema.
+            * Versi: **2.7** (versionCode 27)
+            * **Download offline**: chapter dan seluruh volume bisa diunduh dan
+              dibaca tanpa internet, termasuk semua ilustrasi. Teks disimpan
+              terstruktur (JSON dengan urutan blok dan posisi gambar) dan setiap
+              ilustrasi disimpan sebagai file lokal di penyimpanan internal
+              aplikasi — bukan sekadar URL.
+            * **Status per chapter**: Belum diunduh, Mengunduh, Tersimpan, dan
+              Gagal dengan tombol **Coba lagi**. Chapter yang sudah tersimpan
+              langsung dibuka dari penyimpanan lokal tanpa menyentuh jaringan.
+            * **Download Semua per volume** berjalan berurutan dengan progres
+              "x dari y chapter", tombol **Batalkan**, dan chapter yang sudah
+              lengkap dilewati sehingga tidak ada unduhan ulang atau duplikasi.
+            * **WorkManager** untuk pekerjaan yang bertahan saat aplikasi
+              ditutup, dibatasi 2 pekerja paralel agar tidak membebani sumber,
+              retry dengan backoff eksponensial, notifikasi progres volume, dan
+              tidak ada polling.
+            * **Penulisan atomik**: setiap chapter ditulis ke berkas sementara
+              lalu di-rename, jadi unduhan yang terputus tidak pernah dianggap
+              selesai. Gambar dan konten divalidasi (HTTP 200, tipe gambar
+              nyata, dimensi terbaca, minimal satu blok teks) sebelum chapter
+              ditandai tersimpan.
+            * **Identifier stabil** dari id novel + URL chapter, dengan namespace
+              folder per novel sehingga data Monogatari dan Magical★Explorer
+              tidak pernah tercampur. Berkas sementara dan gambar yatim
+              dibersihkan agar tidak ada file tak terpakai.
+            * **Halaman Unduhan**: daftar novel dan volume yang tersimpan,
+              jumlah chapter, total penggunaan penyimpanan, tombol hapus
+              chapter/volume dengan konfirmasi. Menghapus unduhan **tidak**
+              menghapus progres membaca atau bookmark.
+            * **Reader Mode offline**: memakai konten lokal bila ada, pesan jelas
+              bila offline dan chapter belum diunduh, ilustrasi tetap tampil saat
+              mode pesawat, posisi gambar di antara paragraf dipertahankan, dan
+              Sebelumnya/Berikutnya tetap bekerja untuk chapter terunduh.
+            * Pembaruan katalog dari Kaori Translation tetap berjalan: unduhan
+              offline tidak menghalangi deteksi chapter baru, dan aplikasi tidak
+              mengunduh ulang otomatis saat dibuka.
+            * 185 unit test lulus (37 di antaranya khusus offline), termasuk
+              unduhan ulang tanpa duplikasi, resume setelah batal, penulisan
+              atomik, data dua novel tidak tercampur, hapus unduhan tidak
+              menghapus progres, dan pembacaan offline tanpa satu pun request.
+            * Seluruh fitur 2.6 dipertahankan: header dengan WindowInsets yang
+              benar, tombol Kembali 48 dp, animasi 180–250 ms, dua novel,
+              cover per volume, tema, ukuran font, dan posisi gulir.
 
             APK debug, hasil build otomatis dari commit `${{ github.sha }}`.
             Aplikasi tidak memuat salinan novel; seluruh konten milik Kaori Translation.

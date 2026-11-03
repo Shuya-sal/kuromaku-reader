@@ -26,6 +26,26 @@ public final class Http {
     private Http() {
     }
 
+    /** Downloads a binary resource (an illustration) with the same client. */
+    public static byte[] getBytes(String url) throws IOException {
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "image/*,*/*;q=0.8")
+                .build();
+
+        try (Response response = CLIENT.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+                throw new IOException("HTTP " + response.code() + " untuk " + url);
+            }
+            ResponseBody body = response.body();
+            if (body == null) {
+                throw new IOException("Respons kosong dari " + url);
+            }
+            return body.bytes();
+        }
+    }
+
     public static String get(String url) throws IOException {
         Request request = new Request.Builder()
                 .url(url)

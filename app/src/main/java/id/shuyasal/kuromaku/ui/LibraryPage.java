@@ -18,6 +18,7 @@ import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
 import id.shuyasal.kuromaku.data.Novel;
 import id.shuyasal.kuromaku.data.Volume;
+import id.shuyasal.kuromaku.offline.DownloadStatusStore;
 
 /**
  * Novel detail page: cover, verified metadata, synopsis, continue button and the
@@ -47,6 +48,23 @@ public final class LibraryPage {
         void onOpenCover(String url, String caption);
     }
 
+    /**
+     * Offline download actions.
+     *
+     * <p>Separate from {@link Listener} on purpose: the page renders the same
+     * whether or not downloads are wired, and a screen that does not support
+     * offline reading never has to implement five empty methods.
+     */
+    public interface DownloadListener {
+        void onDownloadChapter(Chapter chapter);
+
+        void onDeleteChapter(Chapter chapter);
+
+        void onDownloadVolume(Volume volume);
+
+        void onCancelVolume(Volume volume);
+    }
+
     private static final int COVER_WIDTH_DP = 210;
     private static final int THUMB_WIDTH_DP = 62;
     private static final float FALLBACK_COVER_RATIO = 0.70f;
@@ -59,6 +77,10 @@ public final class LibraryPage {
     private final Catalog catalog;
     private final boolean synopsisOpen;
     private final Listener listener;
+    /** Optional: when null no download controls are drawn. */
+    private DownloadListener downloadListener;
+    /** Set when the activity knows which chapters are queued/saved/failed. */
+    private DownloadState downloadState;
 
     public LibraryPage(Context context, Prefs prefs, Palette palette, Novel novel,
                        Catalog catalog, boolean synopsisOpen, Listener listener) {
@@ -69,6 +91,30 @@ public final class LibraryPage {
         this.catalog = catalog;
         this.synopsisOpen = synopsisOpen;
         this.listener = listener;
+    }
+
+    /**
+     * Read-only view of the download layer, so this page can print a status per
+     * chapter without knowing anything about WorkManager or the file system.
+     */
+    public interface DownloadState {
+        /** One of the {@code DownloadStatusStore} constants. */
+        int state(Chapter chapter);
+
+        /** Human label: "Belum diunduh", "Mengunduh…", "Tersimpan", "Gagal". */
+        String statusLabel(Chapter chapter);
+
+        /** {@code [finished, total]} for a volume, or null when nothing is known. */
+        int[] volumeProgress(Volume volume);
+
+        /** True while a volume job is running, so the page offers "Batalkan". */
+        boolean isVolumeRunning(Volume volume);
+    }
+
+    public LibraryPage setDownload(DownloadListener listener, DownloadState state) {
+        this.downloadListener = listener;
+        this.downloadState = state;
+        return this;
     }
 
     /** Builds the scrollable content column for the detail screen. */
@@ -322,6 +368,12 @@ public final class LibraryPage {
                 ? "belum ada chapter"
                 : volume.chapterCount() + " chapter";
         texts.addView(Ui.label(context, count, 11, palette.muted));
+
+        // Volume download controls only make sense when the volume has chapters
+        // and the host screen actually wired the offline layer.
+        if (downloadListener != null && downloadState != null && volume.chapterCount() > 0) {
+            addVolumeDownload(texts, volume);
+        }
         row.addView(texts, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
@@ -413,6 +465,10 @@ public final class LibraryPage {
             row.addView(Ui.label(context, progress + "%", 11, palette.accent));
         }
 
+        if (downloadListener != null && downloadState != null) {
+            addChapterDownload(row, chapter);
+        }
+
         row.setOnClickListener(v -> listener.onOpenChapter(chapter));
         parent.addView(row);
 
@@ -420,6 +476,126 @@ public final class LibraryPage {
         line.setBackgroundColor(palette.divider);
         parent.addView(line, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, Ui.dp(context, 1))));
+    }
+
+    /**
+     * Download control for one chapter: a status word plus a single action.
+     *
+     * <p>The action always matches the status, so the reader never has to guess:
+     * not saved → download arrow, downloading → nothing to press (the volume job
+     * owns cancellation), saved → a delete button, failed → "Coba lagi". All of
+     * them keep the 48 dp touch target the rest of the list uses.
+     */
+    private void addChapterDownload(LinearLayout row, Chapter chapter) {
+        int state = downloadState.state(chapter);
+        String status = downloadState.statusLabel(chapter);
+
+        TextView statusView = Ui.label(context, status, 10,
+                state == DownloadStatusStore.SAVED ? palette.accent : palette.muted);
+        statusView.setTag("download_status:" + chapter.url);
+        statusView.setPadding(0, 0, Ui.dp(context, 6), 0);
+        row.addView(statusView);
+
+        View action;
+        if (state == DownloadStatusStore.SAVED) {
+            action = smallButton(R.drawable.ic_check, "Hapus unduhan chapter",
+                    "download_delete:" + chapter.url,
+                    v -> downloadListener.onDeleteChapter(chapter));
+        } else if (state == DownloadStatusStore.FAILED) {
+            action = smallTextButton("Coba lagi", "download_retry:" + chapter.url,
+                    v -> downloadListener.onDownloadChapter(chapter));
+        } else if (state == DownloadStatusStore.QUEUED
+                || state == DownloadStatusStore.DOWNLOADING) {
+            action = smallTextButton("Menunggu", "download_busy:" + chapter.url, null);
+            action.setAlpha(0.6f);
+        } else {
+            action = smallButton(R.drawable.ic_download, "Unduh chapter ini",
+                    "download_chapter:" + chapter.url,
+                    v -> downloadListener.onDownloadChapter(chapter));
+        }
+        row.addView(action);
+    }
+
+    /**
+     * Volume row controls: "Download Semua", live "x dari y chapter" progress and
+     * a "Batalkan" button while a job runs. The buttons sit under the title so a
+     * long volume label can never push them off screen on a small phone.
+     */
+    private void addVolumeDownload(LinearLayout texts, Volume volume) {
+        int[] progress = downloadState.volumeProgress(volume);
+        boolean running = downloadState.isVolumeRunning(volume);
+
+        LinearLayout controls = new LinearLayout(context);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        controls.setPadding(0, Ui.dp(context, 6), 0, 0);
+
+        if (running) {
+            int finished = progress == null ? 0 : progress[0];
+            int total = progress == null ? 0 : progress[1];
+            TextView progressView = Ui.label(context,
+                    finished + " dari " + total + " chapter", 11, palette.accent);
+            progressView.setTag("volume_progress:" + volume.number);
+            controls.addView(progressView, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+            controls.addView(smallTextButton("Batalkan", "volume_cancel:" + volume.number,
+                    v -> downloadListener.onCancelVolume(volume)));
+        } else {
+            int finished = progress == null ? 0 : progress[0];
+            int total = progress == null ? 0 : progress[1];
+            if (total > 0) {
+                TextView summary = Ui.label(context,
+                        finished + " dari " + total + " tersimpan", 11,
+                        finished >= total ? palette.accent : palette.muted);
+                summary.setTag("volume_summary:" + volume.number);
+                controls.addView(summary, new LinearLayout.LayoutParams(
+                        0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            } else {
+                controls.addView(new android.view.View(context),
+                        new LinearLayout.LayoutParams(0, 1, 1));
+            }
+
+            boolean allSaved = total > 0 && finished >= total;
+            controls.addView(smallTextButton(
+                    allSaved ? "Tersimpan semua" : "Download Semua",
+                    "volume_download:" + volume.number,
+                    allSaved ? null : v -> downloadListener.onDownloadVolume(volume)));
+            if (allSaved) controls.getChildAt(controls.getChildCount() - 1).setAlpha(0.7f);
+        }
+        texts.addView(controls);
+    }
+
+    /** 48 dp icon action with a content description, themed ripple. */
+    private View smallButton(int iconRes, String description, String tag,
+                             View.OnClickListener click) {
+        android.widget.ImageButton button = new android.widget.ImageButton(context);
+        button.setImageDrawable(Ui.tinted(context, iconRes, palette.accent));
+        button.setContentDescription(description);
+        button.setTag(tag);
+        button.setBackground(Ui.ripple(context, 0, 0, 10, palette.ripple));
+        button.setPadding(Ui.dp(context, 12), Ui.dp(context, 12),
+                Ui.dp(context, 12), Ui.dp(context, 12));
+        button.setMinimumWidth(Ui.dp(context, Ui.TOUCH_DP));
+        button.setMinimumHeight(Ui.dp(context, Ui.TOUCH_DP));
+        button.setStateListAnimator(null);
+        if (click != null) button.setOnClickListener(click);
+        return button;
+    }
+
+    /** Compact 48 dp tall text action, used for retry and cancel. */
+    private View smallTextButton(String text, String tag, View.OnClickListener click) {
+        Button button = Ui.chip(context, text, palette);
+        button.setTextSize(11);
+        button.setTag(tag);
+        button.setMinimumHeight(Ui.dp(context, Ui.TOUCH_DP));
+        button.setPadding(Ui.dp(context, 10), 0, Ui.dp(context, 10), 0);
+        if (click != null) {
+            button.setOnClickListener(click);
+        } else {
+            button.setEnabled(false);
+        }
+        return button;
     }
 
     private void addAttribution(LinearLayout parent) {

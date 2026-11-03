@@ -1,0 +1,126 @@
+package id.shuyasal.kuromaku.offline;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * In-memory view of which chapters are queued, downloading, saved or failed.
+ *
+ * <p>The download itself runs on a background worker; the library page only
+ * needs to know what to draw next to each chapter and to be told when something
+ * changed. This class is the single place that state lives, so a chapter cannot
+ * show "Tersimpan" while the store says otherwise: the status is derived from
+ * the store plus the live queue.
+ *
+ * <p>Keys are {@code novelId + "|" + chapterUrl}, which keeps the two novels
+ * apart even if a chapter URL were somehow reused.
+ */
+public final class DownloadStatusStore {
+
+    public static final int NOT_DOWNLOADED = 0;
+    public static final int QUEUED = 1;
+    public static final int DOWNLOADING = 2;
+    public static final int SAVED = 3;
+    public static final int FAILED = 4;
+    public static final int CANCELLED = 5;
+
+    /** Listener notified on the main thread whenever any status changes. */
+    public interface Listener {
+        void onDownloadStateChanged();
+    }
+
+    private static final Map<String, Integer> STATE = new LinkedHashMap<>();
+    private static final Map<String, String> MESSAGES = new LinkedHashMap<>();
+    private static final List<Listener> LISTENERS = new ArrayList<>();
+
+    /** Progress of a running volume job: finished chapters and the total. */
+    private static final Map<String, int[]> PROGRESS = new LinkedHashMap<>();
+
+    private DownloadStatusStore() {
+    }
+
+    public static String key(String novelId, String url) {
+        return (novelId == null ? "" : novelId) + "|" + (url == null ? "" : url.trim());
+    }
+
+    public static synchronized void set(String key, int state, String message) {
+        STATE.put(key, state);
+        if (message == null || message.isEmpty()) {
+            MESSAGES.remove(key);
+        } else {
+            MESSAGES.put(key, message);
+        }
+        notifyListeners();
+    }
+
+    public static synchronized int state(String key) {
+        Integer state = STATE.get(key);
+        return state == null ? NOT_DOWNLOADED : state;
+    }
+
+    public static synchronized String message(String key) {
+        String message = MESSAGES.get(key);
+        return message == null ? "" : message;
+    }
+
+    public static synchronized void clear(String key) {
+        STATE.remove(key);
+        MESSAGES.remove(key);
+        notifyListeners();
+    }
+
+    /** Records how far a volume job has come: {@code [finished, total]}. */
+    public static synchronized void setProgress(String novelId, int volume, int finished, int total) {
+        PROGRESS.put(novelId + "#" + volume, new int[]{finished, total});
+        notifyListeners();
+    }
+
+    public static synchronized int[] progress(String novelId, int volume) {
+        int[] value = PROGRESS.get(novelId + "#" + volume);
+        return value == null ? new int[]{0, 0} : value.clone();
+    }
+
+    public static synchronized void clearProgress(String novelId, int volume) {
+        PROGRESS.remove(novelId + "#" + volume);
+        notifyListeners();
+    }
+
+    /**
+     * Resolves what the library should print for one chapter: a live queue state
+     * wins, otherwise the disk decides. Never reports "Tersimpan" for a chapter
+     * the store cannot open.
+     */
+    public static int resolve(String novelId, String url, OfflineStore store) {
+        String key = key(novelId, url);
+        int live = state(key);
+        if (live == QUEUED || live == DOWNLOADING) return live;
+        if (store != null && store.isSaved(novelId, url)) return SAVED;
+        return live;
+    }
+
+    public static synchronized void addListener(Listener listener) {
+        if (listener != null && !LISTENERS.contains(listener)) LISTENERS.add(listener);
+    }
+
+    public static synchronized void removeListener(Listener listener) {
+        LISTENERS.remove(listener);
+    }
+
+    private static void notifyListeners() {
+        List<Listener> copy;
+        synchronized (DownloadStatusStore.class) {
+            copy = new ArrayList<>(LISTENERS);
+        }
+        for (Listener listener : copy) listener.onDownloadStateChanged();
+    }
+
+    /** Drops every transient state; used by tests and on a full reset. */
+    public static synchronized void reset() {
+        STATE.clear();
+        MESSAGES.clear();
+        PROGRESS.clear();
+        LISTENERS.clear();
+    }
+}
