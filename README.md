@@ -1756,7 +1756,7 @@ semuanya lulus:
 - **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
 
 ```bash
-gradle testDebugUnitTest      # 148 tes
+gradle testDebugUnitTest      # 351 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
