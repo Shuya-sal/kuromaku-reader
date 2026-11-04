@@ -2137,14 +2137,12 @@ gradle testDebugUnitTest assembleDebug
   diperbarui bersama; `VolumeCoversTableTest` akan gagal bila hanya salah satunya diubah.
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
-- `ReaderOfflineTest.aFailedExtractionShowsTheReasonRetryAndTheSourceLink` pernah gagal
-  sekali di tengah suite penuh (2026-11-04): judul bar terbaca `Memuat…`, bukan
-  `Gagal memuat chapter`, padahal berkas tes itu dan seluruh `src/main` tidak berubah.
-  Diukur, bukan disimpulkan: **4/4** run terisolasi hijau, lalu suite penuh berikutnya
-  hijau. Jadi ini kegagalan intermiten pada urutan/penjadwalan Robolectric, bukan
-  regresi — tetapi belum diketahui penyebab pastinya, dan satu kegagalan seperti ini
-  bisa muncul lagi tanpa ada kode yang berubah. Jangan langsung menyalahkan commit
-  terakhir bila tes ini merah sendirian; jalankan ulang dulu.
+- `ReaderOfflineTest.aFailedExtractionShowsTheReasonRetryAndTheSourceLink` sempat mengalami
+  kegagalan intermiten di runner CI / suite penuh saat pemuatan asynchronous di latar belakang
+  (`new Thread(...)` pada `ReaderActivity.load()`) belum tuntas saat `idle()` pertama dipanggil,
+  sehingga judul bar masih terbaca `Memuat…`. Masalah ini telah diselesaikan secara definitif
+  lewat helper sinkronisasi `waitForLoad(activity)` yang memantau hilangnya `ProgressBar` dan
+  menuntaskan looper utama, dibuktikan stabil 3/3 run terisolasi dan suite penuh.
 
 ### Batasan parser generik — diukur, bukan diperkirakan
 

@@ -176,9 +176,23 @@ public class ReaderOfflineTest {
         intent.putExtra(ReaderActivity.EXTRA_URL, url);
         ReaderActivity activity = Robolectric.buildActivity(ReaderActivity.class, intent)
                 .setup().get();
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        waitForLoad(activity);
         layout(activity);
         return activity;
+    }
+
+    private void waitForLoad(ReaderActivity activity) {
+        for (int i = 0; i < 50; i++) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            List<android.widget.ProgressBar> bars = findAll(activity.getWindow().getDecorView(), android.widget.ProgressBar.class);
+            if (bars.isEmpty() || bars.get(0).getVisibility() == View.GONE) {
+                break;
+            }
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException ignored) {}
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
     }
 
     private void layout(android.app.Activity activity) {
