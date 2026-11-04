@@ -212,7 +212,7 @@ public class AddNovelDiagnosticsTest {
     }
 
     /**
-     * Every paragraph the source printed appears, verbatim and in order.
+     * Every synopsis paragraph is shown, verbatim and in order.
      *
      * <p>Guards the other direction: a branch that always prints the fallback would
      * pass the test above while hiding the whole synopsis.
@@ -223,6 +223,43 @@ public class AddNovelDiagnosticsTest {
                 new String[]{"Paragraf pertama.", "Paragraf kedua.", "Paragraf ketiga."});
         assertEquals(Arrays.asList("Paragraf pertama.", "Paragraf kedua.", "Paragraf ketiga."),
                 lines);
+    }
+
+    /** Two volumes holding three chapters between them: the two counts differ. */
+    private static String countsLine(String tag) {
+        List<Volume> volumes = new ArrayList<>();
+        volumes.add(new Volume(1, Arrays.asList(
+                new Chapter("Volume 1 Bab 1", "Bab 1", ARTICLE_URL + "#1", "2026-02-01", 1, 1),
+                new Chapter("Volume 1 Bab 2", "Bab 2", ARTICLE_URL + "#2", "2026-02-02", 2, 1))));
+        volumes.add(new Volume(2, Arrays.asList(
+                new Chapter("Volume 2 Bab 1", "Bab 1", ARTICLE_URL + "#3", "2026-02-03", 3, 2))));
+
+        AddNovelPage.State state = new AddNovelPage.State();
+        state.url = ARTICLE_URL;
+        state.preview = NovelDiscovery.catalogueFromFeed(ARTICLE_URL, "Novel Uji", "",
+                "Penulis", "", "", "", "", 0.70f, new String[]{"Sinopsis."}, volumes,
+                new ArrayList<String>());
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), state, null);
+        TextView line = page.build().findViewWithTag(tag);
+        assertNotNull("halaman pratinjau harus punya baris " + tag, line);
+        return line.getText().toString();
+    }
+
+    /**
+     * The counts row prints volumes in one slot and chapters in the other.
+     *
+     * <p>Both numbers come from the parser and the parser's numbers are already
+     * tested, which made this row look covered. It was not: no test named either
+     * "add_novel_volume_count" or "add_novel_chapter_count". Measured — printing the
+     * chapter count in the volume slot, and the volume count in the chapter slot,
+     * both survived the whole class. The two values differ here on purpose (2 volumes,
+     * 3 chapters); with equal values a swap would be invisible even to this test.
+     */
+    @Test
+    public void theCountsRowKeepsVolumesAndChaptersInTheirOwnSlot() {
+        assertEquals("2 volume", countsLine("add_novel_volume_count"));
+        assertEquals(" · 3 chapter ditemukan", countsLine("add_novel_chapter_count"));
     }
 
     /**

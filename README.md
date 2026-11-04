@@ -835,7 +835,7 @@ Tiga di antaranya dijaga tes. Yang keempat **tidak**, dan itu diukur, bukan
 disimpulkan dari `grep`: mengganti salinan di `savePreview` dengan
 `"Status tidak diketahui"` lalu menjalankan seluruh suite menghasilkan **356 tes,
 0 gagal** — `SURVIVED`. (Itu keadaan suite **saat mutasi diukur**; dua tes helper di
-bawah belum ada. Pada pohon sekarang suite berisi **364 tes**, dan mutasi yang sama
+bawah belum ada. Pada pohon sekarang suite berisi **365 tes**, dan mutasi yang sama
 tertangkap.) Artinya satu kalimat yang dilihat pengguna bisa berubah untuk
 setiap novel yang ia tambahkan sendiri, tanpa ada tes yang memerah.
 
@@ -1630,10 +1630,10 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **364 pengujian** di 33 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **365 pengujian** di 33 kelas,
 semuanya lulus:
 
-- **AddNovelDiagnosticsTest** (8) — panel diagnostik menyebut sumber tautannya
+- **AddNovelDiagnosticsTest** (9) — panel diagnostik menyebut sumber tautannya
   sesuai jenis alamat: "di feed label" untuk URL label, "di artikel" untuk URL
   artikel. Dibangun lewat Robolectric pada 320 dp. Kolom yang tidak dicetak sumber
   dituntut **utuh** sebagai `Status: Tidak tercantum di halaman sumber` (string kosong
@@ -1642,11 +1642,16 @@ semuanya lulus:
   Satu tes membaca **keempat** baris pratinjau (penulis, ilustrator, genre, status)
   sebagai pasangan label→nilai. Dua tes menjaga kotak sinopsis: sinopsis kosong
   menyebut sumber tidak mencetaknya dengan kalimat **utuh**, dan setiap paragraf yang
-  dicetak sumber muncul apa adanya **dan berurutan**. Bukti: **5/5 mutasi** kalimat
-  cadangan tertangkap, **2/2 mutasi pasangan baris** tertangkap, dan **2/2 mutasi
-  cabang sinopsis** tertangkap — paragraf diganti string kosong, serta sinopsis dibuat
-  selalu mencetak kalimat cadangan. Ketiga kelompok mutasi itu **semula lolos** saat
-  hanya baris status yang diukur; `md5` sumber dipulihkan sesudah tiap mutasi.
+  dicetak sumber muncul apa adanya **dan berurutan**. Satu tes menjaga baris angka
+  pratinjau: volume dan chapter masing-masing di slotnya sendiri (`2 volume` ·
+  ` · 3 chapter ditemukan`), dengan kedua angka **sengaja berbeda** supaya
+  pertukaran tidak lolos. Bukti: **5/5 mutasi** kalimat cadangan tertangkap,
+  **2/2 mutasi pasangan baris** tertangkap, **2/2 mutasi cabang sinopsis**
+  tertangkap — paragraf diganti string kosong, serta sinopsis dibuat selalu
+  mencetak kalimat cadangan — dan **2/2 mutasi baris angka** tertangkap (jumlah
+  chapter dicetak di slot volume, dan sebaliknya). Keempat kelompok mutasi itu
+  **semula lolos** saat hanya baris status yang diukur; `md5` sumber dipulihkan
+  sesudah tiap mutasi.
 - **AddNovelPickerTest** (3) — pemilih tautan manual lewat Robolectric pada 320 dp:
   hanya tautan yang mungkin chapter yang ditawarkan, centang/batal centang menentukan
   isi pilihan, dan tidak ada yang dikirim sebelum tombol ditekan. Tiga mutasi
@@ -1863,7 +1868,7 @@ semuanya lulus:
   ditulis sumber, dan spasi tidak lagi dianggap kosong.
 
 ```bash
-gradle testDebugUnitTest      # 364 tes
+gradle testDebugUnitTest      # 365 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
