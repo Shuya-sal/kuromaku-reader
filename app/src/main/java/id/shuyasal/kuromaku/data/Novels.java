@@ -90,7 +90,7 @@ public final class Novels {
                 "Yuuki Ryou",
                 "Nakamura",
                 "Action, Adventure, Fantasy, Harem, Romance, School Life",
-                "Tidak dicantumkan di halaman sumber",
+                Novel.STATUS_NOT_STATED,
                 "Kaori Translation (Bahasa Indonesia)",
                 "https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku",
                 "https://kaoritranslation.blogspot.com/2025/09/ln-monogatari-no-kuromaku-ni-tensei.html",
@@ -144,7 +144,7 @@ public final class Novels {
                 "Kannatsuki Noboru",
                 "Action, Adventure, Comedy, Ecchi, Fantasy, Harem, Martial Arts,"
                         + " Romance, School Life",
-                "Tidak dicantumkan di halaman sumber",
+                Novel.STATUS_NOT_STATED,
                 "Kaori Translation (Bahasa Indonesia)",
                 "https://kaoritranslation.blogspot.com/2025/04/ln-magicalexplorer-eroge-no-yuujin.html",
                 "https://kaoritranslation.blogspot.com/2025/04/ln-magicalexplorer-eroge-no-yuujin.html",

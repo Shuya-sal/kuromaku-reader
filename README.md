@@ -1580,7 +1580,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **356 pengujian** di 33 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **358 pengujian** di 33 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1763,7 +1763,7 @@ semuanya lulus:
   di bagian batasan), sementara nomor sungguhan tidak pernah diganti label cadangan.
   Bukti: mengganti `"Volume lain"` menjadi `"Volume ?"` memerahkan
   `aVolumeWithoutANumberSaysSo` — **1/1 tertangkap**, `md5` sumber dipulihkan.
-- **NovelInfoTest** (3, kelas baru) — salinan statis metadata Monogatari di
+- **NovelInfoTest** (5, kelas baru) — salinan statis metadata Monogatari di
   `NovelInfo.java` tidak boleh menyimpang dari novel yang benar-benar ditampilkan
   (`Novels.byId(Novels.MONOGATARI)`): judul, judul Jepang, judul lengkap, penulis,
   ilustrator, genre, status, penerjemah, dan halaman label dituntut sama persis;
@@ -1778,10 +1778,29 @@ semuanya lulus:
   arsitektur README ini — jadi seluruh konstantanya bisa diubah dengan suite tetap hijau.
   Bukti: **3/3 mutasi tertangkap** — penulis diubah `Yuuki Ryo`, status dikarang
   `Ongoing`, dan satu paragraf sinopsis dihapus; tiap mutasi memerahkan tes yang
-  dituju, `md5` sumber dipulihkan sesudahnya.
+  dituju, `md5` sumber dipulihkan sesudahnya. Saat kelas ini ditulis, kalimat status
+  itu masih ada sebagai **empat salinan terpisah** di `app/src/main` —
+  `MainActivity.java:1017`, `NovelInfo.java:30`, `Novels.java:93`, `Novels.java:147`.
+  Yang dijaga tes hanya **tiga**: `NovelInfo.java:30` oleh
+  `theStatusIsTheAbsenceOfOneNotAGuess`, dan `Novels.java:93` serta `Novels.java:147`
+  oleh `aStatusTheSourceNeverStatedIsNotInvented`. Salinan keempat — cadangan di
+  `savePreview` untuk novel yang ditambahkan lewat URL — **tidak dijaga apa pun**:
+  menggantinya dengan `"Status tidak diketahui"` membuat **356 tes tetap hijau**
+  (mutasi diukur, bukan disimpulkan dari grep).
+  Keempatnya kini membaca satu konstanta `Novel.STATUS_NOT_STATED`, dan keputusan
+  "kosong berarti kalimat itu" dipindahkan ke `Novel.statusOrDefault(String)` supaya
+  bisa diuji, bukan tinggal sebagai literal di dalam `savePreview`.
+  Bukti pada konstanta: **3/3 mutasi tertangkap** (jadi `Ongoing`, jadi string kosong,
+  hilang kata "halaman"), dan tiap mutasi memerahkan **dua tes di dua kelas berbeda** —
+  `TwoNovelTest.aStatusTheSourceNeverStatedIsNotInvented` dan
+  `NovelInfoTest.theStatusIsTheAbsenceOfOneNotAGuess` — bukan satu tes yang menegaskan
+  dua kali. Bukti pada helper: **4/4 mutasi tertangkap**, termasuk mutasi yang
+  sebelumnya lolos (helper mengembalikan `"Status tidak diketahui"`), helper
+  mengembalikan status kosong apa adanya, helper menimpa status yang benar-benar
+  ditulis sumber, dan spasi tidak lagi dianggap kosong.
 
 ```bash
-gradle testDebugUnitTest      # 356 tes
+gradle testDebugUnitTest      # 358 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
@@ -1935,7 +1954,7 @@ app/src/main/java/id/shuyasal/kuromaku/
 │   ├── FeedEntry.java         # catatan feed minimal
 │   ├── Library.java           # rak milik user, disimpan di database
 │   ├── LibraryBuilder.java    # parsing judul → volume, label, urutan baca
-│   ├── Novel.java             # satu novel: metadata, cover, cara katalog dibaca
+│   ├── Novel.java             # satu novel: metadata, cover, `STATUS_NOT_STATED`
 │   ├── NovelInfo.java         # metadata Monogatari (dijaga NovelInfoTest)
 │   ├── NovelMapper.java       # baris database ↔ Novel
 │   ├── Novels.java            # daftar dua novel bawaan (teks dari halaman sumber)

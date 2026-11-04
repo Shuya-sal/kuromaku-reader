@@ -94,4 +94,19 @@ public class NovelInfoTest {
                 Math.round(720 / novel.coverRatio), NovelInfo.coverHeight(720));
         assertEquals("lebar 0 tidak boleh menghasilkan tinggi", 0, NovelInfo.coverHeight(0));
     }
+    /** A novel whose post stated no status is stored with the sentence, not a blank. */
+    @Test
+    public void anEmptyStatusBecomesTheSentence() {
+        assertEquals(Novel.STATUS_NOT_STATED, Novel.statusOrDefault(""));
+        assertEquals(Novel.STATUS_NOT_STATED, Novel.statusOrDefault(null));
+        assertEquals(Novel.STATUS_NOT_STATED, Novel.statusOrDefault("   "));
+    }
+
+    /** A status the source did state is kept verbatim, never replaced by the fallback. */
+    @Test
+    public void aStatedStatusIsKept() {
+        assertEquals("Completed", Novel.statusOrDefault("Completed"));
+        assertEquals("Ongoing", Novel.statusOrDefault("Ongoing"));
+    }
+
 }

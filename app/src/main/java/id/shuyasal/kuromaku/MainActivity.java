@@ -1014,7 +1014,7 @@ public class MainActivity extends AppCompatActivity {
                 preview.author,
                 preview.illustrator,
                 preview.genres,
-                preview.status.isEmpty() ? "Tidak dicantumkan di halaman sumber" : preview.status,
+                Novel.statusOrDefault(preview.status),
                 "Kaori Translation",
                 preview.sourceUrl,
                 preview.sourceUrl,

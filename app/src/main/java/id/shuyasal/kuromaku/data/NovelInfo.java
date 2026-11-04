@@ -27,7 +27,7 @@ public final class NovelInfo {
             "Action, Adventure, Fantasy, Harem, Romance, School Life";
 
     /** The source page has no status field; say so rather than invent one. */
-    public static final String STATUS = "Tidak dicantumkan di halaman sumber";
+    public static final String STATUS = Novel.STATUS_NOT_STATED;
 
     public static final String TRANSLATION = "Kaori Translation (Bahasa Indonesia)";
 

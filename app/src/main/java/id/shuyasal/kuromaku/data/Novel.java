@@ -38,6 +38,36 @@ public final class Novel {
     public static final int CATALOG_ARTICLE_FEED = 3;
 
     /**
+     * What {@link #status} says when the source page states no publication status.
+     *
+     * <p>Kaori Translation's landing pages carry a genre line and a translator line
+     * but no status, so the reader says this in words rather than guessing "Ongoing"
+     * or "Completed". The sentence is user-visible, so it lives here once: the two
+     * built-in novels, the metadata copy in {@link NovelInfo} and the path that saves
+     * a novel the user added by URL all read this constant instead of repeating the
+     * text. Of the four copies this replaced, three were held by a test and one - the
+     * fallback in the save path - was not: replacing that literal with
+     * "Status tidak diketahui" left all 356 tests green, which is why the decision now
+     * lives in {@link #statusOrDefault(String)} where it can be asserted directly.
+     */
+    public static final String STATUS_NOT_STATED = "Tidak dicantumkan di halaman sumber";
+
+    /**
+     * The status to store for a novel whose source page stated none.
+     *
+     * <p>A novel added by URL is read off its post, and that post may carry no status
+     * line at all. Storing the empty string would leave a blank row in the detail
+     * page, so the reader substitutes {@link #STATUS_NOT_STATED} - the same sentence
+     * the built-in novels use - and never guesses. The decision lives here rather than
+     * inline in the save path so it can be tested: when it was a literal in
+     * MainActivity, replacing that literal with "Status tidak diketahui" left all 356
+     * tests green.
+     */
+    public static String statusOrDefault(String status) {
+        return status == null || status.trim().isEmpty() ? STATUS_NOT_STATED : status;
+    }
+
+    /**
      * True for the two novels that ship with the app. A built-in novel can still
      * be removed from the library, but the app knows its verified metadata
      * without ever fetching it, so it does not depend on the network to appear.
