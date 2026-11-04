@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.20.1
+# Kuromaku Reader 2.20.2
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -2087,9 +2087,11 @@ Kedua selektor terakhir dijaga tes masing-masing, jadi menghapus salah satunya m
 yang terbit, bukan dari ingatan: `aapt2 dump badging` memberi
 `minSdkVersion:'26'` / `targetSdkVersion:'35'`. Di Android 7.1 ke bawah pemasangan
 ditolak oleh sistem, dan aplikasi tidak akan muncul sebagai pilihan. APK rilis
-ditandatangani dengan kunci **Android Debug** (`CN=Android Debug`) memakai skema
-tanda tangan **v2** saja — cukup untuk dipasang dan diperbarui di perangkat, tetapi
-bukan kunci rilis Play Store.
+ditandatangani dengan kunci **Android Debug** (`CN=Android Debug`, SHA-256: `e413b4146721994d...`)
+dari keystore repositori (`keystore/debug.keystore`) memakai skema tanda tangan **v2** saja.
+Dengan kunci debug tetap ini, setiap pembaruan rilis APK dapat dipasang langsung (update/in-place)
+di perangkat Android tanpa ditolak sistem dan tanpa perlu menghapus aplikasi (yang sebelumnya
+menghapus riwayat membaca dan unduhan offline). Kunci ini bukan kunci rilis Play Store.
 
 GitHub Actions: **Actions → Build Kuromaku Reader APK** (`.github/workflows/android.yml`).
 Alur: unit test → `assembleDebug` → verifikasi APK dengan `aapt2` → artifact → rilis `latest-apk`.

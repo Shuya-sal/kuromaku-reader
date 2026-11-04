@@ -8,11 +8,31 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 44
-        versionName = "2.20.1"
+        versionCode = 45
+        versionName = "2.20.2"
+    }
+
+    // One checked-in debug keystore, used by both CI and local builds.
+    //
+    // Android refuses to install an APK whose signing certificate differs from the
+    // installed one, and until 2.20.2 every CI run generated its own throwaway debug
+    // keystore -- so each release appeared as a different publisher, "update" was
+    // rejected, and the only way forward was uninstall, which deletes reading
+    // progress, bookmarks and offline downloads. Committing a debug keystore is
+    // exactly what it is for: it is not a secret and grants no publishing rights.
+    signingConfigs {
+        create("sharedDebug") {
+            storeFile = file("../keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("sharedDebug")
+        }
         release {
             isMinifyEnabled = false
         }

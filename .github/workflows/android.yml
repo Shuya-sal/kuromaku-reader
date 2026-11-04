@@ -113,6 +113,24 @@ jobs:
           test -f "$APK"
           ls -lh "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | head -5
+          # Android refuses to update an installed app whose signing certificate
+          # changed, and uninstalling to get past that wipes reading progress,
+          # bookmarks and offline downloads. Every CI run used to generate its own
+          # throwaway debug key, so each release looked like a different publisher.
+          # The APK is now signed from the committed keystore; assert it, because a
+          # silently dropped signingConfig would restore the old behaviour with a
+          # green build.
+          EXPECTED="e413b4146721994d141932af94e6450017a5133939aebef7bed3256b9302a776"
+          ACTUAL=$(keytool -list -v -keystore keystore/debug.keystore -storepass android \
+                     -alias androiddebugkey 2>/dev/null \
+                   | grep -i 'SHA256:' | head -1 | awk '{print $2}' \
+                   | tr -d ':' | tr 'A-F' 'a-f')
+          GOT=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" 2>/dev/null \
+                | grep 'SHA-256 digest' | head -1 | awk '{print $NF}')
+          echo "sertifikat keystore : $ACTUAL"
+          echo "sertifikat APK      : $GOT"
+          test "$ACTUAL" = "$EXPECTED" || { echo "::error::keystore berubah, APK tidak akan bisa memperbarui versi terpasang"; exit 1; }
+          test "$GOT" = "$EXPECTED" || { echo "::error::APK tidak ditandatangani keystore repo"; exit 1; }
 
       - name: Package source
         run: |
@@ -132,8 +150,11 @@ jobs:
           # Keep only paths that exist, and verify each one landed in the archive.
           # tools/ stays out on purpose: tools/icon_master.png alone is 2 MB, which
           # would grow the source zip from 1.4 MB to 3.3 MB for a dev-only asset.
+          # keystore/ is required, not optional: build.gradle.kts points debug signing
+          # at it, so a zip without it cannot assemble. It is a debug key -- public by
+          # design, grants no publishing rights.
           FILES="app/src app/build.gradle.kts build.gradle.kts settings.gradle.kts
-                 gradle.properties .gitignore README.md .github"
+                 gradle.properties .gitignore README.md .github keystore"
           for f in $FILES; do
             if [ ! -e "$f" ]; then
               echo "::error::berkas sumber tidak ada: $f"

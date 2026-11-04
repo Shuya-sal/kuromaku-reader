@@ -2,7 +2,15 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.20.1** (versionCode 44) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.20.2** (versionCode 45) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* **2.20.2 — Sertifikat penandatanganan konsisten (reproducible debug keystore).**
+  Sebelumnya setiap eksekusi CI GitHub Actions men-generate debug keystore acak sekali pakai.
+  Akibatnya, setiap rilis APK baru memiliki identitas penerbit (certificate digest SHA-256)
+  yang berbeda, sehingga Android menolak pembaruan langsung (update/install over existing)
+  dan memaksa uninstall yang menghapus progres baca dan chapter offline.
+  Mulai 2.20.2, keystore debug repositori (`keystore/debug.keystore`) didaftarkan ke `signingConfigs`
+  dan divalidasi ketat pada alur CI (`SHA-256: e413b4146721994d...`), memastikan pembaruan APK
+  dapat dipasang langsung di perangkat tanpa menghapus data lokal pembaca.
 * **2.20.1 — satu kalimat status, dan satu salinan yang tidak dijaga tes.**
   Kalimat **`Tidak dicantumkan di halaman sumber`** tadinya ada sebagai empat
   salinan terpisah di kode. Tiga dijaga tes; salinan keempat — cadangan saat
