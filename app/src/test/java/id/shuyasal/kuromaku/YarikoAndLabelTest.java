@@ -647,6 +647,38 @@ public class YarikoAndLabelTest {
     }
 
     /**
+     * A link whose target is a bitmap says exactly that — the full sentence, not the words.
+     *
+     * <p>Plenty of posts wrap a cover or an illustration in {@code <a>}, so the anchor
+     * has to be counted, but its verdict is about the target being an image. Before this
+     * test the only assertion was {@code reason.contains("tautan gambar")}, a fragment
+     * shared with nothing else and therefore safe to break: replacing the sentence with
+     * "ditolak: tautan bukan halaman chapter" left the whole suite green. The branch is
+     * also the one the volume-group promotion used to overwrite, so the exact wording is
+     * what keeps the diagnostics panel from calling a picture "sendiri di grup volume".
+     */
+    @Test
+    public void anImageWrapperIsNamedAsAnImageNotAChapter() throws Exception {
+        String html = "<html><body><div class='post-body entry-content'>"
+                + "<p><b>Author :</b> Uji</p>"
+                + "<h3>Volume 1</h3>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_1.html'>Chapter 1</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_2.html'>Chapter 2</a></p>"
+                + "<p><a href='https://kaoritranslation.blogspot.com/2026/02/novel-x_3.html'>Chapter 3</a></p>"
+                + "<p><a href='https://blogger.googleusercontent.com/img/ilustrasi.jpg'>Ilustrasi</a></p>"
+                + "</div></body></html>";
+
+        NovelDiscovery.Result result = NovelDiscovery.parse(html,
+                "https://kaoritranslation.blogspot.com/2026/02/novel-x.html");
+
+        assertEquals("3 chapter", 3, result.chapterCount());
+        assertEquals("hanya pembungkus gambar yang ditolak", 1, result.rejected().size());
+        NovelDiscovery.Candidate image = result.rejected().get(0);
+        assertEquals("ditolak: tautan gambar, bukan chapter", image.reason);
+        assertFalse("pembungkus gambar tidak boleh bisa dipilih", image.selectable);
+    }
+
+    /**
      * "Interlude" + "2" written as two anchors is one chapter, not a chapter and a stray.
      *
      * <p>The source does this in Volume 1 only: {@code <a>Interlude </a><a>2</a>}, the

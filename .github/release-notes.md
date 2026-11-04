@@ -236,7 +236,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   "50% · 1 dari 2 chapter" + "Batalkan"; sebagian → "Lanjutkan Download";
   selesai → centang + "Tersimpan semua" (nonaktif). "Tersimpan semua"
   tidak pernah muncul selama masih ada chapter belum lengkap.
-* **350 unit test lulus**, 0 gagal (32 kelas). `VolumeCoversAndDownloadStateTest`
+* **351 unit test lulus**, 0 gagal (32 kelas). `VolumeCoversAndDownloadStateTest`
   (17 tes) memakai `yariko_article_covers.html` — artikel asli yang
   memicu laporan — dan mengukur UI pada layar 320 dp.
   `RingProgressMotionTest` (5 tes) menguji cincin progres langsung:
