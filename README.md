@@ -835,7 +835,7 @@ Tiga di antaranya dijaga tes. Yang keempat **tidak**, dan itu diukur, bukan
 disimpulkan dari `grep`: mengganti salinan di `savePreview` dengan
 `"Status tidak diketahui"` lalu menjalankan seluruh suite menghasilkan **356 tes,
 0 gagal** — `SURVIVED`. (Itu keadaan suite **saat mutasi diukur**; dua tes helper di
-bawah belum ada. Pada pohon sekarang suite berisi **362 tes**, dan mutasi yang sama
+bawah belum ada. Pada pohon sekarang suite berisi **364 tes**, dan mutasi yang sama
 tertangkap.) Artinya satu kalimat yang dilihat pengguna bisa berubah untuk
 setiap novel yang ia tambahkan sendiri, tanpa ada tes yang memerah.
 
@@ -1630,21 +1630,23 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **362 pengujian** di 33 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **364 pengujian** di 33 kelas,
 semuanya lulus:
 
-- **AddNovelDiagnosticsTest** (6) — panel diagnostik menyebut sumber tautannya
+- **AddNovelDiagnosticsTest** (8) — panel diagnostik menyebut sumber tautannya
   sesuai jenis alamat: "di feed label" untuk URL label, "di artikel" untuk URL
   artikel. Dibangun lewat Robolectric pada 320 dp. Kolom yang tidak dicetak sumber
   dituntut **utuh** sebagai `Status: Tidak tercantum di halaman sumber` (string kosong
   dan `"   "` dua-duanya dihitung kosong), sedangkan status yang **benar-benar
   dicetak** sumber ditampilkan apa adanya dan tidak pernah ditimpa kalimat cadangan.
-  Satu tes lagi membaca **keempat** baris pratinjau (penulis, ilustrator, genre,
-  status) sebagai pasangan label→nilai. Bukti: **5/5 mutasi** kalimat cadangan
-  tertangkap, dan **2/2 mutasi pasangan baris** tertangkap — menukar nilai penulis
-  dengan ilustrator, serta membuat baris Genre mencetak status. Kedua mutasi pasangan
-  itu **semula lolos** saat hanya baris status yang diukur; `md5` sumber dipulihkan
-  sesudah tiap mutasi.
+  Satu tes membaca **keempat** baris pratinjau (penulis, ilustrator, genre, status)
+  sebagai pasangan label→nilai. Dua tes menjaga kotak sinopsis: sinopsis kosong
+  menyebut sumber tidak mencetaknya dengan kalimat **utuh**, dan setiap paragraf yang
+  dicetak sumber muncul apa adanya **dan berurutan**. Bukti: **5/5 mutasi** kalimat
+  cadangan tertangkap, **2/2 mutasi pasangan baris** tertangkap, dan **2/2 mutasi
+  cabang sinopsis** tertangkap — paragraf diganti string kosong, serta sinopsis dibuat
+  selalu mencetak kalimat cadangan. Ketiga kelompok mutasi itu **semula lolos** saat
+  hanya baris status yang diukur; `md5` sumber dipulihkan sesudah tiap mutasi.
 - **AddNovelPickerTest** (3) — pemilih tautan manual lewat Robolectric pada 320 dp:
   hanya tautan yang mungkin chapter yang ditawarkan, centang/batal centang menentukan
   isi pilihan, dan tidak ada yang dikirim sebelum tombol ditekan. Tiga mutasi
@@ -1861,7 +1863,7 @@ semuanya lulus:
   ditulis sumber, dan spasi tidak lagi dianggap kosong.
 
 ```bash
-gradle testDebugUnitTest      # 362 tes
+gradle testDebugUnitTest      # 364 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
@@ -2127,6 +2129,14 @@ gradle testDebugUnitTest assembleDebug
   diperbarui bersama; `VolumeCoversTableTest` akan gagal bila hanya salah satunya diubah.
 - Katalog dimuat saat aplikasi dibuka. Bila salah satu novel gagal dimuat, novel lain
   tetap tampil dan pesan kegagalan disebutkan di halaman perpustakaan.
+- `ReaderOfflineTest.aFailedExtractionShowsTheReasonRetryAndTheSourceLink` pernah gagal
+  sekali di tengah suite penuh (2026-11-04): judul bar terbaca `Memuat…`, bukan
+  `Gagal memuat chapter`, padahal berkas tes itu dan seluruh `src/main` tidak berubah.
+  Diukur, bukan disimpulkan: **4/4** run terisolasi hijau, lalu suite penuh berikutnya
+  hijau. Jadi ini kegagalan intermiten pada urutan/penjadwalan Robolectric, bukan
+  regresi — tetapi belum diketahui penyebab pastinya, dan satu kegagalan seperti ini
+  bisa muncul lagi tanpa ada kode yang berubah. Jangan langsung menyalahkan commit
+  terakhir bila tes ini merah sendirian; jalankan ulang dulu.
 
 ### Batasan parser generik — diukur, bukan diperkirakan
 

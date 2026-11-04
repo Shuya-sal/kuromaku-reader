@@ -4,6 +4,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 
 import org.junit.Test;
@@ -154,6 +156,73 @@ public class AddNovelDiagnosticsTest {
         assertEquals("Ilustrator: Ilustrator Uji", rowWithTag("add_novel_meta_ilustrator"));
         assertEquals("Genre: Fantasi, Petualangan", rowWithTag("add_novel_meta_genre"));
         assertEquals("Status: Ongoing", rowWithTag("add_novel_meta_status"));
+    }
+
+    private static NovelDiscovery.Result previewWithSynopsis(String[] synopsis) {
+        List<Chapter> chapters = Arrays.asList(
+                new Chapter("Volume 1 Bab 1", "Bab 1", ARTICLE_URL + "#1", "2026-02-01", 1, 1));
+        List<Volume> volumes = new ArrayList<>();
+        volumes.add(new Volume(1, chapters));
+        return NovelDiscovery.catalogueFromFeed(ARTICLE_URL, "Novel Uji", "", "Penulis", "", "",
+                "", "", 0.70f, synopsis, volumes, new ArrayList<String>());
+    }
+
+    /** Every paragraph the synopsis box prints, in order. */
+    private static List<String> synopsisLines(String[] synopsis) {
+        AddNovelPage.State state = new AddNovelPage.State();
+        state.url = ARTICLE_URL;
+        state.preview = previewWithSynopsis(synopsis);
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), state, null);
+        View box = page.build().findViewWithTag("add_novel_synopsis_box");
+        assertNotNull("halaman pratinjau harus punya kotak sinopsis", box);
+
+        List<String> out = new ArrayList<>();
+        collectTagged(box, "add_novel_synopsis", out);
+        return out;
+    }
+
+    private static void collectTagged(View root, String tag, List<String> out) {
+        if (tag.equals(root.getTag()) && root instanceof TextView) {
+            out.add(((TextView) root).getText().toString());
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                collectTagged(group.getChildAt(i), tag, out);
+            }
+        }
+    }
+
+    /**
+     * An empty synopsis says the source did not print one, in that exact wording.
+     *
+     * <p>The synopsis box has two branches — no paragraphs, and one view per
+     * paragraph — and neither was read by any test: no test referenced the
+     * "add_novel_synopsis" tag at all. Measured: printing an empty string instead of
+     * the fallback, and printing the fallback instead of every real paragraph, both
+     * survived the whole class. An empty box tells the reader the app forgot to read
+     * the page.
+     */
+    @Test
+    public void anEmptySynopsisSaysTheSourceDidNotPrintOne() {
+        List<String> lines = synopsisLines(new String[0]);
+        assertEquals("satu baris cadangan", 1, lines.size());
+        assertEquals("Tidak tercantum di halaman sumber", lines.get(0));
+    }
+
+    /**
+     * Every paragraph the source printed appears, verbatim and in order.
+     *
+     * <p>Guards the other direction: a branch that always prints the fallback would
+     * pass the test above while hiding the whole synopsis.
+     */
+    @Test
+    public void everySynopsisParagraphIsShownInOrder() {
+        List<String> lines = synopsisLines(
+                new String[]{"Paragraf pertama.", "Paragraf kedua.", "Paragraf ketiga."});
+        assertEquals(Arrays.asList("Paragraf pertama.", "Paragraf kedua.", "Paragraf ketiga."),
+                lines);
     }
 
     /**
