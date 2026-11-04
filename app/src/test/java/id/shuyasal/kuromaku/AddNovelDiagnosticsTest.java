@@ -115,6 +115,47 @@ public class AddNovelDiagnosticsTest {
         return line.getText().toString();
     }
 
+    private static NovelDiscovery.Result previewWithMeta(String author, String illustrator,
+                                                         String genres, String status) {
+        List<Chapter> chapters = Arrays.asList(
+                new Chapter("Volume 1 Bab 1", "Bab 1", ARTICLE_URL + "#1", "2026-02-01", 1, 1));
+        List<Volume> volumes = new ArrayList<>();
+        volumes.add(new Volume(1, chapters));
+        return NovelDiscovery.catalogueFromFeed(ARTICLE_URL, "Novel Uji", "", author, illustrator,
+                genres, status, "", 0.70f, new String[]{"Sinopsis."}, volumes,
+                new ArrayList<String>());
+    }
+
+    /** Reads one preview row by its tag, given four distinct values. */
+    private static String rowWithTag(String tag) {
+        AddNovelPage.State state = new AddNovelPage.State();
+        state.url = ARTICLE_URL;
+        state.preview = previewWithMeta("Penulis Uji", "Ilustrator Uji", "Fantasi, Petualangan",
+                "Ongoing");
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), state, null);
+        TextView line = page.build().findViewWithTag(tag);
+        assertNotNull("halaman pratinjau harus punya baris " + tag, line);
+        return line.getText().toString();
+    }
+
+    /**
+     * Every preview row must carry its own field, not merely exist.
+     *
+     * <p>The preview builds four rows through one helper and only the status row had
+     * a test. Measured: swapping the author and illustrator values, and printing the
+     * status in the genre row, both survived the whole class. A preview whose rows
+     * drift is worse than a blank one — it tells the reader the source said something
+     * it never said.
+     */
+    @Test
+    public void eachPreviewRowCarriesItsOwnValue() {
+        assertEquals("Penulis: Penulis Uji", rowWithTag("add_novel_meta_penulis"));
+        assertEquals("Ilustrator: Ilustrator Uji", rowWithTag("add_novel_meta_ilustrator"));
+        assertEquals("Genre: Fantasi, Petualangan", rowWithTag("add_novel_meta_genre"));
+        assertEquals("Status: Ongoing", rowWithTag("add_novel_meta_status"));
+    }
+
     /**
      * A field the source never printed says so, in its exact wording.
      *
