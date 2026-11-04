@@ -135,6 +135,28 @@ public class TwoNovelTest {
         assertTrue(magical.fullTitle.contains("Geemu Chishiki Tsukatte Jiyuu ni Ikiru"));
     }
 
+    /**
+     * The status line says the source page did not state one — in that exact wording.
+     *
+     * <p>README quotes this sentence as what the app shows instead of guessing
+     * {@code Ongoing} or {@code Completed}. No test asserted it, so the wording could be
+     * replaced with a guess ("Ongoing") and every test still passed — which would be the
+     * one thing the metadata rule forbids: inventing information the source does not
+     * print. Both built-in novels have no status field on their pages, so both must carry
+     * the sentence rather than an empty string or an invented value.
+     */
+    @Test
+    public void aStatusTheSourceNeverStatedIsNotInvented() {
+        assertEquals("Monogatari: status tidak boleh dikarang",
+                "Tidak dicantumkan di halaman sumber",
+                Novels.byId(Novels.MONOGATARI).status);
+        assertEquals("Magical★Explorer: status tidak boleh dikarang",
+                "Tidak dicantumkan di halaman sumber",
+                Novels.byId(Novels.MAGICAL).status);
+        assertFalse("status tidak boleh kosong",
+                Novels.byId(Novels.MONOGATARI).status.isEmpty());
+    }
+
     /** The library screen shows one card per novel, each with a cover box. */
     @Test
     public void libraryShowsACardPerNovel() {

@@ -1580,7 +1580,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **351 pengujian** di 32 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **353 pengujian** di 32 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1709,9 +1709,14 @@ semuanya lulus:
 - **VolumeCoversTableTest** (4) — tabel cover statis di aplikasi dibandingkan ulang dengan hasil
   parse halaman sumber, jadi tabel tidak bisa melenceng dari sumber; tidak ada cover ganda;
   semua rasio berada di rentang buku (0,55–0,85).
-- **TwoNovelTest** (10) — dua novel di perpustakaan, satu kartu per novel, ketuk kartu membuka
+- **TwoNovelTest** (11) — dua novel di perpustakaan, satu kartu per novel, ketuk kartu membuka
   novel yang benar, progres & accordion tidak bocor antar novel, tema/huruf tetap bersama,
   `Session` memisahkan katalog, dan reader tidak bisa menyeberang ke novel lain.
+  Status kedua novel bawaan dituntut **utuh** sebagai
+  `Tidak dicantumkan di halaman sumber` — aturan metadata melarang mengarang, jadi
+  tesnya menolak baik string kosong maupun tebakan `Ongoing`/`Completed`.
+  Bukti: mengganti kalimat itu menjadi `Ongoing` memerahkan
+  `aStatusTheSourceNeverStatedIsNotInvented` — **1/1 tertangkap**.
 - **HeaderAndMotionTest** (18, Robolectric, layar kecil 320×640dp + sedang 411×891dp) —
   tinggi toolbar berada di 56–64 dp di luar system inset; status bar inset benar-benar
   menjadi padding di atas toolbar sehingga judul tidak menabrak jam; judul toolbar selalu
@@ -1753,10 +1758,14 @@ semuanya lulus:
   `anArticleWithoutABodyWrapperStillParses` — **2/2 tertangkap**, `md5` sumber dipulihkan
   sesudah tiap mutasi.
 - **ScrollMathTest** (6) — progres, restore posisi, padding footer.
-- **LibraryBuilderTest** (5) — pengelompokan volume, urutan numerik, label ringkas.
+- **LibraryBuilderTest** (6) — pengelompokan volume, urutan numerik, label ringkas;
+  volume yang nomornya tidak ditulis halaman berlabel **`Volume lain`** (dikutip README
+  di bagian batasan), sementara nomor sungguhan tidak pernah diganti label cadangan.
+  Bukti: mengganti `"Volume lain"` menjadi `"Volume ?"` memerahkan
+  `aVolumeWithoutANumberSaysSo` — **1/1 tertangkap**, `md5` sumber dipulihkan.
 
 ```bash
-gradle testDebugUnitTest      # 351 tes
+gradle testDebugUnitTest      # 353 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat

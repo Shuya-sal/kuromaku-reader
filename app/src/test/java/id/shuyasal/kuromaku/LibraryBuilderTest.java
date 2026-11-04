@@ -89,4 +89,21 @@ public class LibraryBuilderTest {
         Volume volume = new Volume(4, new ArrayList<Chapter>());
         assertEquals("Volume 4", volume.title());
     }
+
+    /**
+     * A volume whose number the page never wrote is labelled "Volume lain".
+     *
+     * <p>README quotes that label twice: once explaining that a page without a
+     * {@code Volume N} heading puts every chapter into one group, and once as the
+     * heading shown for that group. Nothing asserted the wording, so editing it to
+     * anything else was invisible — {@code volume.title()} could return "Volume ?"
+     * and the whole suite stayed green. Number 0 is how "no number" is represented,
+     * which is what the parser produces for a page without volume headings.
+     */
+    @Test
+    public void aVolumeWithoutANumberSaysSo() {
+        assertEquals("Volume lain", new Volume(0, new ArrayList<Chapter>()).title());
+        // A real number must not be replaced by the fallback label.
+        assertEquals("Volume 14", new Volume(14, new ArrayList<Chapter>()).title());
+    }
 }
