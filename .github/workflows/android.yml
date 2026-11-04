@@ -119,6 +119,10 @@ jobs:
           set -e
           VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts | head -1)
           OUT="kuromaku-reader-${VERSION}-source.zip"
+          # Nama artefak dan judul rilis dibaca dari sini juga. Sebelumnya keduanya
+          # ditulis tangan sebagai "2.20", sehingga build 2.20.1 akan tetap
+          # menerbitkan APK berjudul 2.20 dengan nama artefak yang sama.
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           rm -f "$OUT"
           # This list is the contract with whoever builds from the zip. `zip` skips
           # a named path that does not exist and still exits 0, so a stale entry
@@ -178,7 +182,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kuromaku-reader-2.20-debug
+          name: kuromaku-reader-${{ env.VERSION }}-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 90
@@ -188,7 +192,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
-          name: Kuromaku Reader 2.20 (APK)
+          name: Kuromaku Reader ${{ env.VERSION }} (APK)
           body_path: release-body.md
           files: |
             app/build/outputs/apk/debug/app-debug.apk

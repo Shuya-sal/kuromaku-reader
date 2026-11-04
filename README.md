@@ -1,4 +1,4 @@
-# Kuromaku Reader 2.20
+# Kuromaku Reader 2.20.1
 
 Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
 [Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
@@ -820,6 +820,51 @@ dan `?m=1`.
 
 Uji mutasi: petunjuk dikembalikan ke kalimat lama → tes itu gagal. Setelah
 dipulihkan: **271 tes, 0 gagal**, penanda `MUTATION` nol.
+
+## Satu kalimat status, dan salinan yang tidak dijaga tes (2.20.1)
+
+Kalimat status **`Tidak dicantumkan di halaman sumber`** ada sebagai **empat salinan
+terpisah** di `app/src/main`: `MainActivity.java:1017` (cadangan saat menyimpan novel
+yang ditambahkan lewat URL), `NovelInfo.java:30` (salinan metadata statis),
+`Novels.java:93` (Monogatari), dan `Novels.java:147` (Magical★Explorer).
+
+Tiga di antaranya dijaga tes. Yang keempat **tidak**, dan itu diukur, bukan
+disimpulkan dari `grep`: mengganti salinan di `savePreview` dengan
+`"Status tidak diketahui"` lalu menjalankan seluruh suite menghasilkan **356 tes,
+0 gagal** — `SURVIVED`. Artinya satu kalimat yang dilihat pengguna bisa berubah untuk
+setiap novel yang ia tambahkan sendiri, tanpa ada tes yang memerah.
+
+Dua perubahan, tanpa redesign dan tanpa mengubah tampilan:
+
+- **Satu sumber.** Keempat tempat kini membaca `Novel.STATUS_NOT_STATED`. Memutasi
+  konstanta itu memerahkan **dua tes di dua kelas berbeda** —
+  `TwoNovelTest.aStatusTheSourceNeverStatedIsNotInvented` (novel yang dirender) dan
+  `NovelInfoTest.theStatusIsTheAbsenceOfOneNotAGuess` (salinan statis) — yang memang
+  yang seharusnya terjadi pada satu sumber kebenaran.
+- **Keputusan yang bisa diuji.** Aturan "kosong berarti kalimat itu" pindah dari dalam
+  `savePreview()` ke `Novel.statusOrDefault(String)`. Sebuah keputusan yang terkubur
+  di dalam Activity tidak bisa ditegaskan tanpa menjalankan seluruh layar melewati
+  pemilih dokumen. Helper itu juga memangkas spasi, sehingga status berisi `"   "`
+  tidak lagi tersimpan sebagai spasi — perubahan perilaku kecil yang **disengaja** dan
+  punya tesnya sendiri.
+
+### Bukti tes
+
+`NovelInfoTest` (5 tes) menguji salinan metadata statis terhadap novel yang benar-benar
+dirender, status dituntut utuh, dan helper-nya: `null`, string kosong, dan spasi menjadi
+kalimat itu, sedangkan `"Completed"`/`"Ongoing"` — status yang memang mungkin ditulis
+sumber — dipertahankan apa adanya dan tidak pernah ditimpa.
+
+Uji mutasi helper: **4/4 tertangkap**, yang pertama justru mutasi yang dulu lolos
+(helper mengembalikan `"Status tidak diketahui"`), lalu helper menyimpan status kosong
+apa adanya, helper menimpa status yang benar-benar ditulis sumber, dan spasi tidak lagi
+dianggap kosong.
+
+**Batasan:** `statusOrDefault` hanya menguji keputusan penyimpanan, bukan bahwa
+`savePreview` benar-benar memanggilnya — jalur itu tetap tidak dijangkau tes mana pun di
+sini, karena membutuhkannya melewati pemilih dokumen Android. Yang dijamin tes adalah
+bahwa kalimatnya satu dan keputusannya benar; bukan bahwa layar itu sendiri sudah
+dicoba di perangkat.
 
 ## Drawer bagian dan backup progres membaca (2.20)
 

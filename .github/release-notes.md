@@ -2,7 +2,16 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.20** (versionCode 43) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.20.1** (versionCode 44) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* **2.20.1 — satu kalimat status, dan satu salinan yang tidak dijaga tes.**
+  Kalimat **`Tidak dicantumkan di halaman sumber`** tadinya ada sebagai empat
+  salinan terpisah di kode. Tiga dijaga tes; salinan keempat — cadangan saat
+  menyimpan novel yang ditambahkan lewat URL — **tidak**: menggantinya dengan
+  teks lain membuat seluruh 356 tes tetap hijau. Sekarang keempatnya membaca satu
+  konstanta, dan keputusan "kosong berarti kalimat itu" pindah ke
+  `Novel.statusOrDefault(String)` supaya bisa diuji: `null`, string kosong, dan
+  spasi menjadi kalimat itu; status yang benar-benar ditulis sumber tetap apa
+  adanya. Tidak ada perubahan tampilan, warna, atau navigasi.
 * **Drawer bagian dan backup progres membaca (2.20).** Tombol menu di
   toolbar Perpustakaan sekarang membuka **drawer samping** bergaya modal
   (bukan popup kecil) yang memuat **Novel**, **Manga**, **Backup progres
