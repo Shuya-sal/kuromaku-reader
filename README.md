@@ -774,11 +774,14 @@ pada `preview.sourceUrl`). Angkanya tidak berubah — hanya keterangannya yang j
 
 ### Bukti tes menangkap bug
 
-`AddNovelDiagnosticsTest` (3 tes, Robolectric) membangun panel dengan dua alamat:
+`AddNovelDiagnosticsTest` (5 tes, Robolectric) membangun panel dengan dua alamat:
 
 - alamat label → baris harus memuat "di feed label"
 - alamat artikel → baris harus memuat "di artikel"
 - kedua bentuk alamat yang diterima disebut namanya di petunjuk
+- empat baris metadata memakai satu helper: nilai yang tidak dicetak sumber menjadi
+  `Tidak tercantum di halaman sumber` (utuh, bukan potongan kata), sedangkan status
+  yang dicetak sumber (`Ongoing`, `Completed`) tampil apa adanya
 
 Uji mutasi: kalimat dikembalikan menjadi satu versi tetap untuk semua alamat →
 `aLabelAddressSaysTheLinksCameFromTheFeed` gagal. Setelah dipulihkan:
@@ -1627,12 +1630,19 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **358 pengujian** di 33 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **360 pengujian** di 33 kelas,
 semuanya lulus:
 
-- **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
+- **AddNovelDiagnosticsTest** (5) — panel diagnostik menyebut sumber tautannya
   sesuai jenis alamat: "di feed label" untuk URL label, "di artikel" untuk URL
-  artikel. Dibangun lewat Robolectric pada 320 dp.
+  artikel. Dibangun lewat Robolectric pada 320 dp. Dua tes menjaga baris metadata
+  pratinjau: kolom yang tidak dicetak sumber dituntut **utuh** sebagai
+  `Status: Tidak tercantum di halaman sumber` (string kosong dan `"   "` dua-duanya
+  dihitung kosong), sedangkan status yang **benar-benar dicetak** sumber ditampilkan
+  apa adanya dan tidak pernah ditimpa kalimat cadangan. Bukti: **5/5 mutasi
+  tertangkap** — kalimat dikosongkan, diganti tebakan `Unknown`, diubah menjadi
+  `dicantumkan`, helper dibuat selalu mengembalikan kalimat cadangan, dan spasi tidak
+  lagi dihitung kosong; `md5` sumber dipulihkan sesudah tiap mutasi.
 - **AddNovelPickerTest** (3) — pemilih tautan manual lewat Robolectric pada 320 dp:
   hanya tautan yang mungkin chapter yang ditawarkan, centang/batal centang menentukan
   isi pilihan, dan tidak ada yang dikirim sebelum tombol ditekan. Tiga mutasi
@@ -1847,7 +1857,7 @@ semuanya lulus:
   ditulis sumber, dan spasi tidak lagi dianggap kosong.
 
 ```bash
-gradle testDebugUnitTest      # 358 tes
+gradle testDebugUnitTest      # 360 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat

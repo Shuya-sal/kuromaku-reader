@@ -1,5 +1,6 @@
 package id.shuyasal.kuromaku;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -90,6 +91,57 @@ public class AddNovelDiagnosticsTest {
         assertTrue("label dibaca lewat feed, bukan artikel: " + line,
                 line.contains("di feed label"));
         assertTrue("jumlah tautan tetap disebut: " + line, line.contains("2"));
+    }
+
+    /** Preview built with a status the source may or may not have printed. */
+    private static NovelDiscovery.Result previewWithStatus(String status) {
+        List<Chapter> chapters = Arrays.asList(
+                new Chapter("Volume 1 Bab 1", "Bab 1", ARTICLE_URL + "#1", "2026-02-01", 1, 1));
+        List<Volume> volumes = new ArrayList<>();
+        volumes.add(new Volume(1, chapters));
+        return NovelDiscovery.catalogueFromFeed(ARTICLE_URL, "Novel Uji", "", "Penulis", "", "",
+                status, "", 0.70f, new String[]{"Sinopsis."}, volumes,
+                new ArrayList<String>(), volumes.get(0).chapterCount());
+    }
+
+    private static String metaLine(String status) {
+        AddNovelPage.State state = new AddNovelPage.State();
+        state.url = ARTICLE_URL;
+        state.preview = previewWithStatus(status);
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), state, null);
+        TextView line = page.build().findViewWithTag("add_novel_meta_status");
+        assertNotNull("halaman pratinjau harus punya baris status", line);
+        return line.getText().toString();
+    }
+
+    /**
+     * A field the source never printed says so, in its exact wording.
+     *
+     * <p>The preview shows four metadata rows built by the same helper — penulis,
+     * ilustrator, genre, status — and that helper substitutes one generic sentence
+     * when the value is blank. Nothing asserted that sentence: it could be changed
+     * to an empty string, to "Unknown", or to a guess, and every test still passed.
+     * A blank row tells the user the app forgot to read the page; a guess tells them
+     * something the page never said. Both are worse than saying it is not printed.
+     */
+    @Test
+    public void aFieldTheSourceDidNotPrintSaysSo() {
+        assertEquals("Status: Tidak tercantum di halaman sumber", metaLine(""));
+        assertEquals("spasi saja juga dihitung kosong", "Status: Tidak tercantum di halaman sumber",
+                metaLine("   "));
+    }
+
+    /**
+     * A status the source did print is shown verbatim, never replaced by the fallback.
+     *
+     * <p>Guards the other direction: a helper that always prints the fallback would
+     * pass the test above while hiding every real status the source states.
+     */
+    @Test
+    public void aStatusTheSourceDidPrintKeepsItsWording() {
+        assertEquals("Status: Ongoing", metaLine("Ongoing"));
+        assertEquals("Status: Completed", metaLine("Completed"));
     }
 
     @Test
