@@ -1580,7 +1580,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **353 pengujian** di 32 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **356 pengujian** di 33 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (3) — panel diagnostik menyebut sumber tautannya
@@ -1763,9 +1763,25 @@ semuanya lulus:
   di bagian batasan), sementara nomor sungguhan tidak pernah diganti label cadangan.
   Bukti: mengganti `"Volume lain"` menjadi `"Volume ?"` memerahkan
   `aVolumeWithoutANumberSaysSo` — **1/1 tertangkap**, `md5` sumber dipulihkan.
+- **NovelInfoTest** (3, kelas baru) — salinan statis metadata Monogatari di
+  `NovelInfo.java` tidak boleh menyimpang dari novel yang benar-benar ditampilkan
+  (`Novels.byId(Novels.MONOGATARI)`): judul, judul Jepang, judul lengkap, penulis,
+  ilustrator, genre, status, penerjemah, dan halaman label dituntut sama persis;
+  sinopsis dibandingkan **per paragraf** (batas paragraf itulah yang diukur tombol
+  "Baca selengkapnya"), begitu juga jumlah paragraf pratinjau dan rasio cover
+  (`1080f / 1534f` terhadap `0.704042f`, `coverHeight(720)`). Status dituntut
+  **utuh** sebagai `Tidak dicantumkan di halaman sumber` dan tesnya menolak tebakan
+  `Ongoing`/`Completed` maupun string kosong — aturan metadata melarang mengarang.
+  Sebelum kelas ini ada, tidak ada kode mana pun yang menyebut kelas itu: `git grep -n
+  NovelInfo` pada commit sebelumnya mengembalikan **3 baris** — dua di dalam
+  `NovelInfo.java` sendiri (deklarasi kelas dan konstruktor privatnya) dan satu di pohon
+  arsitektur README ini — jadi seluruh konstantanya bisa diubah dengan suite tetap hijau.
+  Bukti: **3/3 mutasi tertangkap** — penulis diubah `Yuuki Ryo`, status dikarang
+  `Ongoing`, dan satu paragraf sinopsis dihapus; tiap mutasi memerahkan tes yang
+  dituju, `md5` sumber dipulihkan sesudahnya.
 
 ```bash
-gradle testDebugUnitTest      # 353 tes
+gradle testDebugUnitTest      # 356 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat
@@ -1920,7 +1936,7 @@ app/src/main/java/id/shuyasal/kuromaku/
 │   ├── Library.java           # rak milik user, disimpan di database
 │   ├── LibraryBuilder.java    # parsing judul → volume, label, urutan baca
 │   ├── Novel.java             # satu novel: metadata, cover, cara katalog dibaca
-│   ├── NovelInfo.java         # metadata Monogatari (dipakai tes lama)
+│   ├── NovelInfo.java         # metadata Monogatari (dijaga NovelInfoTest)
 │   ├── NovelMapper.java       # baris database ↔ Novel
 │   ├── Novels.java            # daftar dua novel bawaan (teks dari halaman sumber)
 │   ├── ReadingBackup.java     # backup/restore progres baca sebagai berkas milik user
