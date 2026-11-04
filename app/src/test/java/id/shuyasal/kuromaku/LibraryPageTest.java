@@ -242,6 +242,18 @@ public class LibraryPageTest {
         assertEquals(monogatari.titleJp, titleJp.getText().toString());
     }
 
+    /** Volume heading displays exact chapter count and volume count. */
+    @Test
+    public void volumeHeadingDisplaysExactChapterAndVolumeCounts() {
+        Activity activity = activity();
+        Prefs prefs = new Prefs(activity);
+        LinearLayout content = build(activity, prefs, catalog());
+
+        TextView heading = (TextView) byTag(content, "volume_heading");
+        assertNotNull("heading volume harus ada", heading);
+        assertEquals("Volume & chapter · 3 chapter dalam 2 volume", heading.getText().toString());
+    }
+
     /** Synopsis starts collapsed and expands on tap. */
     @Test
     public void synopsisExpandsOnTap() {
