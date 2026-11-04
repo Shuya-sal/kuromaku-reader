@@ -57,6 +57,7 @@ import id.shuyasal.kuromaku.ui.Motion;
 import id.shuyasal.kuromaku.ui.NovelListPage;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.SectionDrawer;
 import id.shuyasal.kuromaku.ui.SystemBarInsets;
 import id.shuyasal.kuromaku.ui.Ui;
 
@@ -145,6 +146,7 @@ public class MainActivity extends AppCompatActivity {
         palette = Palette.of(prefs.theme());
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         buildShell();
+        handleDataAction(getIntent());
         // Paint whatever is already in memory first, then fetch in the
         // background: a returning user sees their library immediately instead
         // of an empty screen with a spinner.
@@ -352,77 +354,61 @@ public class MainActivity extends AppCompatActivity {
     static final int REQUEST_BACKUP = 7121;
     static final int REQUEST_RESTORE = 7122;
 
-    /** A modal left-side drawer with a dimmed scrim; no tiny popup menu. */
     private void showSectionDrawer() {
-        Dialog drawer = new Dialog(this);
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(Ui.dp(this, 20), Ui.dp(this, 30), Ui.dp(this, 20), Ui.dp(this, 24));
-        panel.setBackgroundColor(palette.surface);
-        TextView heading = Ui.label(this, "Kuromaku Reader", 21, palette.text);
-        panel.addView(heading);
-        addDrawerItem(panel, "Novel  ✓", "drawer_novel", () -> { drawer.dismiss(); showLibrary(); });
-        addDrawerItem(panel, "Manga", "drawer_manga", () -> {
-            drawer.dismiss(); startActivity(new Intent(this, MangaActivity.class));
-        });
-        View separator = new View(this);
-        separator.setBackgroundColor(palette.divider);
-        LinearLayout.LayoutParams sep = new LinearLayout.LayoutParams(-1, Ui.dp(this, 1));
-        sep.setMargins(0, Ui.dp(this, 16), 0, Ui.dp(this, 16));
-        panel.addView(separator, sep);
-        addDrawerItem(panel, "Backup progres membaca", "drawer_backup", () -> {
-            drawer.dismiss();
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("application/json");
-            intent.putExtra(Intent.EXTRA_TITLE, "kuromaku-reading-backup.json");
-            startActivityForResult(intent, REQUEST_BACKUP);
-        });
-        addDrawerItem(panel, "Restore progres membaca", "drawer_restore", () -> {
-            drawer.dismiss();
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("application/json");
-            startActivityForResult(intent, REQUEST_RESTORE);
-        });
-        drawer.setContentView(panel);
-        android.view.Window window = drawer.getWindow();
-        if (window != null) {
-            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            android.view.WindowManager.LayoutParams params = window.getAttributes();
-            params.gravity = Gravity.START | Gravity.TOP;
-            params.width = (int) (getResources().getDisplayMetrics().widthPixels * 0.82f);
-            params.height = android.view.WindowManager.LayoutParams.MATCH_PARENT;
-            params.dimAmount = 0.55f;
-            window.setAttributes(params);
-        }
-        drawer.show();
-        if (drawer.getWindow() != null) {
-            android.view.Window window2 = drawer.getWindow();
-            window2.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.82f), -1);
-            View panelView = window2.getDecorView();
-            // The resting position is written explicitly, never left to the default.
-            // Leaving it implicit made "animations off" and "animation that never
-            // ran" indistinguishable, and the second one parks the drawer off screen
-            // where nothing is visible and nothing can be tapped.
-            boolean slide = Motion.enabled(this);
-            panelView.setTranslationX(
-                    slide ? -getResources().getDisplayMetrics().widthPixels : 0f);
-            if (slide) {
-                panelView.animate().translationX(0)
-                        .setDuration(Motion.DURATION_MS).start();
+        SectionDrawer.show(this, SectionDrawer.Section.NOVEL, palette, new SectionDrawer.Listener() {
+            @Override
+            public void onNovel() {
+                showLibrary();
             }
-        }
+
+            @Override
+            public void onManga() {
+                startActivity(new Intent(MainActivity.this, MangaActivity.class));
+            }
+
+            @Override
+            public void onBackup() {
+                Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/json");
+                intent.putExtra(Intent.EXTRA_TITLE, "kuromaku-reading-backup.json");
+                startActivityForResult(intent, REQUEST_BACKUP);
+            }
+
+            @Override
+            public void onRestore() {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("application/json");
+                startActivityForResult(intent, REQUEST_RESTORE);
+            }
+        });
     }
 
-    private void addDrawerItem(LinearLayout panel, String title, String tag, Runnable action) {
-        TextView item = Ui.label(this, title, 17, palette.text);
-        item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setPadding(Ui.dp(this, 12), Ui.dp(this, 16), Ui.dp(this, 12), Ui.dp(this, 16));
-        item.setTag(tag);
-        item.setOnClickListener(v -> action.run());
-        panel.addView(item, new LinearLayout.LayoutParams(-1, Ui.dp(this, 64)));
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleDataAction(intent);
+    }
+
+    private void handleDataAction(Intent intent) {
+        if (intent == null) return;
+        String action = intent.getStringExtra("kuromaku_data_action");
+        if (action == null) return;
+        intent.removeExtra("kuromaku_data_action");
+        if ("backup".equals(action)) {
+            Intent doc = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            doc.addCategory(Intent.CATEGORY_OPENABLE);
+            doc.setType("application/json");
+            doc.putExtra(Intent.EXTRA_TITLE, "kuromaku-reading-backup.json");
+            startActivityForResult(doc, REQUEST_BACKUP);
+        } else if ("restore".equals(action)) {
+            Intent doc = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            doc.addCategory(Intent.CATEGORY_OPENABLE);
+            doc.setType("application/json");
+            startActivityForResult(doc, REQUEST_RESTORE);
+        }
     }
 
     @Override
@@ -1006,6 +992,8 @@ public class MainActivity extends AppCompatActivity {
         if (preview == null) return;
 
         String id = NovelUrl.id(preview.sourceUrl);
+        NovelUrl.Source src = NovelUrl.sourceOf(preview.sourceUrl);
+        String sourceName = src != null ? src.displayName : "Kaori Translation";
         Novel novel = new Novel(
                 id,
                 preview.title,
@@ -1015,7 +1003,7 @@ public class MainActivity extends AppCompatActivity {
                 preview.illustrator,
                 preview.genres,
                 Novel.statusOrDefault(preview.status),
-                "Kaori Translation",
+                sourceName,
                 preview.sourceUrl,
                 preview.sourceUrl,
                 preview.coverUrl,

@@ -19,6 +19,7 @@ import com.bumptech.glide.Glide;
 import java.util.List;
 
 import id.shuyasal.kuromaku.data.Volume;
+import id.shuyasal.kuromaku.net.NovelUrl;
 import id.shuyasal.kuromaku.parser.NovelDiscovery;
 
 /**
@@ -118,9 +119,9 @@ public final class AddNovelPage {
         // user only about article pages hides the one form that gives a complete
         // chapter list in a single step.
         TextView hint = Ui.label(context,
-                "Tempel URL halaman katalog novel dari kaoritranslation.blogspot.com: "
-                        + "artikel katalog (/2025/09/...) atau halaman label (/search/label/...). "
-                        + "URL dengan ?m=1 juga diterima.",
+                "Tempel URL katalog novel dari Kaori Translation, Megumi Novel, atau Sakura Novel. "
+                        + "Mendukung artikel katalog (/2025/09/...), halaman label (/search/label/..., ?m=1 juga diterima), "
+                        + "Megumi Novel (meguminovel.com), dan Sakura Novel (sakuranovel.id).",
                 12, palette.muted);
         hint.setTag("add_novel_hint");
         hint.setPadding(0, Ui.dp(context, 4), 0, Ui.dp(context, 14));
@@ -158,7 +159,7 @@ public final class AddNovelPage {
         field = new EditText(context);
         field.setTag("add_novel_url");
         field.setText(state.url == null ? "" : state.url);
-        field.setHint("https://kaoritranslation.blogspot.com/2025/09/judul-novel.html");
+        field.setHint("URL dari Kaori, Megumi Novel, atau Sakura Novel");
         field.setHintTextColor(palette.muted);
         field.setTextColor(palette.text);
         field.setTextSize(13);
@@ -354,8 +355,11 @@ public final class AddNovelPage {
 
     private String sourceLabel(NovelDiscovery.Result preview) {
         String url = preview.sourceUrl == null ? "" : preview.sourceUrl;
+        NovelUrl.Source src = NovelUrl.sourceOf(url);
+        String name = src != null ? src.displayName : "";
         url = url.replace("https://", "").replace("http://", "");
-        return url.length() > 56 ? url.substring(0, 55) + "…" : url;
+        if (url.length() > 56) url = url.substring(0, 55) + "…";
+        return name.isEmpty() ? url : name + " · " + url;
     }
 
     /** "3 volume berisi chapter · 42 chapter" — the numbers actually found. */

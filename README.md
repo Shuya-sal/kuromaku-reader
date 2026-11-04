@@ -1,7 +1,17 @@
-# Kuromaku Reader 2.20.2
+# Kuromaku Reader 2.21.0
 
-Aplikasi pembaca Android **native** untuk novel *Monogatari no Kuromaku* di label
-[Kaori Translation](https://kaoritranslation.blogspot.com/search/label/Monogatari%20no%20Kuromaku).
+Aplikasi pembaca Android **native** untuk novel ringan berbahasa Indonesia dengan
+dukungan multi-sumber (**Kaori Translation**, **Megumi Novel**, dan **Sakura Novel**)
+serta pembaca manga terintegrasi.
+
+Versi 2.21.0 menyamakan **Navigation Drawer** antara layar Novel (`MainActivity`) dan
+layar Manga (`MangaActivity`) menggunakan komponen bersama `SectionDrawer` (lebar 82%,
+overlay gelap transparan, gestur swipe-to-close, dark/light mode, insets aman, indikator
+menu aktif) serta memperkenalkan arsitektur **multi-source parser** untuk mendukung
+penambahan novel dari **Megumi Novel** (`meguminovel.com`) dan **Sakura Novel**
+(`sakuranovel.id`) dengan deteksi domain otomatis, parsing volume/chapter, pembersihan
+elemen iklan/navigasi, urutan bab ascending, dan integrasi penuh dengan offline reader,
+progres membaca, serta backup/restore. Seluruh 384 unit test di 35 kelas lulus.
 
 Versi 1.0 hanya membungkus website di dalam WebView, sehingga iklan, sidebar, dan
 menu Blogspot ikut tampil. Versi 2.0 membuang WebView sepenuhnya: isi chapter

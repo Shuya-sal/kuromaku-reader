@@ -2,7 +2,19 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.20.2** (versionCode 45) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.21.0** (versionCode 46) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* **2.21.0 — Penyelarasan Navigation Drawer Manga & Dukungan Multi-Source Novel.**
+  - **Navigation Drawer Manga Identik**: Tombol menu tiga garis (☰) di halaman Manga (`MangaActivity`)
+    kini menggunakan komponen bersama `SectionDrawer` yang sama dengan halaman Novel (`MainActivity`),
+    menggantikan `PopupMenu` kecil sebelumnya. Drawer mencakup menu **Novel**, **Manga** (dengan penanda aktif `✓`),
+    **Backup progres membaca**, dan **Restore progres membaca**. Memiliki lebar 82% layar, latar diredupkan
+    (overlay gelap transparan), gestur swipe ke kiri untuk menutup, tombol Back untuk menutup, serta mendukung
+    tema gelap & terang secara konsisten tanpa mengganggu status fullscreen WebView.
+  - **Arsitektur Multi-Source Adapter**: Menambahkan dukungan penambahan novel melalui URL dari **Megumi Novel**
+    (`meguminovel.com`) dan **Sakura Novel** (`sakuranovel.id`) di samping **Kaori Translation**.
+    Aplikasi mendeteksi sumber secara otomatis berdasarkan hostname, mengekstrak cover, metadata, sinopsis,
+    dan daftar bab secara ascending kronologis dengan pembersihan navigasi, iklan, serta widget website sumber.
+  - **386 unit test lulus**, 0 gagal (35 kelas).
 * **2.20.2 — Sertifikat penandatanganan konsisten (reproducible debug keystore).**
   Sebelumnya setiap eksekusi CI GitHub Actions men-generate debug keystore acak sekali pakai.
   Akibatnya, setiap rilis APK baru memiliki identitas penerbit (certificate digest SHA-256)

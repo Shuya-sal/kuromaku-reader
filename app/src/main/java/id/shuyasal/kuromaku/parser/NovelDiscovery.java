@@ -4,6 +4,8 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.nodes.Node;
 import org.jsoup.nodes.TextNode;
+
+import id.shuyasal.kuromaku.net.NovelUrl;
 import org.jsoup.select.Elements;
 
 import java.util.ArrayList;
@@ -341,6 +343,13 @@ public final class NovelDiscovery {
      *                    looks like a chapter link
      */
     public static Result parse(String html, String url) throws Unreadable {
+        NovelUrl.Source source = NovelUrl.sourceOf(url);
+        if (source == NovelUrl.Source.MEGUMI) {
+            return MegumiParser.parse(html, url);
+        }
+        if (source == NovelUrl.Source.SAKURA) {
+            return SakuraParser.parse(html, url);
+        }
         return analyse(html, url, true);
     }
 
@@ -354,6 +363,13 @@ public final class NovelDiscovery {
      * @throws Unreadable only when the article body cannot be found at all
      */
     public static Result describe(String html, String url) throws Unreadable {
+        NovelUrl.Source source = NovelUrl.sourceOf(url);
+        if (source == NovelUrl.Source.MEGUMI) {
+            return MegumiParser.parse(html, url);
+        }
+        if (source == NovelUrl.Source.SAKURA) {
+            return SakuraParser.parse(html, url);
+        }
         return analyse(html, url, false);
     }
 

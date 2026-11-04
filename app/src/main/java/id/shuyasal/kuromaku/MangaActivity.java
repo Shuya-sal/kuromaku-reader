@@ -22,6 +22,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import java.util.Locale;
+import id.shuyasal.kuromaku.ui.Palette;
+import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.SectionDrawer;
 
 /** Manga entry point. The landing page discovers the current Voratoon domain;
  * never pin a numbered subdomain such as 12.voratoon.com. */
@@ -49,8 +52,9 @@ public class MangaActivity extends AppCompatActivity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(8), dp(8), dp(8), dp(8));
         Button menu = button("☰");
-        menu.setContentDescription("Pilih Novel atau Manga");
-        menu.setOnClickListener(v -> showMenu(menu));
+        menu.setContentDescription("Menu Novel dan Manga");
+        menu.setTag("section_menu");
+        menu.setOnClickListener(v -> showSectionDrawer());
         header.addView(menu);
         TextView heading = new TextView(this);
         heading.setText("Manga"); heading.setTextSize(20); heading.setTextColor(Color.WHITE);
@@ -140,14 +144,39 @@ public class MangaActivity extends AppCompatActivity {
         return host.equals("voratoon.id") || host.endsWith(".voratoon.id")
                 || host.equals("voratoon.com") || host.endsWith(".voratoon.com");
     }
-    private void showMenu(View anchor) {
-        android.widget.PopupMenu popup = new android.widget.PopupMenu(this, anchor);
-        popup.getMenu().add("Novel").setOnMenuItemClickListener(item -> {
-            startActivity(new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP));
-            finish(); return true;
+    private void showSectionDrawer() {
+        int theme = new Prefs(this, null).theme();
+        Palette palette = Palette.of(theme);
+        SectionDrawer.show(this, SectionDrawer.Section.MANGA, palette, new SectionDrawer.Listener() {
+            @Override
+            public void onNovel() {
+                startActivity(new Intent(MangaActivity.this, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                finish();
+            }
+
+            @Override
+            public void onManga() {
+            }
+
+            @Override
+            public void onBackup() {
+                openNovelDataAction("backup");
+            }
+
+            @Override
+            public void onRestore() {
+                openNovelDataAction("restore");
+            }
         });
-        popup.getMenu().add("Manga ✓");
-        popup.show();
+    }
+
+    private void openNovelDataAction(String action) {
+        Intent intent = new Intent(this, MainActivity.class);
+        intent.putExtra("kuromaku_data_action", action);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        startActivity(intent);
+        finish();
     }
     private Button button(String text) {
         Button b = new Button(this); b.setText(text); b.setAllCaps(false);

@@ -36,7 +36,9 @@ public final class ChapterParser {
             "adsbygoogle", "ad-container", "ad-slot", "sponsored", "post-share",
             "share-buttons", "share-button", "reactions", "post-footer",
             "blog-pager", "post-nav", "comments", "comment-form", "related-posts",
-            "popup", "modal", "cookie", "newsletter", "ignielad", "igniel-ad"));
+            "popup", "modal", "cookie", "newsletter", "ignielad", "igniel-ad",
+            "navigation-top", "navigation-bottom", "epnavigation", "saweria",
+            "ch-prev-btn", "ch-next-btn", "entry-nav", "post-navigation", "foxiz-nav"));
 
     private static final Set<String> BLOCK_TAGS = new HashSet<>(Arrays.asList(
             "p", "div", "section", "article", "main", "center", "table", "tbody",
@@ -129,7 +131,7 @@ public final class ChapterParser {
                     ? element.attr("content") : element.text();
             String cleaned = clean(raw);
             if (cleaned.isEmpty()) continue;
-            cleaned = cleaned.replaceAll("\\s*[-|]\\s*Kaori TL\\s*$", "").trim();
+            cleaned = cleaned.replaceAll("\\s*[-|]\\s*(Kaori TL|Megumi Novel|Sakura Novel)\\s*$", "").trim();
             if (!cleaned.isEmpty()) return cleaned;
         }
         return "Tanpa judul";

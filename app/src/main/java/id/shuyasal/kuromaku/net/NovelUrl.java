@@ -34,18 +34,39 @@ import java.util.Locale;
  */
 public final class NovelUrl {
 
-    /** The only source this reader understands. */
-    public static final String HOST = "kaoritranslation.blogspot.com";
+    public static final String HOST_KAORI = "kaoritranslation.blogspot.com";
+    public static final String HOST_MEGUMI = "meguminovel.com";
+    public static final String HOST_SAKURA = "sakuranovel.id";
+    public static final String HOST = HOST_KAORI;
 
-    /** What kind of page a normalised address points at. */
+    public enum Source {
+        KAORI("Kaori Translation", HOST_KAORI),
+        MEGUMI("Megumi Novel", HOST_MEGUMI),
+        SAKURA("Sakura Novel", HOST_SAKURA);
+
+        public final String displayName;
+        public final String host;
+
+        Source(String displayName, String host) {
+            this.displayName = displayName;
+            this.host = host;
+        }
+    }
+
+    public static Source sourceOf(String raw) {
+        if (raw == null) return null;
+        String lower = raw.toLowerCase(Locale.ROOT);
+        if (lower.contains(HOST_MEGUMI)) return Source.MEGUMI;
+        if (lower.contains(HOST_SAKURA)) return Source.SAKURA;
+        if (lower.contains(HOST_KAORI)) return Source.KAORI;
+        return null;
+    }
+
     public enum Kind {
-        /** A dated post: {@code /2026/03/some-novel.html}. */
         ARTICLE,
-        /** A Blogger label listing: {@code /search/label/Some%20Novel}. */
         LABEL
     }
 
-    /** Raised for anything that is not a usable catalogue address. */
     public static final class Invalid extends Exception {
         public Invalid(String message) {
             super(message);
@@ -55,32 +76,19 @@ public final class NovelUrl {
     private NovelUrl() {
     }
 
-    /**
-     * Canonical form of the address, e.g.
-     * {@code https://kaoritranslation.blogspot.com/2025/09/some-novel.html} or
-     * {@code https://kaoritranslation.blogspot.com/search/label/Some%20Novel}.
-     *
-     * @throws Invalid when the text is not a Kaori Translation article or label
-     */
     public static String normalize(String raw) throws Invalid {
         if (raw == null || raw.trim().isEmpty()) {
             throw new Invalid("URL belum diisi.");
         }
         String text = raw.trim();
         if (!text.contains("://")) text = "https://" + text;
-        // A URL pasted out of a chat client often carries literal spaces where the
-        // browser would have sent %20 — a label named "Yarikonde ita Game Sekai…"
-        // arrives exactly like that. Refusing it as "not a valid URL" would blame
-        // the user for something the normaliser can fix, so spaces are escaped
-        // before the URI is parsed.
         text = text.replace(" ", "%20");
 
         URI uri;
         try {
             uri = new URI(text);
         } catch (URISyntaxException error) {
-            throw new Invalid("URL tidak valid. Contoh: https://kaoritranslation.blogspot.com/"
-                    + "2025/09/judul-novel.html");
+            throw new Invalid("URL tidak valid. Masukkan URL dari Kaori Translation, Megumi Novel, atau Sakura Novel.");
         }
 
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
@@ -90,18 +98,39 @@ public final class NovelUrl {
 
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
         if (host.startsWith("www.")) host = host.substring(4);
-        if (!HOST.equals(host)) {
-            throw new Invalid("Sumber belum didukung. Hanya halaman katalog dari "
-                    + HOST + " yang bisa ditambahkan.");
+
+        Source source = sourceOf(host);
+        if (source == null) {
+            throw new Invalid("Sumber belum didukung. Masukkan URL dari Kaori Translation, Megumi Novel, atau Sakura Novel.");
+        }
+
+        if (source == Source.MEGUMI) {
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            while (path.startsWith("/")) path = path.substring(1);
+            while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            if (path.isEmpty()) {
+                throw new Invalid("Itu halaman depan Megumi Novel, bukan halaman katalog novel.");
+            }
+            return "https://" + HOST_MEGUMI + "/" + path + "/";
+        }
+
+        if (source == Source.SAKURA) {
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            while (path.startsWith("/")) path = path.substring(1);
+            while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            if (path.isEmpty()) {
+                throw new Invalid("Itu halaman depan Sakura Novel, bukan halaman katalog novel.");
+            }
+            if (!path.startsWith("series/")) {
+                path = "series/" + path;
+            }
+            return "https://" + HOST_SAKURA + "/" + path + "/";
         }
 
         String path = uri.getPath() == null ? "" : uri.getPath();
         if (path.isEmpty() || "/".equals(path)) {
             throw new Invalid("Itu halaman depan blog, bukan halaman katalog novel.");
         }
-        // A pasted link often carries a trailing slash (".../judul.html/"). Removing
-        // it before the extension check means that spelling resolves to the same
-        // novel instead of being refused as "not an article".
         while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
         String lower = path.toLowerCase(Locale.ROOT);
 
@@ -195,6 +224,27 @@ public final class NovelUrl {
      */
     public static String id(String normalized) {
         if (normalized == null) return "";
+        Source source = sourceOf(normalized);
+        if (source == Source.MEGUMI) {
+            String path = normalized;
+            int query = path.indexOf('?');
+            if (query >= 0) path = path.substring(0, query);
+            int hash = path.indexOf('#');
+            if (hash >= 0) path = path.substring(0, hash);
+            while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            return "megumi-" + slug(name);
+        }
+        if (source == Source.SAKURA) {
+            String path = normalized;
+            int query = path.indexOf('?');
+            if (query >= 0) path = path.substring(0, query);
+            int hash = path.indexOf('#');
+            if (hash >= 0) path = path.substring(0, hash);
+            while (path.endsWith("/")) path = path.substring(0, path.length() - 1);
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            return "sakura-" + slug(name);
+        }
         if (isLabel(normalized)) {
             String name;
             try {

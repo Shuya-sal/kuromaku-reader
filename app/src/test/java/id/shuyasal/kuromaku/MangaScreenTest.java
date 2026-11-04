@@ -21,6 +21,15 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.test.core.app.ApplicationProvider;
 
+import android.app.Dialog;
+import android.view.MotionEvent;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import org.robolectric.shadows.ShadowActivity;
+import org.robolectric.shadows.ShadowDialog;
+import id.shuyasal.kuromaku.ui.Palette;
+import id.shuyasal.kuromaku.ui.Prefs;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -277,5 +286,196 @@ public class MangaScreenTest {
 
         assertEquals("layar penuh memakai seluruh tinggi", 0, content.getPaddingTop());
         assertEquals("layar penuh memakai seluruh dasar", 0, content.getPaddingBottom());
+    }
+
+    @Test
+    public void mangaScreenDrawerShowsConsistentItemsAndActiveMangaState() {
+        MangaActivity screen = manga();
+        View menu = tagged(screen, "section_menu");
+        assertNotNull(menu);
+        menu.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        assertTrue(dialog.isShowing());
+
+        View root = dialog.findViewById(android.R.id.content);
+        assertNotNull(root);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+
+        TextView novel = panel.findViewWithTag("drawer_novel");
+        TextView manga = panel.findViewWithTag("drawer_manga");
+        TextView backup = panel.findViewWithTag("drawer_backup");
+        TextView restore = panel.findViewWithTag("drawer_restore");
+
+        assertNotNull(novel);
+        assertNotNull(manga);
+        assertNotNull(backup);
+        assertNotNull(restore);
+
+        assertEquals("Novel", novel.getText().toString());
+        assertEquals("Manga  ✓", manga.getText().toString());
+        assertEquals("Backup progres membaca", backup.getText().toString());
+        assertEquals("Restore progres membaca", restore.getText().toString());
+
+        int expectedWidth = (int) (screen.getResources().getDisplayMetrics().widthPixels * 0.82f);
+        assertEquals(expectedWidth, dialog.getWindow().getAttributes().width);
+    }
+
+    @Test
+    public void tappingNovelInMangaDrawerNavigatesToMainActivity() {
+        MangaActivity screen = manga();
+        tagged(screen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        View root = dialog.findViewById(android.R.id.content);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+
+        panel.findViewWithTag("drawer_novel").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Intent next = Shadows.shadowOf(screen).getNextStartedActivity();
+        assertNotNull(next);
+        assertEquals(MainActivity.class.getName(), next.getComponent().getClassName());
+        assertTrue((next.getFlags() & Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0);
+        assertTrue((next.getFlags() & Intent.FLAG_ACTIVITY_SINGLE_TOP) != 0);
+        assertTrue(screen.isFinishing());
+    }
+
+    @Test
+    public void tappingBackupInMangaDrawerRoutesToMainActivityWithAction() {
+        MangaActivity screen = manga();
+        tagged(screen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        View root = dialog.findViewById(android.R.id.content);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+
+        panel.findViewWithTag("drawer_backup").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Intent next = Shadows.shadowOf(screen).getNextStartedActivity();
+        assertNotNull(next);
+        assertEquals(MainActivity.class.getName(), next.getComponent().getClassName());
+        assertEquals("backup", next.getStringExtra("kuromaku_data_action"));
+        assertTrue(screen.isFinishing());
+    }
+
+    @Test
+    public void tappingRestoreInMangaDrawerRoutesToMainActivityWithAction() {
+        MangaActivity screen = manga();
+        tagged(screen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        View root = dialog.findViewById(android.R.id.content);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+
+        panel.findViewWithTag("drawer_restore").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Intent next = Shadows.shadowOf(screen).getNextStartedActivity();
+        assertNotNull(next);
+        assertEquals(MainActivity.class.getName(), next.getComponent().getClassName());
+        assertEquals("restore", next.getStringExtra("kuromaku_data_action"));
+        assertTrue(screen.isFinishing());
+    }
+
+    @Test
+    public void swipingLeftOnMangaDrawerDismissesIt() {
+        MangaActivity screen = manga();
+        tagged(screen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        assertTrue(dialog.isShowing());
+
+        View root = dialog.findViewById(android.R.id.content);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+
+        long downTime = android.os.SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, 200f, 200f, 0);
+        MotionEvent move = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_MOVE, 100f, 200f, 0);
+        panel.dispatchTouchEvent(down);
+        panel.dispatchTouchEvent(move);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        assertFalse(dialog.isShowing());
+    }
+
+    @Test
+    public void mangaDrawerHasDarkScrimOverlayAndTouchOutsideDismissal() {
+        MangaActivity screen = manga();
+        tagged(screen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        android.view.Window window = dialog.getWindow();
+        assertNotNull(window);
+        assertEquals(0.55f, window.getAttributes().dimAmount, 0.01f);
+        assertTrue((window.getAttributes().flags & android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND) != 0);
+
+        dialog.setCanceledOnTouchOutside(true);
+        dialog.onBackPressed();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertFalse(dialog.isShowing());
+    }
+
+    @Test
+    public void mangaDrawerSupportsDarkAndLightThemes() {
+        new Prefs(context, null).setTheme(Prefs.THEME_LIGHT);
+        MangaActivity lightScreen = manga();
+        tagged(lightScreen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog lightDialog = ShadowDialog.getLatestDialog();
+        assertNotNull(lightDialog);
+        View lightRoot = lightDialog.findViewById(android.R.id.content);
+        LinearLayout lightPanel = (LinearLayout) ((ViewGroup) lightRoot).getChildAt(0);
+        TextView lightHeading = (TextView) lightPanel.getChildAt(0);
+        assertEquals(Palette.of(Prefs.THEME_LIGHT).text, lightHeading.getCurrentTextColor());
+        lightDialog.dismiss();
+
+        new Prefs(context, null).setTheme(Prefs.THEME_DARK);
+        MangaActivity darkScreen = manga();
+        tagged(darkScreen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog darkDialog = ShadowDialog.getLatestDialog();
+        assertNotNull(darkDialog);
+        View darkRoot = darkDialog.findViewById(android.R.id.content);
+        LinearLayout darkPanel = (LinearLayout) ((ViewGroup) darkRoot).getChildAt(0);
+        TextView darkHeading = (TextView) darkPanel.getChildAt(0);
+        assertEquals(Palette.of(Prefs.THEME_DARK).text, darkHeading.getCurrentTextColor());
+        darkDialog.dismiss();
+    }
+
+    @Test
+    public void tappingActiveMangaJustDismissesDrawerWithoutChangingFullscreenOrRecreating() {
+        MangaActivity screen = manga();
+        View header = tagged(screen, "manga_header");
+        tagged(screen, "section_menu").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        assertTrue(dialog.isShowing());
+
+        View root = dialog.findViewById(android.R.id.content);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+        panel.findViewWithTag("drawer_manga").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        assertFalse(dialog.isShowing());
+        assertFalse(screen.isFinishing());
+        assertEquals("header tetap tampil normal", View.VISIBLE, header.getVisibility());
     }
 }
