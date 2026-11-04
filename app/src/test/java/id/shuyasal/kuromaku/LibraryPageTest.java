@@ -222,6 +222,26 @@ public class LibraryPageTest {
         assertEquals(monogatari.translation, rows.get("Terjemahan"));
     }
 
+    /** Titles carry main title, full title, and Japanese title with exact tags. */
+    @Test
+    public void titlesIncludeFullTitleAndJapaneseTitleWhenPresent() {
+        Activity activity = activity();
+        Prefs prefs = new Prefs(activity);
+        LinearLayout content = build(activity, prefs, catalog());
+
+        TextView title = (TextView) byTag(content, "novel_title");
+        assertNotNull("judul utama harus ada", title);
+        assertEquals(monogatari.title, title.getText().toString());
+
+        TextView fullTitle = (TextView) byTag(content, "novel_full_title");
+        assertNotNull("judul lengkap harus ada saat berbeda dari judul utama", fullTitle);
+        assertEquals(monogatari.fullTitle, fullTitle.getText().toString());
+
+        TextView titleJp = (TextView) byTag(content, "novel_title_jp");
+        assertNotNull("judul jepang harus ada", titleJp);
+        assertEquals(monogatari.titleJp, titleJp.getText().toString());
+    }
+
     /** Synopsis starts collapsed and expands on tap. */
     @Test
     public void synopsisExpandsOnTap() {
