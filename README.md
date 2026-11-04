@@ -835,7 +835,7 @@ Tiga di antaranya dijaga tes. Yang keempat **tidak**, dan itu diukur, bukan
 disimpulkan dari `grep`: mengganti salinan di `savePreview` dengan
 `"Status tidak diketahui"` lalu menjalankan seluruh suite menghasilkan **356 tes,
 0 gagal** — `SURVIVED`. (Itu keadaan suite **saat mutasi diukur**; dua tes helper di
-bawah belum ada. Pada pohon sekarang suite berisi **358 tes**, dan mutasi yang sama
+bawah belum ada. Pada pohon sekarang suite berisi **361 tes**, dan mutasi yang sama
 tertangkap.) Artinya satu kalimat yang dilihat pengguna bisa berubah untuk
 setiap novel yang ia tambahkan sendiri, tanpa ada tes yang memerah.
 
@@ -1630,7 +1630,7 @@ tiga kali berturut-turut tanpa kegagalan.
 
 ## Pengujian
 
-`app/src/test/java/id/shuyasal/kuromaku/` berisi **360 pengujian** di 33 kelas,
+`app/src/test/java/id/shuyasal/kuromaku/` berisi **361 pengujian** di 33 kelas,
 semuanya lulus:
 
 - **AddNovelDiagnosticsTest** (5) — panel diagnostik menyebut sumber tautannya
@@ -1748,8 +1748,10 @@ semuanya lulus:
   terakhir bersih dari panel navigasi; bookmark tidak tertimpa layout pass; persen hanya
   100% di akhir; tombol Berikutnya tetap berpindah chapter. Chapter uji berisi **300 paragraf
   + ilustrasi**.
-- **LibraryPageTest** (14, Robolectric, layar kecil 320×640dp) — rasio sampul sesuai artwork
+- **LibraryPageTest** (15, Robolectric, layar kecil 320×640dp) — rasio sampul sesuai artwork
   (toleransi 0.02), placeholder berada di belakang gambar, judul & metadata tampil apa adanya,
+  **setiap label metadata berdiri di samping nilainya sendiri** (baris dibaca label→nilai; menukar
+  label "Status" dengan "Genre", atau mengganti labelnya, memerahkan tes ini),
   sinopsis mengembang lewat "Baca selengkapnya", volume tertutup menyembunyikan chapter,
   Volume 1 dan 2 keduanya terdaftar, tombol Lanjutkan Membaca memakai progres nyata,
   atribusi + tautan sumber tetap ada, tema gelap memakai struktur yang sama, **setiap volume
@@ -1857,7 +1859,7 @@ semuanya lulus:
   ditulis sumber, dan spasi tidak lagi dianggap kosong.
 
 ```bash
-gradle testDebugUnitTest      # 360 tes
+gradle testDebugUnitTest      # 361 tes
 ```
 
 Mutation test untuk 2.5 (dibuktikan, bukan diklaim): mengembalikan bug lama membuat

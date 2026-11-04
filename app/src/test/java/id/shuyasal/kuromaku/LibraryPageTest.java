@@ -26,7 +26,9 @@ import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import id.shuyasal.kuromaku.data.Catalog;
 import id.shuyasal.kuromaku.data.Chapter;
@@ -183,6 +185,41 @@ public class LibraryPageTest {
         assertTrue("genre harus tampil", text.contains("Fantasy"));
         assertTrue("status tidak boleh dikarang", text.contains(monogatari.status));
         assertTrue("sumber terjemahan harus tampil", text.contains("Kaori Translation"));
+    }
+
+    /**
+     * Every label must stand beside its own value.
+     *
+     * <p>{@link #titleAndMetadataAreShownNotInvented} only checks {@code contains} over
+     * the whole card, which cannot tell which label sits next to which value: pairing
+     * the "Status" label with the genre string keeps every one of those assertions
+     * green. Measured — that swap survived the whole class. So the rows are read
+     * label/value, as the reader sees them.
+     */
+    @Test
+    public void eachLabelStandsBesideItsOwnValue() {
+        Activity activity = activity();
+        LinearLayout content = build(activity, new Prefs(activity), catalog());
+
+        ViewGroup card = (ViewGroup) byTag(content, "metadata");
+        Map<String, String> rows = new LinkedHashMap<>();
+        for (int i = 0; i < card.getChildCount(); i++) {
+            View row = card.getChildAt(i);
+            if (!(row instanceof LinearLayout)) continue;
+            LinearLayout pair = (LinearLayout) row;
+            assertEquals("baris metadata harus punya label dan nilai", 2, pair.getChildCount());
+            String label = ((TextView) pair.getChildAt(0)).getText().toString();
+            String value = ((TextView) pair.getChildAt(1)).getText().toString();
+            assertFalse("label ganda: " + label, rows.containsKey(label));
+            rows.put(label, value);
+        }
+
+        assertEquals("lima baris metadata", 5, rows.size());
+        assertEquals(monogatari.author, rows.get("Penulis"));
+        assertEquals(monogatari.illustrator, rows.get("Ilustrator"));
+        assertEquals(monogatari.genres, rows.get("Genre"));
+        assertEquals(monogatari.status, rows.get("Status"));
+        assertEquals(monogatari.translation, rows.get("Terjemahan"));
     }
 
     /** Synopsis starts collapsed and expands on tap. */
