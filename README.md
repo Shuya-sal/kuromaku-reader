@@ -831,7 +831,9 @@ yang ditambahkan lewat URL), `NovelInfo.java:30` (salinan metadata statis),
 Tiga di antaranya dijaga tes. Yang keempat **tidak**, dan itu diukur, bukan
 disimpulkan dari `grep`: mengganti salinan di `savePreview` dengan
 `"Status tidak diketahui"` lalu menjalankan seluruh suite menghasilkan **356 tes,
-0 gagal** — `SURVIVED`. Artinya satu kalimat yang dilihat pengguna bisa berubah untuk
+0 gagal** — `SURVIVED`. (Itu keadaan suite **saat mutasi diukur**; dua tes helper di
+bawah belum ada. Pada pohon sekarang suite berisi **358 tes**, dan mutasi yang sama
+tertangkap.) Artinya satu kalimat yang dilihat pengguna bisa berubah untuk
 setiap novel yang ia tambahkan sendiri, tanpa ada tes yang memerah.
 
 Dua perubahan, tanpa redesign dan tanpa mengubah tampilan:
