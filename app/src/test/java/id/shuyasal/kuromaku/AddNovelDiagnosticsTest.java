@@ -298,4 +298,36 @@ public class AddNovelDiagnosticsTest {
                 line.contains("di artikel"));
         assertTrue("jumlah tautan tetap disebut: " + line, line.contains("2"));
     }
+
+    /**
+     * When a novel is already in library, a warning notice informs the reader.
+     */
+    @Test
+    public void duplicateNovelShowsWarningNotice() {
+        AddNovelPage.State state = new AddNovelPage.State();
+        state.url = ARTICLE_URL;
+        state.preview = preview(ARTICLE_URL);
+        state.duplicate = true;
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), state, null);
+        TextView notice = page.build().findViewWithTag("add_novel_duplicate");
+        assertNotNull("peringatan novel duplikat harus ada saat state.duplicate true", notice);
+        assertEquals("Novel ini sudah ada di perpustakaan Tuan. Menyimpan lagi tidak akan membuat duplikat.",
+                notice.getText().toString());
+    }
+
+    /**
+     * When a novel is not in library, the duplicate warning notice is absent.
+     */
+    @Test
+    public void nonDuplicateNovelHidesWarningNotice() {
+        AddNovelPage.State state = new AddNovelPage.State();
+        state.url = ARTICLE_URL;
+        state.preview = preview(ARTICLE_URL);
+        state.duplicate = false;
+        AddNovelPage page = new AddNovelPage(RuntimeEnvironment.getApplication(),
+                Palette.of(Prefs.THEME_DARK), state, null);
+        TextView notice = page.build().findViewWithTag("add_novel_duplicate");
+        org.junit.Assert.assertNull("peringatan novel duplikat tidak boleh ada saat state.duplicate false", notice);
+    }
 }
