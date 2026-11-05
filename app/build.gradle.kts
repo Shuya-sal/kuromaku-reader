@@ -8,8 +8,8 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 46
-        versionName = "2.21.0"
+        versionCode = 47
+        versionName = "2.21.1"
     }
 
     // One checked-in debug keystore, used by both CI and local builds.
@@ -56,6 +56,7 @@ android {
 dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.core:core:1.13.1")
+    implementation("androidx.browser:browser:1.8.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("org.jsoup:jsoup:1.18.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

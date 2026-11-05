@@ -478,4 +478,126 @@ public class MangaScreenTest {
         assertFalse(screen.isFinishing());
         assertEquals("header tetap tampil normal", View.VISIBLE, header.getVisibility());
     }
+
+    @Test
+    public void addressBarShowsShortHostAndOpensUrlDetailsDialog() {
+        MangaActivity screen = manga();
+        TextView address = (TextView) tagged(screen, "manga_address");
+        assertNotNull(address);
+        assertEquals("Sumber: voratoon.id", address.getText().toString());
+
+        address.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        Dialog dialog = ShadowDialog.getLatestDialog();
+        assertNotNull(dialog);
+        assertTrue(dialog.isShowing());
+
+        View root = dialog.findViewById(android.R.id.content);
+        assertNotNull(root);
+        LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
+
+        TextView title = (TextView) panel.getChildAt(0);
+        assertEquals("Alamat Halaman", title.getText().toString());
+
+        TextView hostLabel = (TextView) panel.getChildAt(1);
+        assertEquals("Sumber: voratoon.id", hostLabel.getText().toString());
+
+        LinearLayout buttonRow = (LinearLayout) panel.getChildAt(3);
+        android.widget.Button copyBtn = (android.widget.Button) buttonRow.getChildAt(0);
+        assertEquals("Salin URL", copyBtn.getText().toString());
+
+        copyBtn.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        android.content.ClipboardManager cm = (android.content.ClipboardManager) screen.getSystemService(Context.CLIPBOARD_SERVICE);
+        assertNotNull(cm);
+        assertNotNull(cm.getPrimaryClip());
+        assertEquals("https://voratoon.id/", cm.getPrimaryClip().getItemAt(0).getText().toString());
+        assertFalse(dialog.isShowing());
+    }
+
+    @Test
+    public void googleOAuthNavigationLaunchesExternalBrowserIntent() {
+        MangaActivity screen = manga();
+        android.webkit.WebView web = null;
+        ViewGroup root = (ViewGroup) ((ViewGroup) screen.findViewById(android.R.id.content)).getChildAt(0);
+        for (int i = 0; i < root.getChildCount(); i++) {
+            if (root.getChildAt(i) instanceof android.webkit.WebView) {
+                web = (android.webkit.WebView) root.getChildAt(i);
+                break;
+            }
+        }
+        assertNotNull(web);
+
+        org.robolectric.shadows.ShadowWebView shadowWeb = Shadows.shadowOf(web);
+        android.webkit.WebViewClient client = shadowWeb.getWebViewClient();
+        assertNotNull(client);
+
+        android.webkit.WebResourceRequest googleOAuthRequest = new android.webkit.WebResourceRequest() {
+            @Override public Uri getUrl() {
+                return Uri.parse("https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=12345");
+            }
+            @Override public boolean isForMainFrame() { return true; }
+            @Override public boolean isRedirect() { return false; }
+            @Override public boolean hasGesture() { return true; }
+            @Override public String getMethod() { return "GET"; }
+            @Override public java.util.Map<String, String> getRequestHeaders() { return java.util.Collections.emptyMap(); }
+        };
+
+        boolean handled = client.shouldOverrideUrlLoading(web, googleOAuthRequest);
+        assertTrue(handled);
+
+        Intent started = Shadows.shadowOf(screen).getNextStartedActivity();
+        assertNotNull(started);
+        assertEquals(Intent.ACTION_VIEW, started.getAction());
+        assertEquals("accounts.google.com", started.getData().getHost());
+    }
+
+    @Test
+    public void adNetworkRequestIsInterceptedWithNoContentResponse() {
+        MangaActivity screen = manga();
+        android.webkit.WebView web = null;
+        ViewGroup root = (ViewGroup) ((ViewGroup) screen.findViewById(android.R.id.content)).getChildAt(0);
+        for (int i = 0; i < root.getChildCount(); i++) {
+            if (root.getChildAt(i) instanceof android.webkit.WebView) {
+                web = (android.webkit.WebView) root.getChildAt(i);
+                break;
+            }
+        }
+        assertNotNull(web);
+
+        org.robolectric.shadows.ShadowWebView shadowWeb = Shadows.shadowOf(web);
+        android.webkit.WebViewClient client = shadowWeb.getWebViewClient();
+        assertNotNull(client);
+
+        android.webkit.WebResourceRequest adRequest = new android.webkit.WebResourceRequest() {
+            @Override public Uri getUrl() {
+                return Uri.parse("https://googleads.g.doubleclick.net/pagead/ads?client=ca-pub-12345");
+            }
+            @Override public boolean isForMainFrame() { return false; }
+            @Override public boolean isRedirect() { return false; }
+            @Override public boolean hasGesture() { return false; }
+            @Override public String getMethod() { return "GET"; }
+            @Override public java.util.Map<String, String> getRequestHeaders() { return java.util.Collections.emptyMap(); }
+        };
+
+        android.webkit.WebResourceResponse response = client.shouldInterceptRequest(web, adRequest);
+        assertNotNull(response);
+        assertEquals(204, response.getStatusCode());
+
+        android.webkit.WebResourceRequest authRequest = new android.webkit.WebResourceRequest() {
+            @Override public Uri getUrl() {
+                return Uri.parse("https://accounts.google.com/o/oauth2/v2/auth");
+            }
+            @Override public boolean isForMainFrame() { return false; }
+            @Override public boolean isRedirect() { return false; }
+            @Override public boolean hasGesture() { return false; }
+            @Override public String getMethod() { return "GET"; }
+            @Override public java.util.Map<String, String> getRequestHeaders() { return java.util.Collections.emptyMap(); }
+        };
+
+        android.webkit.WebResourceResponse authResponse = client.shouldInterceptRequest(web, authRequest);
+        org.junit.Assert.assertNull(authResponse);
+    }
 }

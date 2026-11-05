@@ -2,7 +2,13 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.21.0** (versionCode 46) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.21.1** (versionCode 47) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* **2.21.1 — Penanganan Google Login & Pemblokiran Iklan Terarah Manga.**
+  - **Autentikasi Google via Browser/Custom Tabs**: Navigasi OAuth Google (`accounts.google.com`, `oauth2.googleapis.com`) dideteksi otomatis dan diluncurkan melalui Chrome Custom Tabs atau browser eksternal. Mencegah error penolakan embedded webview dari Google (`403 disallowed_useragent`) tanpa pernah meminta atau menyimpan password pengguna di aplikasi.
+  - **Pemblokiran Iklan Terarah & Perlindungan Resource Autentikasi (`MangaAdFilter`)**: Jaringan iklan agresif (`doubleclick.net`, `googleads.g.doubleclick.net`, `adservice.google.com`, `adsterra`, `monetag`, `highperformancegate`, `popads`, `propellerads`, `exoclick`, `histats`, `mgid`, popunder, dan banner promosi) dicegat dengan respon 204 No Content. Di saat yang sama, layanan krusial TIDAK diblokir: endpoint autentikasi Google, token discovery, `api.voratoon.com`, cookie sesi, serta Cloudflare Turnstile (`challenges.cloudflare.com`, `cloudflareinsights.com`).
+  - **Perapian Toolbar Alamat Manga**: Bilah alamat toolbar kini hanya menampilkan nama sumber / hostname ringkas (contoh: `Sumber: 13.voratoon.com` atau `Login Google (accounts.google.com)`) dengan satu baris dan elipsis rapi. Mengetuk bilah alamat membuka dialog modal "Alamat Halaman" yang menampilkan URL lengkap, tombol **Salin URL** ke clipboard, tombol **Buka di Browser**, dan tombol **Tutup**.
+  - **CookieManager Third-Party Cookies**: Mengaktifkan penerimaan third-party cookies dan sinkronisasi flush cookie pada WebView untuk menjaga persistensi sesi pengguna dan token keamanan Cloudflare.
+  - **394 unit test lulus**, 0 gagal (36 kelas).
 * **2.21.0 — Penyelarasan Navigation Drawer Manga & Dukungan Multi-Source Novel.**
   - **Navigation Drawer Manga Identik**: Tombol menu tiga garis (☰) di halaman Manga (`MangaActivity`)
     kini menggunakan komponen bersama `SectionDrawer` yang sama dengan halaman Novel (`MainActivity`),

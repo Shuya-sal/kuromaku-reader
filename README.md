@@ -1,8 +1,27 @@
-# Kuromaku Reader 2.21.0
+# Kuromaku Reader 2.21.1
 
 Aplikasi pembaca Android **native** untuk novel ringan berbahasa Indonesia dengan
 dukungan multi-sumber (**Kaori Translation**, **Megumi Novel**, dan **Sakura Novel**)
 serta pembaca manga terintegrasi.
+
+Versi 2.21.1 memperbaiki **Autentikasi Google Login** dan **Pemblokiran Iklan Terarah** pada
+halaman Manga (`MangaActivity`):
+- **Autentikasi Google Terproteksi**: Navigasi OAuth Google (`accounts.google.com`, `oauth2.googleapis.com`)
+  dideteksi secara otomatis dan diluncurkan ke Chrome Custom Tabs atau browser eksternal. Hal ini
+  mencegah penolakan browser embedded (`403 disallowed_useragent`) dari Google, tanpa pernah meminta
+  atau menyimpan sandi pengguna di aplikasi.
+- **Pemblokiran Iklan Terarah (`MangaAdFilter`)**: Mencegat resource dan permintaan dari jaringan iklan
+  agresif (`doubleclick.net`, `googleads.g.doubleclick.net`, `adservice.google.com`, `adsterra`, `monetag`,
+  `highperformancegate`, `popads`, `propellerads`, `exoclick`, `histats`, `mgid`, dll.) dengan respon 204
+  No Content, tanpa memblokir layanan krusial seperti endpoint autentikasi Google, token discovery,
+  `api.voratoon.com`, cookie sesi, maupun Cloudflare Turnstile (`challenges.cloudflare.com`).
+- **Perapian Bilah Alamat Toolbar**: Bilah alamat toolbar Manga tidak lagi meluap oleh URL panjang, melainkan
+  menampilkan hostname ringkas (contoh: `Sumber: 13.voratoon.com` atau `Login Google (accounts.google.com)`)
+  dengan elipsis rapi. Mengetuk bilah alamat membuka dialog modal "Alamat Halaman" yang menampilkan URL lengkap,
+  tombol **Salin URL** ke clipboard, tombol **Buka di Browser**, dan tombol **Tutup**.
+- **Cookie & Sesi Persisten**: Mengaktifkan penerimaan third-party cookies dan sinkronisasi flush cookie
+  pada WebView untuk menjaga integritas sesi dan token keamanan website.
+- **394 unit test lulus**, 0 gagal (36 kelas).
 
 Versi 2.21.0 menyamakan **Navigation Drawer** antara layar Novel (`MainActivity`) dan
 layar Manga (`MangaActivity`) menggunakan komponen bersama `SectionDrawer` (lebar 82%,
