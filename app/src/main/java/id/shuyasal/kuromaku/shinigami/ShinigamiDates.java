@@ -23,4 +23,18 @@ public final class ShinigamiDates {
         return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm", Locale.ROOT)
                 .withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(millis));
     }
+
+    /**
+     * Label ringkas untuk kartu sempit. Nama bulan mengikuti bahasa perangkat
+     * supaya tidak terpotong pada kolom kecil.
+     */
+    public static String formatShort(long millis) {
+        if (millis <= 0L) return "";
+        Locale locale = Locale.getDefault();
+        if (!"in".equals(locale.getLanguage()) && !"id".equals(locale.getLanguage())) {
+            locale = new Locale("id", "ID");
+        }
+        return DateTimeFormatter.ofPattern("d MMM yyyy", locale)
+                .withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(millis));
+    }
 }

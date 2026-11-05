@@ -1,5 +1,6 @@
 package id.shuyasal.kuromaku.shinigami;
 
+import android.graphics.Typeface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -44,6 +45,10 @@ public class ShinigamiActivity extends AppCompatActivity {
     private static final String STATE_SORT = "shinigami_sort";
     private static final String STATE_GENRE = "shinigami_genre";
     private static final String STATE_STATUS = "shinigami_status";
+
+    /** Jumlah kartu "Lanjutkan Membaca" yang tampil di beranda. */
+    private static final int CONTINUE_LIMIT = 8;
+    private static final int CONTINUE_COVER_DP = 112;
 
     private enum Mode {
         CATALOGUE,
@@ -93,6 +98,8 @@ public class ShinigamiActivity extends AppCompatActivity {
     private ProgressBar spinner;
     private EditText searchField;
     private LinearLayout filterRow;
+    private LinearLayout continueRail;
+    private LinearLayout continueCards;
 
     private int page = 1;
     private int totalPages = 1;
@@ -108,7 +115,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        palette = Palette.of(new Prefs(this).theme());
+        palette = Palette.of(new Prefs(this).resolvedTheme());
         source = createSource();
         store = new ShinigamiStore(this);
 
@@ -123,7 +130,15 @@ public class ShinigamiActivity extends AppCompatActivity {
 
         buildUi();
         searchField.setText(query);
+        refreshContinueRail();
         loadPage(1, false);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Progres/riwayat bisa berubah setelah membaca; rail ikut segar.
+        if (store != null) refreshContinueRail();
     }
 
     private void buildUi() {
@@ -158,6 +173,10 @@ public class ShinigamiActivity extends AppCompatActivity {
         root.addView(searchRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        continueRail = buildContinueRail();
+        root.addView(continueRail, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         filterRow = new LinearLayout(this);
         filterRow.setOrientation(LinearLayout.HORIZONTAL);
         filterRow.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 12), Ui.dp(this, 6));
@@ -181,7 +200,7 @@ public class ShinigamiActivity extends AppCompatActivity {
         rowAdapter = new RowAdapter();
         downloadsAdapter = new DownloadsAdapter();
         list.setAdapter(adapter);
-        list.setLayoutManager(new GridLayoutManager(this, 3));
+        list.setLayoutManager(new GridLayoutManager(this, 2));
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
@@ -250,6 +269,135 @@ public class ShinigamiActivity extends AppCompatActivity {
         applyInsets(root);
 
         buildFilterChips();
+    }
+
+    /**
+     * Rail "Lanjutkan Membaca": dibangun sekali, isinya disegarkan setiap kali
+     * layar kembali aktif. Sumber data hanya ShinigamiStore (riwayat + progres),
+     * tidak ada penyimpanan riwayat kedua.
+     */
+    private LinearLayout buildContinueRail() {
+        LinearLayout rail = new LinearLayout(this);
+        rail.setOrientation(LinearLayout.VERTICAL);
+        rail.setTag("shinigami_continue_rail");
+        rail.setVisibility(View.GONE);
+        rail.setPadding(0, Ui.dp(this, 2), 0, Ui.dp(this, 4));
+
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        head.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 8), 0);
+
+        TextView label = Ui.label(this, getString(
+                id.shuyasal.kuromaku.R.string.shinigami_continue_title), 15, palette.text);
+        label.setTypeface(label.getTypeface(), Typeface.BOLD);
+        label.setTag("shinigami_continue_label");
+        head.addView(label, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        TextView all = Ui.label(this, getString(
+                id.shuyasal.kuromaku.R.string.shinigami_continue_all), 12, palette.accent);
+        all.setTag("shinigami_continue_all");
+        all.setGravity(Gravity.CENTER_VERTICAL);
+        all.setPadding(Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 6), Ui.dp(this, 12));
+        all.setOnClickListener(v -> {
+            showHistory();
+            list.scrollToPosition(0);
+        });
+        head.addView(all, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        rail.addView(head, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        HorizontalScrollView scroller = new HorizontalScrollView(this);
+        scroller.setHorizontalScrollBarEnabled(false);
+        scroller.setClipToPadding(false);
+        continueCards = new LinearLayout(this);
+        continueCards.setOrientation(LinearLayout.HORIZONTAL);
+        continueCards.setTag("shinigami_continue_cards");
+        continueCards.setPadding(Ui.dp(this, 14), Ui.dp(this, 6), Ui.dp(this, 14), 0);
+        scroller.addView(continueCards, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        rail.addView(scroller, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return rail;
+    }
+
+    private void refreshContinueRail() {
+        if (continueRail == null || continueCards == null) return;
+        continueCards.removeAllViews();
+        int shown = 0;
+        for (ShinigamiStore.HistoryEntry entry : store.history()) {
+            if (shown >= CONTINUE_LIMIT) break;
+            if (entry.chapterId.isEmpty()) continue;
+            continueCards.addView(buildContinueCard(entry));
+            shown++;
+        }
+        // Tanpa riwayat, bagian ini hilang sepenuhnya agar katalog tetap di atas.
+        continueRail.setVisibility(shown == 0 ? View.GONE : View.VISIBLE);
+    }
+
+    private View buildContinueCard(ShinigamiStore.HistoryEntry entry) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setTag("shinigami_continue_" + entry.mangaId);
+        card.setPadding(0, 0, Ui.dp(this, 10), 0);
+
+        RatioFrameLayout box = new RatioFrameLayout(this);
+        box.setRatio(0.68f);
+        box.setBackgroundColor(palette.surface);
+        ImageView cover = new ImageView(this);
+        cover.setTag("shinigami_continue_cover");
+        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        cover.setBackgroundColor(palette.surface);
+        box.addView(cover, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        card.addView(box, new LinearLayout.LayoutParams(CONTINUE_COVER_DP, CONTINUE_COVER_DP));
+
+        TextView title = Ui.label(this, entry.title, 12, palette.text);
+        title.setTag("shinigami_continue_title");
+        title.setLineSpacing(0f, 0.95f);
+        title.setMaxLines(2);
+        title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setPadding(0, Ui.dp(this, 4), 0, 0);
+        card.addView(title, new LinearLayout.LayoutParams(CONTINUE_COVER_DP,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        int percent = store.progress(entry.chapterId);
+        TextView meta = Ui.label(this, getString(
+                id.shuyasal.kuromaku.R.string.shinigami_continue_progress,
+                ShinigamiManga.formatNumber(entry.chapterNumber), percent), 10, palette.muted);
+        meta.setTag("shinigami_continue_meta");
+        meta.setMaxLines(1);
+        meta.setEllipsize(TextUtils.TruncateAt.END);
+        card.addView(meta, new LinearLayout.LayoutParams(CONTINUE_COVER_DP,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView action = Ui.label(this, getString(
+                id.shuyasal.kuromaku.R.string.shinigami_continue_action), 11, palette.accent);
+        action.setTag("shinigami_continue_action");
+        action.setTypeface(action.getTypeface(), Typeface.BOLD);
+        // Satu baris: label tidak boleh pecah di tengah kata.
+        action.setSingleLine(true);
+        action.setMaxLines(1);
+        action.setEllipsize(null);
+        action.setGravity(Gravity.CENTER_VERTICAL);
+        action.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 6));
+        card.addView(action, new LinearLayout.LayoutParams(CONTINUE_COVER_DP,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        Glide.with(this).load(entry.coverUrl).centerCrop().into(cover);
+
+        View.OnClickListener open = v -> openHistoryEntry(entry);
+        card.setOnClickListener(open);
+        action.setOnClickListener(open);
+        return card;
+    }
+
+    private void openHistoryEntry(ShinigamiStore.HistoryEntry entry) {
+        Row row = new Row(entry.mangaId, entry.title, entry.coverUrl, entry.chapterId,
+                entry.chapterNumber, ShinigamiDates.format(entry.timestamp));
+        openChapter(row);
     }
 
     private LinearLayout buildHeader() {
@@ -417,6 +565,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void showHistory() {
         cancelRemoteView();
         mode = Mode.HISTORY;
+        buildFilterChips();
         rows.clear();
         useRowAdapter();
         for (ShinigamiStore.HistoryEntry entry : store.history()) {
@@ -487,7 +636,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void useGridAdapter() {
-        list.setLayoutManager(new GridLayoutManager(this, 3));
+        list.setLayoutManager(new GridLayoutManager(this, 2));
         list.setAdapter(adapter);
     }
 
@@ -712,7 +861,7 @@ public class ShinigamiActivity extends AppCompatActivity {
 
             TextView info = Ui.label(ShinigamiActivity.this, "", 11, palette.muted);
             info.setTag("shinigami_subtitle");
-            info.setMaxLines(3);
+            info.setMaxLines(4);
             info.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(info);
 
@@ -731,9 +880,13 @@ public class ShinigamiActivity extends AppCompatActivity {
                 if (info.length() > 0) info.append(" - ");
                 info.append(manga.genres.get(0));
             }
-            info.append("\nUpdate terakhir: ").append(manga.latestChapterTimeMillis > 0
-                    ? ShinigamiDates.format(manga.latestChapterTimeMillis)
-                    : manga.updatedAtMillis > 0 ? ShinigamiDates.format(manga.updatedAtMillis) + " (Diperbarui)"
+            long updated = manga.latestChapterTimeMillis > 0
+                    ? manga.latestChapterTimeMillis : manga.updatedAtMillis;
+            // Baris sendiri + format ringkas: tanggal tidak lagi terpotong pada
+            // kartu dua kolom.
+            info.append("\n").append(updated > 0
+                    ? getString(id.shuyasal.kuromaku.R.string.shinigami_update_line,
+                            ShinigamiDates.formatShort(updated))
                     : "Tanggal belum tersedia");
             holder.subtitle.setText(info.toString());
             holder.coverBox.setOnClickListener(v -> openDetail(manga.id, manga.title, manga.coverUrl));

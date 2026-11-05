@@ -79,7 +79,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        palette = Palette.of(new Prefs(this).theme());
+        palette = Palette.of(new Prefs(this).resolvedTheme());
         source = createSource();
         store = new ShinigamiStore(this);
         downloader = new ShinigamiDownloader(this);

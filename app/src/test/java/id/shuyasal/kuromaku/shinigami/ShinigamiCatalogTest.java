@@ -89,7 +89,10 @@ public class ShinigamiCatalogTest {
             assertNotNull(tagged(host, "shinigami_chip_Manga terbaru"));
             TextView info = bindFirst(host).findViewWithTag("shinigami_subtitle");
             assertTrue(info.getText().toString(), info.getText().toString().contains("Chapter terbaru: 210"));
-            assertTrue(info.getText().toString(), info.getText().toString().contains("Update terakhir: 2026-11-05 10:24"));
+            // Baris tanggal kini ringkas dan berdiri sendiri agar tidak terpotong
+            // pada kartu dua kolom: "Update 5 Nov 2026".
+            assertTrue(info.getText().toString(),
+                    info.getText().toString().contains("Update 5 Nov 2026"));
         } finally { java.util.TimeZone.setDefault(previous); }
     }
     @Test public void latestChaptersUseLatestSortWithoutLosingFilters() throws Exception {

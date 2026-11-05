@@ -184,7 +184,7 @@ public class MangaActivity extends AppCompatActivity {
 
     private void showUrlDetailsDialog(String currentUrl) {
         final String targetUrl = (currentUrl == null || currentUrl.isEmpty()) ? LANDING : currentUrl;
-        int theme = new Prefs(this, null).theme();
+        int theme = new Prefs(this, null).resolvedTheme();
         Palette palette = Palette.of(theme);
 
         Dialog dialog = new Dialog(this);
@@ -313,7 +313,7 @@ public class MangaActivity extends AppCompatActivity {
     }
 
     private void showSectionDrawer() {
-        int theme = new Prefs(this, null).theme();
+        int theme = new Prefs(this, null).resolvedTheme();
         Palette palette = Palette.of(theme);
         SectionDrawer.show(this, SectionDrawer.Section.MANGA_VORATON, palette, new SectionDrawer.Listener() {
             @Override

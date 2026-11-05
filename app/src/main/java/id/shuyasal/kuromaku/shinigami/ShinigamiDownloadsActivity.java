@@ -60,7 +60,7 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        palette = Palette.of(new Prefs(this).theme());
+        palette = Palette.of(new Prefs(this).resolvedTheme());
         store = new ShinigamiStore(this);
         buildUi();
         scan();

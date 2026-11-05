@@ -18,6 +18,8 @@ public final class Prefs {
     public static final int THEME_LIGHT = 0;
     public static final int THEME_DARK = 1;
     public static final int THEME_SEPIA = 2;
+    /** Ikuti tema sistem (terang/gelap) saat aplikasi dibuka. */
+    public static final int THEME_SYSTEM = 3;
 
     /** The preference file that holds theme, bookmarks and per-chapter progress. */
     public static final String FILE_NAME = "kuromaku_reader";
@@ -62,6 +64,20 @@ public final class Prefs {
 
     public void setTheme(int theme) {
         prefs.edit().putInt(KEY_THEME, theme).apply();
+    }
+
+    /**
+     * Tema yang benar-benar dipakai untuk menggambar. Nilai tersimpan tetap
+     * dikembalikan apa adanya oleh {@link #theme()} agar pilihan pengguna tidak
+     * hilang saat mode sistem berubah.
+     */
+    public int resolvedTheme() {
+        int stored = theme();
+        if (stored != THEME_SYSTEM) return stored;
+        boolean night = (context.getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        return night ? THEME_DARK : THEME_LIGHT;
     }
 
     public int fontSize() {

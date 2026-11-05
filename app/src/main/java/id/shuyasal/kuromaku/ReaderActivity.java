@@ -108,7 +108,7 @@ public class ReaderActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = new Prefs(this);
-        palette = Palette.of(prefs.theme());
+        palette = Palette.of(prefs.resolvedTheme());
 
         novelId = getIntent().getStringExtra(EXTRA_NOVEL);
         if (novelId == null || novelId.isEmpty()) {
@@ -635,14 +635,14 @@ public class ReaderActivity extends AppCompatActivity {
         panelBox.addView(sectionLabel("Tema"));
         LinearLayout themes = new LinearLayout(this);
         themes.setOrientation(LinearLayout.HORIZONTAL);
-        String[] names = {"Terang", "Gelap", "Sepia"};
+        String[] names = {"Terang", "Gelap", "Sepia", "Sistem"};
         for (int i = 0; i < names.length; i++) {
             final int theme = i;
             Button button = Ui.chip(this, names[i], palette);
             if (prefs.theme() == i) button.setTextColor(palette.accent);
             button.setOnClickListener(v -> {
                 prefs.setTheme(theme);
-                palette = Palette.of(theme);
+                palette = Palette.of(prefs.resolvedTheme());
                 repaint();
             });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(

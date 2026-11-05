@@ -115,7 +115,22 @@ public class ShinigamiDownloadsActivityTest {
         assertNotNull("dialog konfirmasi harus muncul", dialog);
         dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).performClick();
 
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        // Penghapusan + pemindaian ulang berjalan di worker; tunggu keduanya
+        // selesai supaya asersi tidak bergantung pada kecepatan mesin.
+        Field worker = ShinigamiDownloadsActivity.class.getDeclaredField("worker");
+        worker.setAccessible(true);
+        ((java.util.concurrent.ExecutorService) worker.get(activity)).submit(() -> {})
+                .get(5, java.util.concurrent.TimeUnit.SECONDS);
+        // Robolectric menjadwalkan post lintas-thread secara longgar: tunggu
+        // sampai daftar benar-benar diperbarui, bukan menebak satu idle().
+        View row = null;
+        for (int attempt = 0; attempt < 60; attempt++) {
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            row = activity.getWindow().getDecorView()
+                    .findViewWithTag("downloads_chapter_" + CHAPTER);
+            if (row == null) break;
+            Thread.sleep(25);
+        }
         assertNull("berkas harus hilang", downloader.pageFile(CHAPTER, 0));
         assertNull("chapter harus hilang dari daftar",
                 tagged(activity, "downloads_chapter_" + CHAPTER));

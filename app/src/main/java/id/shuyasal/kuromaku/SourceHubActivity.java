@@ -39,7 +39,7 @@ public class SourceHubActivity extends AppCompatActivity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        palette = Palette.of(new Prefs(this).theme());
+        palette = Palette.of(new Prefs(this).resolvedTheme());
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(palette.background);

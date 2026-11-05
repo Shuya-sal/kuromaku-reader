@@ -145,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = new Prefs(this);
-        palette = Palette.of(prefs.theme());
+        palette = Palette.of(prefs.resolvedTheme());
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         buildShell();
         handleDataAction(getIntent());
@@ -287,8 +287,8 @@ public class MainActivity extends AppCompatActivity {
         themeButton = Ui.iconButton(this, palette.themeIcon(), themeDescription(), palette);
         themeButton.setTag("theme");
         themeButton.setOnClickListener(v -> {
-            prefs.setTheme((prefs.theme() + 1) % 3);
-            palette = Palette.of(prefs.theme());
+            prefs.setTheme((prefs.theme() + 1) % 4);
+            palette = Palette.of(prefs.resolvedTheme());
             rebuildShell();
         });
         LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(
