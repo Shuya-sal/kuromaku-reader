@@ -1,63 +1,59 @@
-# Kuromaku Reader 2.22.0 — Laporan Shinigami
+# Kuromaku Reader 2.22.1 — Perbaikan Shinigami
 
-## Status
-Modul native Shinigami ditambahkan langsung pada proyek yang ada. Integrasi masih eksperimental, bukan klaim bahwa seluruh situs atau izin penggunaan pihak ketiga telah terverifikasi. Laporan ini mencatat verifikasi lokal sebelum publikasi; status build GitHub Actions diperiksa terpisah.
+## Status dan akar masalah
+Perbaikan diterapkan pada source terbaru. Tombol daftar chapter sebelumnya berlabel statis "Offline", bukan hasil pemeriksaan file. Reader tidak menampilkan error ketika Glide gagal; pengukuran gambar panjang dan ukuran decoding juga tidak dikendalikan secara memadai. HTTP/decoding sumber berhasil diuji, tetapi ini bukan bukti seluruh gambar tampil pada perangkat Android.
 
-## Perubahan
-- Drawer bersama lima entri: Novel, Manga Voratoon, Manga Shinigami, Backup progres membaca, Restore progres membaca; panel kiri 82%, scrim 0.55, swipe kiri, Back, tap di luar, tema dan insets.
-- Voratoon tetap MangaActivity berbasis WebView. Perubahan pada halaman Voratoon hanya integrasi menu Shinigami, bukan migrasi reader atau penggantian fitur sumber/fullscreen/OAuth.
-- ShinigamiActivity: katalog grid cover/judul, pencarian, urutan terbaru/terpopuler, informasi chapter terbaru, pagination, riwayat, favorit, dan pengaturan domain.
-- ShinigamiDetailActivity: cover, sinopsis, genre/status/metadata tersedia, daftar chapter berhalaman, favorit, tombol membuka reader.
-- ShinigamiReaderActivity: RecyclerView vertikal, pemuatan gambar bertahap, urutan URL dari respons sumber, tautan zoom ke ImageViewerActivity, fullscreen, penyimpanan/restorasi posisi halaman dan persentase chapter.
-- ShinigamiSource terpisah dari parser novel; endpoint JSON yang menghasilkan respons nyata digunakan, tanpa endpoint fiktif. Timeout, retry koneksi maksimal dua percobaan, penolakan redirect, HTTP 401/403/429, CAPTCHA/Cloudflare, respons kosong, dan struktur berubah ditangani sebagai error.
-- ShinigamiConfig: domain API/situs dapat diganti; HTTPS, host tepat di bawah domain sumber, dan penolakan userinfo/port/path traversal/domain palsu.
-- Identitas memakai manga_id/chapter_id, bukan indeks atau nomor chapter. Nomor chapter desimal dan nomor ganda tidak menggabungkan chapter berbeda.
-- ShinigamiStore menggunakan preferensi terpisah. ReadingBackup menambah bagian opsional Shinigami; backup lama tetap diterima. Restore memvalidasi data sebelum menulis.
-- Unduhan offline dinonaktifkan sebelum pembuatan berkas karena izin sumber belum terverifikasi.
-- Application ID tetap id.shuyasal.kuromaku; versi 2.22.0, versionCode 48. Tidak ada migrasi destruktif atau penghapusan database/progres lama.
-- Berkas yang diedit dicadangkan lokal ke backupcode_coding-high/. Backup lokal dan direktori build tidak dimasukkan ke ZIP distribusi.
+## Perubahan dan file
+Semua Java berikut berada di `app/src/main/java/id/shuyasal/kuromaku/shinigami/`:
+- `ShinigamiReaderActivity.java`: pemuatan bitmap Glide bertahap, ukuran decoding terbatas, tinggi sel proporsional, loading/error/Coba Lagi per halaman; kegagalan satu gambar tidak mengosongkan reader. Daftar URL tersimpan digunakan hanya ketika terjadi kegagalan koneksi, bukan untuk mengatasi CAPTCHA/403. Progres halaman/fullscreen dipertahankan.
+- `ShinigamiPageView.java` (baru): sel gambar dengan placeholder terlihat, ukuran sesuai rasio gambar, pesan error dan retry.
+- `ShinigamiImageRequest.java` (baru): transport OkHttp untuk Glide, Referer situs yang valid, validasi HTTPS/host/redirect, status HTTP, MIME image dan signature JPEG/PNG/GIF/WebP; timeout dan batas ukuran. Tidak mengarang cookie atau mencatat token, cookie, dan URL bertanda tangan.
+- `ShinigamiImageZoomActivity.java` (baru): zoom khusus Shinigami memakai transport yang sama, bitmap dibatasi, loading/error/retry. Viewer Novel lama tidak diubah.
+- `ShinigamiDownloader.java`: "Tersimpan offline" hanya untuk jumlah halaman yang diketahui dan semua file yang lolos pemeriksaan format, kelengkapan container dan decoding sampel; file kosong/HTML/terpotong ditolak. Status "Belum diunduh" dan "Mengunduh..." terpisah dari progres membaca. Daftar offline tidak menerima folder berisi metadata saja.
+- `ShinigamiChapter.java`, `ShinigamiManga.java`, `ShinigamiDates.java` (baru): UTC epoch milliseconds dari timestamp sumber, tampilan zona waktu pengguna, label Rilis/Diperbarui sesuai metadata, fallback "Tanggal belum tersedia". Tidak memakai nomor chapter atau waktu fetch untuk mengarang tanggal.
+- `ShinigamiSource.java`: cache metadata dan URL tervalidasi, jumlah halaman dan HTTP dicatat tanpa rahasia. Pencarian dapat membawa sort, genre dan status bersama-sama.
+- `ShinigamiStore.java`: penambahan key metadata/UTC/URL/jumlah halaman secara aditif pada preferensi Shinigami yang sudah ada. Tidak mengganti database Room Novel, menghapus data, atau melakukan migrasi destruktif. Metadata kosong/null tidak menghapus tanggal yang sudah diketahui, progres, riwayat, favorit atau posisi baca.
+- `ShinigamiDetailActivity.java`: tanggal chapter dan status lokal yang benar; status diperbarui saat kembali ke detail.
+- `ShinigamiActivity.java`: kartu "Chapter terbaru" dan "Update terakhir", pilihan "Update terbaru", filter/pencarian dipertahankan, deduplikasi ID saat pagination dan perlindungan dari respons lama yang menimpa riwayat.
 
-## Masalah yang ditemukan dan diperbaiki
-- Nomor chapter awalnya diperlakukan sebagai integer; data nyata memuat nomor desimal dan nomor sama pada ID berbeda. Model, intent, label, dan store diperbaiki memakai double serta ID sumber.
-- Gambar kosong awalnya memiliki tinggi nol: seluruh 18 halaman reader terikat sekaligus, dan posisi halaman tersimpan tidak dapat dipulihkan. Placeholder setinggi viewport digunakan sampai gambar siap. Tes regresi lazy binding dan posisi tersimpan kini lulus.
-- Swipe drawer tidak selalu ditangani; dispatch gesture horizontal diperbaiki pada komponen bersama.
-- Kegagalan daftar chapter tidak menampilkan tombol retry; retry juga dapat menambah chapter duplikat. Tombol retry dan deduplikasi ID lintas halaman diperbaiki.
-- Callback hasil jaringan pada Activity yang ditutup diabaikan agar tidak memperbarui UI yang telah dihancurkan.
+Konfigurasi: `app/src/main/AndroidManifest.xml` mendaftarkan zoom Shinigami; `app/build.gradle.kts` menjadi 2.22.1/versionCode 49 dengan application ID dan debug signing yang tetap.
+
+Tes yang ditambah/diperbarui di `app/src/test/java/id/shuyasal/kuromaku/shinigami/`: `ShinigamiCatalogTest`, `ShinigamiDatesTest`, `ShinigamiDownloadStateTest`, `ShinigamiImageRequestTest`, `ShinigamiImageTransportTest`, `ShinigamiImageZoomTest`, `ShinigamiPageViewTest`, `ShinigamiDetailTest`, `ShinigamiReaderTest`, `ShinigamiSourceTest`, `ShinigamiStoreTest`.
+
+Novel, Manga Voratoon WebView, Navigation Drawer, Backup/Restore, tema, dan pengaturan bersama tidak diedit untuk perbaikan ini. Unduhan permanen Shinigami tetap dinonaktifkan karena izin sumber belum terverifikasi; cache pembacaan bukan jaminan chapter tersimpan offline.
 
 ## Pengujian yang benar-benar dilakukan
-### Suite otomatis final
+### Suite otomatis dan build
 Perintah:
 
-    /home/ubuntu/tools/gradle-8.9/bin/gradle testDebugUnitTest assembleDebug --offline --console=plain
+```sh
+/home/ubuntu/tools/gradle-8.9/bin/gradle testDebugUnitTest assembleDebug --offline --console=plain
+```
 
-Hasil: BUILD SUCCESSFUL. Laporan XML final berisi 45 kelas, 457 tes terdaftar, 456 lulus, 0 gagal, 0 error, 1 dilewati. Tes yang dilewati adalah ShinigamiLiveTest pada suite reguler karena tes jaringan bersifat opt-in.
+Hasil final: **BUILD SUCCESSFUL**. XML: **52 kelas, 495 tes terdaftar, 494 lulus, 0 gagal, 0 error, 1 dilewati**. Tes yang dilewati adalah `ShinigamiLiveTest`, bersifat jaringan opt-in. Pengujian HTTP nyata di bawah dilakukan terpisah, bukan dianggap sebagai hasil tes yang dilewati.
 
-Cakupan meliputi regresi novel, MangaScreenTest (WebView Voratoon), SectionDrawerTest, parser sumber/konfigurasi, data nyata sebagai fixture, detail, reader/fullscreen, lazy loading, posisi halaman/progres, store, backup Shinigami dan format lama. Ini pengujian JVM/Robolectric, bukan pengujian perangkat fisik.
+Cakupan JVM/Robolectric: regresi Novel/Voratoon/drawer/backup, urutan URL, lazy binding, ukuran gambar panjang, loading/error/retry sel, fullscreen dan restore progres halaman, tanggal/zona waktu/fallback, refresh metadata tanpa reset progres, kelengkapan file offline, serta filter/sort/pagination katalog.
 
-### Uji jaringan langsung terpisah
-Perintah:
+Tes transport menggunakan interceptor OkHttp: respons tertunda, koneksi terputus, 403 tidak diulang, redirect ke host/HTTP tak valid ditolak, cancellation tidak memulai request, Referer valid tanpa cookie palsu. Ini simulasi terkontrol, bukan uji koneksi lambat/terputus pada HP nyata.
 
-    KUROMAKU_LIVE=1 /home/ubuntu/tools/gradle-8.9/bin/gradle testDebugUnitTest --offline --console=plain --tests '*ShinigamiLiveTest'
+### Konten nyata: semua halaman pada sembilan chapter
+Probe API publik, daftar chapter berhalaman, detail chapter, HTTP gambar dan decoding Pillow dilakukan tanpa kredensial. Hasil per halaman ada di `SHINIGAMI-LIVE-EVIDENCE.json`.
 
-Hasil yang disimpan: 1 tes, 1 lulus, 0 gagal/error/dilewati. Transport produksi ShinigamiSource membaca katalog halaman 1 dan 2, pencarian "solo", detail manga, daftar chapter, dan URL gambar dari API yang dapat diakses tanpa kredensial.
+| Judul | Chapter awal / tengah / terbaru | Halaman diuji dan berhasil HTTP 200 + MIME image + decoding |
+|---|---|---|
+| Miss Ji-Hye, The Uncool Adult | 1 / 14 / 26 | 15 / 11 / 9 |
+| Nano Machine | 1 / 169 / 337 | 26 / 16 / 25 |
+| Necromancer Academy’s Genius Summoner | 1 / 112 / 223 | 20 / 18 / 16 |
 
-Contoh nyata: Regressor Instruction Manual, manga_id 14423a1b-8d7e-41e2-af00-ba0ba655d5f9; Chapter 210, chapter_id d6cd3f14-a528-4752-a546-0d14873e9a4a; 18 URL gambar. Pencarian menghasilkan Solo Leveling : Ragnarok. Respons nyata tersimpan dalam fixture live_*.json; tes juga memeriksa urutan gambar.
+Total **156/156 gambar** lolos HTTP dan decoding, termasuk halaman pertama sampai terakhir setiap chapter terpilih. Timestamp `release_date`, `updated_at` dan `latest_chapter_time` tersedia pada respons yang diperiksa. Bukti ini menguji konten sumber, **bukan membuktikan rendering Glide di Android atau seluruh katalog**.
 
-Satu URL gambar pertama diambil terpisah: HTTP 200, image/webp, 248832 byte, berhasil didekode sebagai WEBP 800 x 10000. Ini bukan bukti seluruh gambar atau seluruh katalog berhasil dimuat pada Android.
+### Verifikasi APK
+- `app/build/outputs/apk/debug/app-debug.apk`: 5.709.609 byte.
+- `apksigner verify`: berhasil.
+- `aapt2 dump badging`: `id.shuyasal.kuromaku`, versionName 2.22.1, versionCode 49, minimum API 26.
+- `git diff --check`: lulus.
 
-### Build dan verifikasi
-- APK: app/build/outputs/apk/debug/app-debug.apk.
-- Ukuran APK final: 5697085 byte.
-- apksigner verify: berhasil.
-- aapt2 dump badging: application ID id.shuyasal.kuromaku, versionName 2.22.0, versionCode 48.
-- git diff --check: lulus.
-- Pemeriksaan komentar baru pada modul Java/test dan emoji UI baru: tidak ditemukan.
-- APK dan ZIP diperiksa integritas ZIP; source memuat source Shinigami serta konfigurasi proyek, tanpa app/build/, backupcode, atau .planning/.
+## Batasan dan pengujian perangkat yang belum dilakukan
+`adb devices` tidak menemukan perangkat. Instalasi/update dari APK lama, rendering seluruh gambar di HP, pinch-zoom, scrolling panjang, orientasi, perilaku fullscreen sistem, serta koneksi lambat/terputus pada perangkat nyata belum diuji. Restore data lama diuji lewat tes otomatis, bukan upgrade instalasi nyata. Progres masih per halaman/persentase, bukan offset piksel di dalam gambar panjang.
 
-## Batasan dan hal yang belum diuji
-- https://shinigami.asia/ dan https://11.shinigami.asia/ memberikan pembatasan/pemeriksaan Cloudflare saat diperiksa. Tidak ada bypass CAPTCHA, autentikasi, paywall, atau keamanan situs yang dilakukan. Struktur HTML penuh situs belum terverifikasi; adapter menggunakan respons JSON API yang dapat diakses.
-- Akses API yang berhasil bukan bukti izin penggunaan konten oleh reader pihak ketiga. Izin belum dapat diverifikasi. Integrasi tetap eksperimental; download permanen tidak diaktifkan.
-- Tidak ada perangkat Android yang terhubung saat diperiksa dengan adb devices. Instalasi/update tanpa kehilangan data, rendering seluruh gambar, pinch-zoom, pergantian orientasi, performa gulir panjang, dan perilaku sistem fullscreen di perangkat nyata belum diuji.
-- Login Google Voratoon dan perpindahan sesi browser/WebView tidak diuji manual pada pengerjaan ini. Tidak diklaim berhasil hanya karena browser terbuka.
-- Progres reader disimpan per indeks halaman dan persentase chapter; presisi offset piksel dalam gambar panjang belum tersedia.
-- Ketahanan terhadap semua perubahan API/CDN belum dapat dijamin. Jika host/struktur berubah atau akses ditolak, aplikasi menampilkan kesalahan alih-alih mengarang konten atau membungkus situs penuh.
+Akses API bukan izin reader pihak ketiga. Integrasi tetap eksperimental, unduhan permanen tetap disabled. CAPTCHA/autentikasi/paywall/pembatasan akses tidak dilewati. Perubahan API/CDN di masa depan tetap dapat menyebabkan error yang perlu ditangani. Login Google Voratoon tidak diuji manual pada pengerjaan ini dan tidak diklaim berhasil hanya karena build sukses.

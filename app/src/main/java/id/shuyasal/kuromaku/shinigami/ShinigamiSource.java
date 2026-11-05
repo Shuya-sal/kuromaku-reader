@@ -68,15 +68,18 @@ public final class ShinigamiSource {
             .callTimeout(30, TimeUnit.SECONDS).followRedirects(false)
             .followSslRedirects(false).retryOnConnectionFailure(false).build();
     private final ShinigamiConfig config;
+    private final ShinigamiStore store;
     private final Transport transport;
 
     public ShinigamiSource(Context context) {
         config = new ShinigamiConfig(context);
+        store = new ShinigamiStore(context);
         transport = this::fetch;
     }
 
     ShinigamiSource(Context context, Transport transport) {
         config = new ShinigamiConfig(context);
+        store = new ShinigamiStore(context);
         this.transport = transport;
     }
 
@@ -88,6 +91,11 @@ public final class ShinigamiSource {
 
     public Page search(String keyword, int page) throws SourceException {
         return list(page, Sort.LATEST, keyword == null ? "" : keyword.trim(), null, null);
+    }
+
+    public Page search(String keyword, int page, Sort sort, String genreSlug, String status)
+            throws SourceException {
+        return list(page, sort, keyword == null ? "" : keyword.trim(), genreSlug, status);
     }
 
     public Page catalog(int page, Sort sort, String genreSlug, String status) throws SourceException {
@@ -112,6 +120,7 @@ public final class ShinigamiSource {
             if (item == null) throw changedShape();
             ShinigamiManga manga = parseManga(item);
             if (manga.id.isEmpty() || manga.title.isEmpty()) throw changedShape();
+            manga = parseManga(store.mergeMangaMetadata(manga.id, item));
             items.put(manga.id, manga);
         }
         JSONObject meta = root.optJSONObject("meta");
@@ -126,7 +135,7 @@ public final class ShinigamiSource {
         if (manga == null) throw new SourceException("Detail manga tidak ditemukan atau format sumber berubah.");
         ShinigamiManga parsed = parseManga(manga);
         if (!mangaId.equals(parsed.id) || parsed.title.isEmpty()) throw changedShape();
-        return parsed;
+        return parseManga(store.mergeMangaMetadata(mangaId, manga));
     }
 
     public ChapterPage chapters(String mangaId, int page) throws SourceException {
@@ -142,9 +151,11 @@ public final class ShinigamiSource {
             String id = item.optString("chapter_id", "");
             String owner = item.optString("manga_id", mangaId);
             if (id.isEmpty() || !owner.equals(mangaId)) throw changedShape();
+            item = store.mergeChapterMetadata(id, item);
             items.put(id, new ShinigamiChapter(id, owner, item.optDouble("chapter_number", 0d),
                     item.optString("chapter_title", ""), item.optString("release_date", ""),
-                    safeImage(item.optString("thumbnail_image_url", ""))));
+                    safeImage(item.optString("thumbnail_image_url", "")),
+                    item.optString("updated_at", "")));
         }
         JSONObject meta = root.optJSONObject("meta");
         if (meta == null) throw changedShape();
@@ -174,6 +185,9 @@ public final class ShinigamiSource {
             }
             urls.add(url);
         }
+        store.mergeChapterMetadata(chapterId, chapter);
+        store.setChapterPages(chapterId, urls);
+        android.util.Log.i("ShinigamiSource", "Chapter image metadata validated; pages=" + urls.size());
         return new ChapterImages(chapterId, urls);
     }
 
@@ -209,7 +223,8 @@ public final class ShinigamiSource {
                 item.optString("release_year", ""), item.optDouble("user_rate", 0d),
                 item.optLong("view_count", 0L), item.optDouble("latest_chapter_number", 0d),
                 item.optString("latest_chapter_time", ""), taxonomyNames(taxonomy, "Genre"),
-                taxonomyNames(taxonomy, "Author"), taxonomyFirst(taxonomy, "Format"));
+                taxonomyNames(taxonomy, "Author"), taxonomyFirst(taxonomy, "Format"),
+                item.optString("updated_at", ""));
     }
 
     private static String safeImage(String url) {
@@ -252,6 +267,7 @@ public final class ShinigamiSource {
                 .header("Accept", "application/json").build();
         try (Response response = CLIENT.newCall(request).execute()) {
             int code = response.code();
+            android.util.Log.i("ShinigamiSource", "Source response HTTP " + code);
             ResponseBody body = response.body();
             if (code < 200 || code >= 300) throw httpFailure(code);
             if (body == null) throw new SourceException("Respons sumber kosong.");

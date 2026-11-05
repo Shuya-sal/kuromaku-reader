@@ -14,6 +14,10 @@ import java.util.Set;
 public final class ShinigamiStore {
     public static final String FILE_NAME = "kuromaku_shinigami";
 
+    private static final String KEY_MANGA_METADATA = "manga_metadata:";
+    private static final String KEY_CHAPTER_METADATA = "chapter_metadata:";
+    private static final String KEY_CHAPTER_URLS = "chapter_urls:";
+    private static final String KEY_EXPECTED_PAGES = "expected_pages:";
     private static final String KEY_PROGRESS = "progress:";
     private static final String KEY_PAGE = "page:";
     private static final String KEY_LAST_CHAPTER = "last_chapter:";
@@ -53,6 +57,73 @@ public final class ShinigamiStore {
 
     public SharedPreferences prefs() {
         return prefs;
+    }
+
+    // Additive metadata cache: absent/null fields cannot erase known source facts.
+    // Existing progress, history, favorites and backup keys are deliberately untouched.
+    JSONObject mergeMangaMetadata(String id, JSONObject incoming) {
+        return mergeMetadata(KEY_MANGA_METADATA + id, incoming);
+    }
+
+    JSONObject mergeChapterMetadata(String id, JSONObject incoming) {
+        return mergeMetadata(KEY_CHAPTER_METADATA + id, incoming);
+    }
+
+    private JSONObject mergeMetadata(String key, JSONObject incoming) {
+        JSONObject merged;
+        try { merged = new JSONObject(prefs.getString(key, "{}")); }
+        catch (Exception ignored) { merged = new JSONObject(); }
+        java.util.Iterator<String> keys = incoming.keys();
+        try {
+            while (keys.hasNext()) {
+                String field = keys.next();
+                Object value = incoming.opt(field);
+                if (value == null || value == JSONObject.NULL) continue;
+                if (value instanceof String && ((String) value).trim().isEmpty()) continue;
+                if ((field.equals("release_date") || field.equals("latest_chapter_time")
+                        || field.equals("updated_at")) && ShinigamiDates.parse(String.valueOf(value)) <= 0L) continue;
+                merged.put(field, value);
+            }
+            // Persist normalized UTC values alongside raw fields for additive migration.
+            for (String field : new String[]{"release_date", "latest_chapter_time", "updated_at"}) {
+                long millis = ShinigamiDates.parse(merged.optString(field, ""));
+                if (millis > 0L) merged.put(field + "_millis", millis);
+            }
+        } catch (Exception ignored) { return incoming; }
+        prefs.edit().putString(key, merged.toString()).apply();
+        return merged;
+    }
+
+    public void setChapterPages(String chapterId, List<String> urls) {
+        if (chapterId == null || !chapterId.matches("[A-Za-z0-9_-]{1,128}")
+                || urls == null || urls.isEmpty()) return;
+        JSONArray array = new JSONArray();
+        for (String url : urls) {
+            if (!ShinigamiConfig.isValidResource(url)) return;
+            array.put(url);
+        }
+        prefs.edit().putString(KEY_CHAPTER_URLS + chapterId, array.toString())
+                .putInt(KEY_EXPECTED_PAGES + chapterId, urls.size()).apply();
+    }
+
+    public List<String> chapterUrls(String chapterId) {
+        List<String> urls = new ArrayList<>();
+        if (chapterId == null) return urls;
+        try {
+            JSONArray array = new JSONArray(prefs.getString(KEY_CHAPTER_URLS + chapterId, "[]"));
+            for (int i = 0; i < array.length(); i++) {
+                if (!(array.opt(i) instanceof String)) return new ArrayList<>();
+                String url = array.getString(i);
+                if (!ShinigamiConfig.isValidResource(url)) return new ArrayList<>();
+                urls.add(url);
+            }
+        } catch (Exception ignored) { return new ArrayList<>(); }
+        return urls;
+    }
+
+    public int expectedPages(String chapterId) {
+        if (chapterId == null) return 0;
+        return Math.max(0, prefs.getInt(KEY_EXPECTED_PAGES + chapterId, 0));
     }
 
     public int progress(String chapterId) {

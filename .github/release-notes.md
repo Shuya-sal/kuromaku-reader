@@ -2,7 +2,15 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.22.0** (versionCode 48) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.22.1** (versionCode 49) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* **2.22.1 — Perbaikan reader Shinigami.**
+  - Loading/error/Coba Lagi per gambar; bitmap panjang dibatasi, halaman lain tetap terlihat bila satu gagal.
+  - Status lokal hanya Tersimpan offline bila jumlah dan semua file gambar lengkap/valid; metadata saja bukan offline.
+  - Tanggal Rilis/Diperbarui berasal dari sumber, mengikuti zona waktu pengguna. Kartu Chapter terbaru/Update terakhir dan filter/sort dipertahankan.
+  - Cache metadata aditif tidak menghapus progres, riwayat, favorit, atau data lama. Novel, Voratoon WebView, drawer dan backup tidak diubah.
+  - Build lokal: 494 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Uji sumber terpisah: 156/156 gambar dari sembilan chapter pada tiga judul lolos HTTP/MIME/decoding.
+  - **Tampilan seluruh gambar di HP belum diuji**; tidak ada perangkat adb tersambung. Unduhan permanen tetap disabled karena izin sumber belum terverifikasi.
+  - Detail file dan metode: SHINIGAMI-TEST-REPORT.md; bukti per halaman: SHINIGAMI-LIVE-EVIDENCE.json.
 * **2.22.0 — Manga Shinigami native (eksperimental).**
   - Drawer bersama lima entri: Novel, Manga Voratoon, Manga Shinigami, Backup, Restore. Voratoon tetap WebView.
   - Katalog grid, pencarian, terbaru, detail, reader vertikal dengan pemuatan bertahap, zoom, layar penuh,

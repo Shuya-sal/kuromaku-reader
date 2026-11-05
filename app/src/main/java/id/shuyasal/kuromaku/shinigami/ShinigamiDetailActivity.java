@@ -280,6 +280,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         if (manga.latestChapterNumber > 0) {
             facts.append("\nChapter terbaru: ").append(ShinigamiManga.formatNumber(manga.latestChapterNumber));
         }
+        facts.append("\nRilis chapter: ").append(ShinigamiDates.format(manga.latestChapterTimeMillis));
+        facts.append("\nDiperbarui: ").append(ShinigamiDates.format(manga.updatedAtMillis));
         meta.setText(facts.toString());
         synopsis.setText(manga.description.isEmpty()
                 ? "Sumber tidak memberikan sinopsis untuk judul ini."
@@ -347,9 +349,10 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         row.setBackground(Ui.rounded(palette.surface, palette.divider, 10, this));
         row.setTag("shinigami_chapter_" + chapter.id);
 
-        TextView label = Ui.label(this, chapter.label(), 14, palette.text);
+        TextView label = Ui.label(this, chapter.label() + "\n"
+                + chapter.dateLabel(), 14, palette.text);
         label.setTag("shinigami_chapter_label");
-        label.setMaxLines(2);
+        label.setMaxLines(4);
         label.setPadding(Ui.dp(this, 12), Ui.dp(this, 6), Ui.dp(this, 6), Ui.dp(this, 6));
         row.addView(label, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -361,7 +364,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         state.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 6), 0);
         row.addView(state);
 
-        Button download = Ui.chip(this, "Offline", palette);
+        Button download = Ui.chip(this, downloader.storageLabel(chapter.id,
+                store.expectedPages(chapter.id)), palette);
         download.setTag("shinigami_chapter_download");
         download.setAlpha(0.6f);
         download.setOnClickListener(v -> explainDownloadUnavailable());
@@ -418,6 +422,12 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
     protected ShinigamiSource createSource() {
         return new ShinigamiSource(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (store != null && chapterList != null && !chapters.isEmpty()) renderChapters();
     }
 
     @Override

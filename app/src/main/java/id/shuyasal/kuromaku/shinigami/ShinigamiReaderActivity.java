@@ -77,6 +77,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         source = createSource();
         store = new ShinigamiStore(this);
         downloader = new ShinigamiDownloader(this);
+        ShinigamiImageRequest.register(this);
 
         mangaId = getIntent().getStringExtra(EXTRA_MANGA_ID);
         mangaTitle = getIntent().getStringExtra(EXTRA_MANGA_TITLE);
@@ -220,7 +221,10 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             try {
                 urls.addAll(source.chapterImages(chapterId).urls);
             } catch (ShinigamiSource.SourceException error) {
-                failure = error.getMessage();
+                // Only connectivity failures may use the prior, validated page order.
+                // Access-denied/CAPTCHA responses are never worked around.
+                if (error.getCause() instanceof java.io.IOException) urls.addAll(store.chapterUrls(chapterId));
+                if (urls.isEmpty()) failure = error.getMessage();
             }
             final String message = failure;
             main.post(() -> {
@@ -237,8 +241,9 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 adapter.notifyDataSetChanged();
                 statusText.setVisibility(View.GONE);
                 if (pages.isEmpty()) {
-                    errorText.setText("Chapter ini tidak memiliki gambar.");
+                    errorText.setText("Gambar chapter tidak tersedia. Periksa koneksi atau coba muat ulang.");
                     errorText.setVisibility(View.VISIBLE);
+                    retryButton.setVisibility(View.VISIBLE);
                     return;
                 }
                 recordOpen();
@@ -295,79 +300,100 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     }
 
     private final class PageAdapter extends RecyclerView.Adapter<PageAdapter.Holder> {
-
         class Holder extends RecyclerView.ViewHolder {
-            final ImageView image;
-
-            Holder(View item) {
-                super(item);
-                image = item.findViewWithTag("shinigami_page_image");
-            }
+            final ShinigamiPageView cell;
+            com.bumptech.glide.request.target.CustomTarget<android.graphics.Bitmap> target;
+            int bound = -1;
+            Holder(ShinigamiPageView item) { super(item); cell = item; }
         }
 
-        @Override
-        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
-            ImageView image = new ImageView(ShinigamiReaderActivity.this);
-            image.setTag("shinigami_page_image");
-            image.setAdjustViewBounds(true);
-            image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            image.setBackgroundColor(Color.BLACK);
-            LinearLayout wrapper = new LinearLayout(ShinigamiReaderActivity.this);
-            wrapper.setOrientation(LinearLayout.VERTICAL);
-            wrapper.addView(image, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            return new Holder(wrapper);
+        @Override public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
+            ShinigamiPageView cell = new ShinigamiPageView(ShinigamiReaderActivity.this);
+            cell.setLayoutParams(new RecyclerView.LayoutParams(-1, -2));
+            return new Holder(cell);
         }
 
-        @Override
-        public void onBindViewHolder(Holder holder, int position) {
+        @Override public void onBindViewHolder(Holder holder, int position) {
+            holder.bound = position;
+            holder.cell.setRetryAction(() -> {
+                if (holder.bound >= 0 && holder.bound < pages.size()) load(holder, true);
+            });
+            holder.cell.image.setOnClickListener(v -> {
+                if (holder.bound >= 0 && holder.bound < pages.size()) openZoomed(pages.get(holder.bound));
+            });
+            load(holder, false);
+        }
+
+        private void load(Holder holder, boolean retry) {
+            if (holder.target != null) Glide.with(ShinigamiReaderActivity.this).clear(holder.target);
+            holder.cell.showLoading();
+            int position = holder.bound;
             String url = pages.get(position);
             File local = downloader.pageFile(chapterId, position);
-            holder.image.setImageDrawable(null);
-            holder.image.setMinimumHeight(placeholderHeight());
-            RequestListener<Drawable> listener = new RequestListener<Drawable>() {
-                @Override
-                public boolean onLoadFailed(GlideException error, Object model,
-                                            Target<Drawable> target, boolean first) {
-                    return false;
+            Object model = local != null ? local : new ShinigamiImageRequest(url, source.config().siteBase());
+            int width = Math.max(1, Math.min(1080, getResources().getDisplayMetrics().widthPixels));
+            holder.target = new com.bumptech.glide.request.target.CustomTarget<android.graphics.Bitmap>(width, 4096) {
+                @Override public void onResourceReady(android.graphics.Bitmap bitmap,
+                        com.bumptech.glide.request.transition.Transition<? super android.graphics.Bitmap> transition) {
+                    if (holder.bound != position || isDestroyed()) return;
+                    holder.cell.showReady(bitmap);
+                    android.util.Log.i("ShinigamiReader", "decoded page=" + (position + 1)
+                            + "/" + pages.size() + " size=" + bitmap.getWidth() + "x" + bitmap.getHeight());
                 }
-
-                @Override
-                public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target,
-                                               DataSource dataSource, boolean first) {
-                    holder.image.setMinimumHeight(0);
-                    return false;
+                @Override public void onLoadFailed(Drawable drawable) {
+                    if (holder.bound == position) holder.cell.showFailure("Gambar halaman " + (position + 1)
+                            + " gagal dimuat. Periksa koneksi atau coba lagi.");
                 }
+                @Override public void onLoadCleared(Drawable drawable) { holder.cell.showLoading(); }
             };
-            if (local != null) {
-                Glide.with(ShinigamiReaderActivity.this).load(local).listener(listener).into(holder.image);
-            } else {
-                Glide.with(ShinigamiReaderActivity.this).load(url).listener(listener).into(holder.image);
+            try {
+                Glide.with(ShinigamiReaderActivity.this).asBitmap().load(model)
+                        .disallowHardwareConfig().format(com.bumptech.glide.load.DecodeFormat.PREFER_RGB_565)
+                        .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
+                        .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.DATA)
+                        .skipMemoryCache(retry)
+                        .listener(new RequestListener<android.graphics.Bitmap>() {
+                            @Override public boolean onLoadFailed(GlideException failure, Object ignored,
+                                    Target<android.graphics.Bitmap> target, boolean first) {
+                                String reason = safeFailure(failure);
+                                android.util.Log.w("ShinigamiReader", "image_failed page=" + (position + 1) + " " + reason);
+                                if (holder.bound == position) holder.cell.showFailure("Halaman " + (position + 1) + ": " + reason);
+                                return true;
+                            }
+                            @Override public boolean onResourceReady(android.graphics.Bitmap bitmap, Object ignored,
+                                    Target<android.graphics.Bitmap> target, DataSource data, boolean first) { return false; }
+                        }).into(holder.target);
+            } catch (Exception failure) {
+                holder.cell.showFailure("Pemuat gambar gagal. Coba muat ulang.");
+                android.util.Log.w("ShinigamiReader", "loader_failed page=" + (position + 1) + " type=" + failure.getClass().getSimpleName());
             }
-            holder.image.setOnClickListener(v -> {
-                int index = holder.getBindingAdapterPosition();
-                if (index < 0 || index >= pages.size()) return;
-                openZoomed(pages.get(index));
-            });
         }
 
-        @Override
-        public int getItemCount() {
-            return pages.size();
+        @Override public void onViewRecycled(Holder holder) {
+            if (holder.target != null) Glide.with(ShinigamiReaderActivity.this).clear(holder.target);
+            holder.target = null;
+            holder.bound = -1;
+            super.onViewRecycled(holder);
         }
+        @Override public int getItemCount() { return pages.size(); }
     }
 
-    private int placeholderHeight() {
-        int height = list == null ? 0 : list.getHeight();
-        return height > 0 ? height : getResources().getDisplayMetrics().heightPixels;
+    static String safeFailure(GlideException failure) {
+        if (failure != null) for (Throwable cause : failure.getRootCauses()) {
+            String message = cause.getMessage();
+            if (message != null && !message.contains("://") && !message.contains("Cookie")
+                    && (message.startsWith("HTTP ") || message.startsWith("Gambar ")
+                    || message.startsWith("Respons ") || message.startsWith("Redirect "))) return message;
+        }
+        return "Koneksi, waktu tunggu, atau decoding gambar gagal. Coba lagi.";
     }
 
     private void openZoomed(String url) {
         if (url == null || url.isEmpty()) return;
-        Intent intent = new Intent(this, id.shuyasal.kuromaku.ImageViewerActivity.class);
-        intent.putExtra(id.shuyasal.kuromaku.ImageViewerActivity.EXTRA_URL, url);
-        intent.putExtra(id.shuyasal.kuromaku.ImageViewerActivity.EXTRA_CAPTION,
-                ShinigamiManga.chapterLabel(chapterNumber, chapterTitle));
+        Intent intent = new Intent(this, ShinigamiImageZoomActivity.class);
+        intent.putExtra("url", url);
+        intent.putExtra("chapter_id", chapterId);
+        intent.putExtra("page", pages.indexOf(url));
         startActivity(intent);
     }
 }

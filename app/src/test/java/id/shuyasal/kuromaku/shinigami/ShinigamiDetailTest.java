@@ -72,6 +72,78 @@ public class ShinigamiDetailTest {
         return view;
     }
 
+    @Test public void chapterReleaseDateUsesTheUserTimezone() throws Exception {
+        java.util.TimeZone previous = java.util.TimeZone.getDefault();
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Jakarta"));
+        try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
+            Detail detail = controller.get(); await(detail);
+            LinearLayout list = (LinearLayout) tagged(detail, "shinigami_chapter_list");
+            TextView label = list.getChildAt(0).findViewWithTag("shinigami_chapter_label");
+            assertTrue(label.getText().toString(), label.getText().toString().contains("Rilis: 2026-11-05 10:24"));
+        } finally {
+            java.util.TimeZone.setDefault(previous);
+        }
+    }
+
+    @Test public void mangaUpdateDateIsShownSeparatelyFromChapterRelease() throws Exception {
+        java.util.TimeZone previous = java.util.TimeZone.getDefault();
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Jakarta"));
+        try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
+            Detail detail = controller.get(); await(detail);
+            String meta = ((TextView) tagged(detail, "shinigami_detail_meta")).getText().toString();
+            assertTrue(meta, meta.contains("Rilis chapter: 2026-11-05 10:24"));
+            assertTrue(meta, meta.contains("Diperbarui: 2026-11-05 10:39"));
+        } finally {
+            java.util.TimeZone.setDefault(previous);
+        }
+    }
+
+    @Test public void chapterMissingReleaseFallsBackToLabeledUpdate() throws Exception {
+        org.json.JSONObject payload = new org.json.JSONObject(ShinigamiReaderTest.fixture("live_chapter_list.json"));
+        org.json.JSONObject first = payload.getJSONArray("data").getJSONObject(0);
+        first.put("release_date", org.json.JSONObject.NULL);
+        first.put("updated_at", "2026-11-05T03:39:16Z");
+        String body = payload.toString();
+        transport = url -> url.contains("/list") ? body : route(url);
+        java.util.TimeZone previous = java.util.TimeZone.getDefault();
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"));
+        try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
+            Detail detail = controller.get(); await(detail);
+            LinearLayout list = (LinearLayout) tagged(detail, "shinigami_chapter_list");
+            TextView label = list.getChildAt(0).findViewWithTag("shinigami_chapter_label");
+            assertTrue(label.getText().toString(), label.getText().toString().contains("Diperbarui: 2026-11-05 03:39"));
+        } finally { java.util.TimeZone.setDefault(previous); }
+    }
+
+    @Test public void chapterRowsShowActualStorageStateSeparateFromReadProgress() throws Exception {
+        String id = new org.json.JSONObject(ShinigamiReaderTest.fixture("live_chapter_list.json"))
+                .getJSONArray("data").getJSONObject(0).getString("chapter_id");
+        ShinigamiStore store = new ShinigamiStore(context);
+        store.setProgress(id, 100);
+        store.setChapterPages(id, java.util.Collections.singletonList("https://assets.shngm.id/chapter/0.png"));
+        ShinigamiDownloader downloader = new ShinigamiDownloader(context);
+        downloader.deleteChapter(id);
+        try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
+            Detail detail = controller.get(); await(detail);
+            View row = tagged(detail, "shinigami_chapter_" + id);
+            assertEquals("100%", ((TextView) row.findViewWithTag("shinigami_chapter_progress")).getText().toString());
+            assertEquals("Belum diunduh", ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
+            downloader.setRunning(id, true);
+            controller.pause().resume();
+            row = tagged(detail, "shinigami_chapter_" + id);
+            assertEquals("Mengunduh...", ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
+            downloader.setRunning(id, false);
+            downloader.chapterDir(id).mkdirs();
+            try (java.io.FileOutputStream output = new java.io.FileOutputStream(new java.io.File(downloader.chapterDir(id), "0.img"))) {
+                android.graphics.Bitmap.createBitmap(50, 50, android.graphics.Bitmap.Config.ARGB_8888)
+                        .compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output);
+            }
+            controller.pause().resume();
+            row = tagged(detail, "shinigami_chapter_" + id);
+            assertEquals("Tersimpan offline", ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
+        } finally { downloader.setRunning(id, false); downloader.deleteChapter(id); }
+    }
+
     @Test public void realPayloadShowsSynopsisGenreStatusAndChapters() throws Exception {
         try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
             Detail detail = controller.get(); await(detail);

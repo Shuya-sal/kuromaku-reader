@@ -16,6 +16,8 @@ public final class ShinigamiManga {
     public final long viewCount;
     public final double latestChapterNumber;
     public final String latestChapterTime;
+    public final long latestChapterTimeMillis;
+    public final long updatedAtMillis;
     public final List<String> genres;
     public final List<String> authors;
     public final String format;
@@ -24,6 +26,14 @@ public final class ShinigamiManga {
                           String description, int status, String releaseYear, double rating,
                           long viewCount, double latestChapterNumber, String latestChapterTime,
                           List<String> genres, List<String> authors, String format) {
+        this(id, title, alternativeTitle, coverUrl, description, status, releaseYear, rating,
+                viewCount, latestChapterNumber, latestChapterTime, genres, authors, format, "");
+    }
+
+    public ShinigamiManga(String id, String title, String alternativeTitle, String coverUrl,
+                          String description, int status, String releaseYear, double rating,
+                          long viewCount, double latestChapterNumber, String latestChapterTime,
+                          List<String> genres, List<String> authors, String format, String updatedAt) {
         this.id = id == null ? "" : id;
         this.title = title == null ? "" : title;
         this.alternativeTitle = alternativeTitle == null ? "" : alternativeTitle;
@@ -36,6 +46,8 @@ public final class ShinigamiManga {
         this.latestChapterNumber = Double.isNaN(latestChapterNumber)
                 || Double.isInfinite(latestChapterNumber) ? 0d : latestChapterNumber;
         this.latestChapterTime = latestChapterTime == null ? "" : latestChapterTime;
+        this.latestChapterTimeMillis = ShinigamiDates.parse(latestChapterTime);
+        this.updatedAtMillis = ShinigamiDates.parse(updatedAt);
         this.genres = genres == null ? new ArrayList<String>() : genres;
         this.authors = authors == null ? new ArrayList<String>() : authors;
         this.format = format == null ? "" : format;

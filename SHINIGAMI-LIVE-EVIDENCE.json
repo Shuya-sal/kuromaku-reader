@@ -1,0 +1,1568 @@
+[
+  {
+    "query": "Miss Ji-Hye",
+    "chapters": [
+      {
+        "selection": "awal",
+        "id": "232d8ca0-0d37-495b-ba5c-774ddbcb9192",
+        "number": 1,
+        "dates": {
+          "release_date": "2026-06-17T06:50:24Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 850,
+            "height": 1375,
+            "bytes": 77026
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 12483,
+            "bytes": 230592
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14175,
+            "bytes": 279410
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 15000,
+            "bytes": 302936
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14200,
+            "bytes": 273900
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 13760,
+            "bytes": 290734
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14760,
+            "bytes": 325136
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14735,
+            "bytes": 299086
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14605,
+            "bytes": 334102
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14955,
+            "bytes": 332664
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14460,
+            "bytes": 288786
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14595,
+            "bytes": 262284
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 15000,
+            "bytes": 426118
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 14625,
+            "bytes": 308032
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 1567,
+            "bytes": 81374
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2026-06-17T06:50:24Z",
+          "updated_at": "2026-11-05T05:24:15Z"
+        },
+        "pages": 15
+      },
+      {
+        "selection": "tengah",
+        "id": "ced9257a-f01d-467c-abdd-eae4bfe4a579",
+        "number": 14,
+        "dates": {
+          "release_date": "2026-07-29T14:44:49Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 850,
+            "height": 1375,
+            "bytes": 175264
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 12124,
+            "bytes": 569488
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 13195,
+            "bytes": 824039
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 12685,
+            "bytes": 667813
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 14000,
+            "bytes": 794355
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 14000,
+            "bytes": 781185
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 14000,
+            "bytes": 786610
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 13490,
+            "bytes": 675242
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 13270,
+            "bytes": 725036
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 12456,
+            "bytes": 805353
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 850,
+            "height": 1062,
+            "bytes": 151339
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2026-07-29T14:44:49Z",
+          "updated_at": "2026-11-05T04:39:05Z"
+        },
+        "pages": 11
+      },
+      {
+        "selection": "terbaru",
+        "id": "a7ca05c6-62fd-4e0b-b56e-08d66abb9f58",
+        "number": 26,
+        "dates": {
+          "release_date": "2026-11-05T01:25:30Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 850,
+            "height": 1174,
+            "bytes": 67002
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 10874,
+            "bytes": 279230
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 12000,
+            "bytes": 248110
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 10900,
+            "bytes": 210618
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 11210,
+            "bytes": 362834
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 11475,
+            "bytes": 301264
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 11730,
+            "bytes": 303044
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 11570,
+            "bytes": 304782
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 6604,
+            "bytes": 135788
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2026-11-05T01:25:30Z",
+          "updated_at": "2026-11-05T05:24:05Z"
+        },
+        "pages": 9
+      }
+    ],
+    "title": "Miss Ji-Hye, The Uncool Adult",
+    "manga_id": "a62115a2-74d6-4e5b-b047-b7876385d168",
+    "latest": "2026-11-05T01:25:30Z",
+    "chapter_count": 26
+  },
+  {
+    "query": "Nano Machine",
+    "chapters": [
+      {
+        "selection": "awal",
+        "id": "779413b9-4041-46db-9f6c-6d187a81f63a",
+        "number": 1,
+        "dates": {
+          "release_date": "2024-11-26T02:52:19Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 1124,
+            "height": 768,
+            "bytes": 143554
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4701,
+            "bytes": 214544
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5160,
+            "bytes": 267095
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5238,
+            "bytes": 259503
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4701,
+            "bytes": 258215
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4914,
+            "bytes": 253077
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4914,
+            "bytes": 286850
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4976,
+            "bytes": 342634
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4653,
+            "bytes": 233805
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5679,
+            "bytes": 328684
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4976,
+            "bytes": 288068
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5432,
+            "bytes": 298498
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4518,
+            "bytes": 242514
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4701,
+            "bytes": 362936
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4698,
+            "bytes": 264953
+          },
+          {
+            "index": 15,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4689,
+            "bytes": 291103
+          },
+          {
+            "index": 16,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 6218,
+            "bytes": 412209
+          },
+          {
+            "index": 17,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4716,
+            "bytes": 300382
+          },
+          {
+            "index": 18,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5255,
+            "bytes": 307497
+          },
+          {
+            "index": 19,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5061,
+            "bytes": 296051
+          },
+          {
+            "index": 20,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5061,
+            "bytes": 240940
+          },
+          {
+            "index": 21,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 5471,
+            "bytes": 314184
+          },
+          {
+            "index": 22,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4698,
+            "bytes": 241928
+          },
+          {
+            "index": 23,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4518,
+            "bytes": 256603
+          },
+          {
+            "index": 24,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 720,
+            "height": 4294,
+            "bytes": 171455
+          },
+          {
+            "index": 25,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 900,
+            "height": 1273,
+            "bytes": 195169
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2024-11-26T02:52:19Z",
+          "updated_at": "2026-11-05T04:39:04Z"
+        },
+        "pages": 26
+      },
+      {
+        "selection": "tengah",
+        "id": "ccde6c49-d071-4b73-94b6-66ad1264668b",
+        "number": 169,
+        "dates": {
+          "release_date": "2024-11-26T03:54:56Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 614,
+            "bytes": 56488
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9565,
+            "bytes": 933188
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 801040
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9735,
+            "bytes": 710952
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 7625,
+            "bytes": 863769
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 975070
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 754179
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8920,
+            "bytes": 732014
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 991677
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 13045,
+            "bytes": 1415622
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9980,
+            "bytes": 940368
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 7380,
+            "bytes": 785896
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9475,
+            "bytes": 787534
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 4091,
+            "bytes": 321966
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 5086,
+            "bytes": 380065
+          },
+          {
+            "index": 15,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 1200,
+            "height": 675,
+            "bytes": 113163
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2024-11-26T03:54:56Z",
+          "updated_at": "2026-11-05T04:34:10Z"
+        },
+        "pages": 16
+      },
+      {
+        "selection": "terbaru",
+        "id": "420786b2-49aa-4025-936a-92621ebeb5de",
+        "number": 337,
+        "dates": {
+          "release_date": "2026-11-04T23:54:58Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 614,
+            "bytes": 86585
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 1044115
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 1069018
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8995,
+            "bytes": 994595
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9695,
+            "bytes": 1235686
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9240,
+            "bytes": 809530
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 7460,
+            "bytes": 664733
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9630,
+            "bytes": 1175678
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9675,
+            "bytes": 864266
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9240,
+            "bytes": 767066
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8975,
+            "bytes": 876265
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9475,
+            "bytes": 1115493
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8645,
+            "bytes": 1080983
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9530,
+            "bytes": 959286
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8140,
+            "bytes": 726940
+          },
+          {
+            "index": 15,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 1186188
+          },
+          {
+            "index": 16,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9520,
+            "bytes": 1006095
+          },
+          {
+            "index": 17,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9810,
+            "bytes": 865865
+          },
+          {
+            "index": 18,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8520,
+            "bytes": 770138
+          },
+          {
+            "index": 19,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9920,
+            "bytes": 897303
+          },
+          {
+            "index": 20,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9320,
+            "bytes": 778818
+          },
+          {
+            "index": 21,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9720,
+            "bytes": 786632
+          },
+          {
+            "index": 22,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 7924,
+            "bytes": 952638
+          },
+          {
+            "index": 23,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 1200,
+            "bytes": 221777
+          },
+          {
+            "index": 24,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 1200,
+            "height": 675,
+            "bytes": 220267
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2026-11-04T23:54:58Z",
+          "updated_at": "2026-11-05T04:14:10Z"
+        },
+        "pages": 25
+      }
+    ],
+    "title": "Nano Machine",
+    "manga_id": "d3b05787-4c8e-42bb-ba9a-6b2fafd92f3c",
+    "latest": "2026-11-04T23:54:58Z",
+    "chapter_count": 337
+  },
+  {
+    "query": "Necromancer Academy",
+    "chapters": [
+      {
+        "selection": "awal",
+        "id": "2a57677f-e7b3-4804-a656-b34b10626f4e",
+        "number": 1,
+        "dates": {
+          "release_date": "2024-12-02T19:53:16Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 614,
+            "bytes": 56804
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9950,
+            "bytes": 542050
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 585369
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 531887
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9650,
+            "bytes": 783559
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9465,
+            "bytes": 547366
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9025,
+            "bytes": 717001
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9970,
+            "bytes": 704938
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 640189
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8140,
+            "bytes": 411213
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9175,
+            "bytes": 626760
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8440,
+            "bytes": 407821
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9855,
+            "bytes": 541438
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8865,
+            "bytes": 570796
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9585,
+            "bytes": 582245
+          },
+          {
+            "index": 15,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9905,
+            "bytes": 602030
+          },
+          {
+            "index": 16,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 6156,
+            "bytes": 438019
+          },
+          {
+            "index": 17,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 2759,
+            "bytes": 252828
+          },
+          {
+            "index": 18,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 2759,
+            "bytes": 208072
+          },
+          {
+            "index": 19,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 1200,
+            "height": 675,
+            "bytes": 113382
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2024-12-02T19:53:16Z",
+          "updated_at": "2026-11-05T05:24:08Z"
+        },
+        "pages": 20
+      },
+      {
+        "selection": "tengah",
+        "id": "5c53a800-24d8-4e35-a828-5a8f5655bcfa",
+        "number": 112,
+        "dates": {
+          "release_date": "2024-12-02T20:05:01Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 614,
+            "bytes": 56628
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9270,
+            "bytes": 404926
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8330,
+            "bytes": 489448
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9915,
+            "bytes": 582926
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 561593
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9965,
+            "bytes": 669101
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 9095,
+            "bytes": 478905
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 8900,
+            "bytes": 350450
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 567959
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 633844
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 695271
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 518594
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 482282
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 10000,
+            "bytes": 415983
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 4148,
+            "bytes": 333427
+          },
+          {
+            "index": 15,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 800,
+            "height": 6055,
+            "bytes": 551968
+          },
+          {
+            "index": 16,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 1200,
+            "height": 675,
+            "bytes": 113382
+          },
+          {
+            "index": 17,
+            "http": 200,
+            "mime": "image/jpeg",
+            "decoded": true,
+            "width": 4042,
+            "height": 1042,
+            "bytes": 269652
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2024-12-02T20:05:01Z",
+          "updated_at": "2026-11-05T03:54:03Z"
+        },
+        "pages": 18
+      },
+      {
+        "selection": "terbaru",
+        "id": "8c01adff-878d-4cdb-94ef-f7f991896d7a",
+        "number": 223,
+        "dates": {
+          "release_date": "2026-11-04T17:00:44Z"
+        },
+        "images": [
+          {
+            "index": 0,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 7625,
+            "bytes": 243334
+          },
+          {
+            "index": 1,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8750,
+            "bytes": 249058
+          },
+          {
+            "index": 2,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8325,
+            "bytes": 378648
+          },
+          {
+            "index": 3,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 9000,
+            "bytes": 299542
+          },
+          {
+            "index": 4,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 7925,
+            "bytes": 147842
+          },
+          {
+            "index": 5,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 4425,
+            "bytes": 120150
+          },
+          {
+            "index": 6,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 7500,
+            "bytes": 289174
+          },
+          {
+            "index": 7,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8400,
+            "bytes": 249748
+          },
+          {
+            "index": 8,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8600,
+            "bytes": 238428
+          },
+          {
+            "index": 9,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8625,
+            "bytes": 204510
+          },
+          {
+            "index": 10,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 9000,
+            "bytes": 258998
+          },
+          {
+            "index": 11,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 9000,
+            "bytes": 239340
+          },
+          {
+            "index": 12,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 7300,
+            "bytes": 177454
+          },
+          {
+            "index": 13,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 7975,
+            "bytes": 194426
+          },
+          {
+            "index": 14,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8025,
+            "bytes": 206418
+          },
+          {
+            "index": 15,
+            "http": 200,
+            "mime": "image/webp",
+            "decoded": true,
+            "width": 800,
+            "height": 8451,
+            "bytes": 206014
+          }
+        ],
+        "detail_dates": {
+          "release_date": "2026-11-04T17:00:44Z",
+          "updated_at": "2026-11-05T04:39:02Z"
+        },
+        "pages": 16
+      }
+    ],
+    "title": "Necromancer Academy’s Genius Summoner",
+    "manga_id": "088e0611-f9d9-4732-a030-ede3c6f92a03",
+    "latest": "2026-11-04T17:00:44Z",
+    "chapter_count": 223
+  }
+]

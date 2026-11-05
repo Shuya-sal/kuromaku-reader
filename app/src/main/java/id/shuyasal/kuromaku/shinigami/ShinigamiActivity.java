@@ -92,6 +92,8 @@ public class ShinigamiActivity extends AppCompatActivity {
     private int page = 1;
     private int totalPages = 1;
     private boolean loading;
+    private int requestGeneration;
+    private int filterGeneration;
     private String query = "";
     private ShinigamiSource.Sort sort = ShinigamiSource.Sort.LATEST;
     private String genre = "";
@@ -102,18 +104,20 @@ public class ShinigamiActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         palette = Palette.of(new Prefs(this).theme());
-        source = new ShinigamiSource(this);
+        source = createSource();
         store = new ShinigamiStore(this);
 
         if (savedInstanceState != null) {
             query = savedInstanceState.getString(STATE_QUERY, "");
             page = savedInstanceState.getInt(STATE_PAGE, 1);
-            sort = ShinigamiSource.Sort.LATEST;
+            sort = "rank".equals(savedInstanceState.getString(STATE_SORT))
+                    ? ShinigamiSource.Sort.RANK : ShinigamiSource.Sort.LATEST;
             genre = savedInstanceState.getString(STATE_GENRE, "");
             status = savedInstanceState.getString(STATE_STATUS, "");
         }
 
         buildUi();
+        searchField.setText(query);
         loadPage(1, false);
     }
 
@@ -265,8 +269,9 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void buildFilterChips() {
+        filterGeneration++;
         filterRow.removeAllViews();
-        addChip(sort == ShinigamiSource.Sort.RANK ? "Terpopuler" : "Manga terbaru", true, () -> {
+        addChip(sort == ShinigamiSource.Sort.RANK ? "Terpopuler" : "Update terbaru", true, () -> {
             sort = sort == ShinigamiSource.Sort.LATEST
                     ? ShinigamiSource.Sort.RANK : ShinigamiSource.Sort.LATEST;
             buildFilterChips();
@@ -277,14 +282,17 @@ public class ShinigamiActivity extends AppCompatActivity {
         addChip("Favorit", false, () -> showFavorites());
         addChip("Berjalan", status.equals("ongoing"), () -> {
             status = status.equals("ongoing") ? "" : "ongoing";
+            buildFilterChips();
             loadPage(1, false);
         });
         addChip("Tamat", status.equals("completed"), () -> {
             status = status.equals("completed") ? "" : "completed";
+            buildFilterChips();
             loadPage(1, false);
         });
         addChip("Hiatus", status.equals("hiatus"), () -> {
             status = status.equals("hiatus") ? "" : "hiatus";
+            buildFilterChips();
             loadPage(1, false);
         });
         loadGenres();
@@ -293,6 +301,8 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void addChip(String text, boolean active, Runnable action) {
         Button chip = Ui.chip(this, text, palette);
         chip.setTag("shinigami_chip_" + text);
+        chip.setSelected(active);
+        chip.setAlpha(active ? 1f : 0.7f);
         chip.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -301,6 +311,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void loadGenres() {
+        final int generation = filterGeneration;
         worker.execute(() -> {
             List<ShinigamiSource.Genre> loaded;
             try {
@@ -311,6 +322,7 @@ public class ShinigamiActivity extends AppCompatActivity {
             final List<ShinigamiSource.Genre> genres = loaded;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                if (generation != filterGeneration) return;
                 for (ShinigamiSource.Genre item : genres) {
                     addChip(item.name, item.slug.equals(genre), () -> {
                         genre = item.slug.equals(genre) ? "" : item.slug;
@@ -330,7 +342,8 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void loadMore() {
         if (loading) return;
         if (page >= totalPages) return;
-        loadPage(page + 1, true);
+        if (mode == Mode.CATALOGUE || mode == Mode.NEWEST_CHAPTERS)
+            loadRemote(page + 1, true, mode == Mode.NEWEST_CHAPTERS);
     }
 
     private void reload() {
@@ -351,46 +364,23 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void showNewestChapters() {
-        mode = Mode.NEWEST_CHAPTERS;
-        rows.clear();
-        useRowAdapter();
-        statusLine.setText("Memuat...");
-        worker.execute(() -> {
-            ShinigamiSource.Page result = null;
-            String failure = null;
-            try {
-                result = source.catalog(1, ShinigamiSource.Sort.LATEST);
-            } catch (ShinigamiSource.SourceException error) {
-                failure = error.getMessage();
-            }
-            final ShinigamiSource.Page page_result = result;
-            final String message = failure;
-            main.post(() -> {
-                if (isFinishing() || isDestroyed()) return;
-                if (message != null) {
-                    showError(message);
-                    return;
-                }
-                hideError();
-                if (page_result == null) return;
-                for (ShinigamiManga manga : page_result.items) {
-                    if (manga.latestChapterNumber <= 0) continue;
-                    rows.add(new Row(manga.id, manga.title, manga.coverUrl, "",
-                            manga.latestChapterNumber, manga.latestChapterTime));
-                }
-                rowAdapter.notifyDataSetChanged();
-                statusLine.setText(rows.size() + " chapter terbaru");
-            });
-        });
+        loadRemote(1, false, true);
+    }
+
+    private void cancelRemoteView() {
+        requestGeneration++;
+        loading = false;
+        spinner.setVisibility(View.GONE);
     }
 
     private void showHistory() {
+        cancelRemoteView();
         mode = Mode.HISTORY;
         rows.clear();
         useRowAdapter();
         for (ShinigamiStore.HistoryEntry entry : store.history()) {
             rows.add(new Row(entry.mangaId, entry.title, entry.coverUrl, entry.chapterId,
-                    entry.chapterNumber, formatTime(entry.timestamp)));
+                    entry.chapterNumber, ShinigamiDates.format(entry.timestamp)));
         }
         rowAdapter.notifyDataSetChanged();
         statusLine.setText(rows.size() + " manga dalam riwayat");
@@ -398,6 +388,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void showFavorites() {
+        cancelRemoteView();
         mode = Mode.FAVORITES;
         items.clear();
         useGridAdapter();
@@ -411,13 +402,6 @@ public class ShinigamiActivity extends AppCompatActivity {
         hideError();
     }
 
-    private static String formatTime(long millis) {
-        if (millis <= 0) return "";
-        java.text.SimpleDateFormat format =
-                new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT);
-        return format.format(new java.util.Date(millis));
-    }
-
     private void useRowAdapter() {
         list.setLayoutManager(new LinearLayoutManager(this));
         list.setAdapter(rowAdapter);
@@ -429,8 +413,13 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void loadPage(int targetPage, boolean append) {
-        if (loading) return;
-        mode = Mode.CATALOGUE;
+        loadRemote(targetPage, append, false);
+    }
+
+    private void loadRemote(int targetPage, boolean append, boolean newest) {
+        if (loading && append) return;
+        mode = newest ? Mode.NEWEST_CHAPTERS : Mode.CATALOGUE;
+        final int generation = ++requestGeneration;
         loading = true;
         spinner.setVisibility(View.VISIBLE);
         statusLine.setText("Memuat...");
@@ -444,8 +433,11 @@ public class ShinigamiActivity extends AppCompatActivity {
             ShinigamiSource.Page result = null;
             String failure = null;
             try {
-                if (!wantedQuery.isEmpty()) {
-                    result = source.search(wantedQuery, targetPage);
+                if (newest) {
+                    result = source.search(wantedQuery, targetPage, ShinigamiSource.Sort.LATEST,
+                            wantedGenre, wantedStatus);
+                } else if (!wantedQuery.isEmpty()) {
+                    result = source.search(wantedQuery, targetPage, wantedSort, wantedGenre, wantedStatus);
                 } else {
                     result = source.catalog(targetPage, wantedSort, wantedGenre, wantedStatus);
                 }
@@ -456,6 +448,7 @@ public class ShinigamiActivity extends AppCompatActivity {
             final String message = failure;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                if (generation != requestGeneration) return;
                 loading = false;
                 spinner.setVisibility(View.GONE);
                 if (message != null) {
@@ -467,14 +460,34 @@ public class ShinigamiActivity extends AppCompatActivity {
                     showError("Sumber tidak mengembalikan data.");
                     return;
                 }
-                useGridAdapter();
-                if (!append) items.clear();
-                items.addAll(page_result.items);
-                adapter.notifyDataSetChanged();
+                if (newest) {
+                    useRowAdapter();
+                    if (!append) rows.clear();
+                    java.util.Set<String> known = new java.util.HashSet<>();
+                    for (Row row : rows) known.add(row.mangaId);
+                    for (ShinigamiManga manga : page_result.items) {
+                        if (manga.latestChapterNumber <= 0 || !known.add(manga.id)) continue;
+                        String date = manga.latestChapterTimeMillis > 0
+                                ? "Rilis: " + ShinigamiDates.format(manga.latestChapterTimeMillis)
+                                : manga.updatedAtMillis > 0 ? "Diperbarui: " + ShinigamiDates.format(manga.updatedAtMillis)
+                                : "Tanggal belum tersedia";
+                        rows.add(new Row(manga.id, manga.title, manga.coverUrl, "",
+                                manga.latestChapterNumber, date));
+                    }
+                    rowAdapter.notifyDataSetChanged();
+                } else {
+                    useGridAdapter();
+                    java.util.LinkedHashMap<String, ShinigamiManga> merged = new java.util.LinkedHashMap<>();
+                    if (append) for (ShinigamiManga manga : items) merged.put(manga.id, manga);
+                    for (ShinigamiManga manga : page_result.items) merged.put(manga.id, manga);
+                    items.clear();
+                    items.addAll(merged.values());
+                    adapter.notifyDataSetChanged();
+                }
                 page = targetPage;
                 totalPages = Math.max(1, page_result.totalPages);
                 long total = page_result.totalRecords;
-                statusLine.setText(items.size() + " manga"
+                statusLine.setText((newest ? rows.size() + " chapter terbaru" : items.size() + " manga")
                         + (total > 0 ? " dari " + total : "")
                         + (wantedQuery.isEmpty() ? "" : " untuk \"" + wantedQuery + "\""));
             });
@@ -568,6 +581,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         outState.putString(STATE_STATUS, status);
     }
 
+    protected ShinigamiSource createSource() { return new ShinigamiSource(this); }
+
     @Override
     protected void onDestroy() {
         worker.shutdownNow();
@@ -618,7 +633,7 @@ public class ShinigamiActivity extends AppCompatActivity {
 
             TextView info = Ui.label(ShinigamiActivity.this, "", 11, palette.muted);
             info.setTag("shinigami_subtitle");
-            info.setMaxLines(1);
+            info.setMaxLines(3);
             info.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(info);
 
@@ -631,12 +646,16 @@ public class ShinigamiActivity extends AppCompatActivity {
             holder.title.setText(manga.title);
             StringBuilder info = new StringBuilder();
             if (manga.latestChapterNumber > 0) {
-                info.append("Ch ").append(ShinigamiManga.formatNumber(manga.latestChapterNumber));
+                info.append("Chapter terbaru: ").append(ShinigamiManga.formatNumber(manga.latestChapterNumber));
             }
             if (!manga.genres.isEmpty()) {
                 if (info.length() > 0) info.append(" - ");
                 info.append(manga.genres.get(0));
             }
+            info.append("\nUpdate terakhir: ").append(manga.latestChapterTimeMillis > 0
+                    ? ShinigamiDates.format(manga.latestChapterTimeMillis)
+                    : manga.updatedAtMillis > 0 ? ShinigamiDates.format(manga.updatedAtMillis) + " (Diperbarui)"
+                    : "Tanggal belum tersedia");
             holder.subtitle.setText(info.toString());
             holder.coverBox.setOnClickListener(v -> openDetail(manga.id, manga.title, manga.coverUrl));
             Glide.with(ShinigamiActivity.this)
@@ -697,7 +716,7 @@ public class ShinigamiActivity extends AppCompatActivity {
 
             TextView info = Ui.label(ShinigamiActivity.this, "", 12, palette.muted);
             info.setTag("shinigami_row_subtitle");
-            info.setMaxLines(1);
+            info.setMaxLines(3);
             info.setEllipsize(TextUtils.TruncateAt.END);
             text.addView(info);
 

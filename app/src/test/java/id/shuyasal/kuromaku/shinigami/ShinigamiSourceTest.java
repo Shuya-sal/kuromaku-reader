@@ -20,11 +20,48 @@ public class ShinigamiSourceTest {
     @Before public void setup() {
         context = ApplicationProvider.getApplicationContext();
         context.getSharedPreferences(ShinigamiConfig.FILE_NAME, 0).edit().clear().commit();
+        context.getSharedPreferences(ShinigamiStore.FILE_NAME, 0).edit().clear().commit();
     }
     String fixture(String name) throws IOException { return ShinigamiReaderTest.fixture(name); }
     ShinigamiSource source(String name) {
         return new ShinigamiSource(context, url -> fixture(name));
     }
+    @Test public void validatedChapterImagesAreCachedInOrderWithoutChangingProgress() throws Exception {
+        String chapter = "d6cd3f14-a528-4752-a546-0d14873e9a4a";
+        ShinigamiStore store = new ShinigamiStore(context);
+        store.setProgress(chapter, 47);
+        java.util.List<String> urls = source("live_chapter_detail.json").chapterImages(chapter).urls;
+        assertTrue("validated URLs should be persisted", store.prefs().contains("chapter_urls:" + chapter));
+        org.json.JSONArray cached = new org.json.JSONArray(store.prefs().getString("chapter_urls:" + chapter, "[]"));
+        assertEquals(urls.size(), cached.length());
+        assertEquals(urls.get(0), cached.getString(0));
+        assertEquals(47, store.progress(chapter));
+        assertEquals(urls, store.chapterUrls(chapter));
+        assertEquals(urls.size(), store.expectedPages(chapter));
+        JSONObject metadata = new JSONObject(store.prefs().getString("chapter_metadata:" + chapter, "{}"));
+        assertEquals(chapter, metadata.getString("chapter_id"));
+        assertTrue(metadata.has("release_date_millis"));
+    }
+
+    @Test public void sparseDetailRetainsKnownDatesWithoutResettingReadingState() throws Exception {
+        String id = "14423a1b-8d7e-41e2-af00-ba0ba655d5f9";
+        source("live_manga_detail.json").detail(id);
+        ShinigamiStore store = new ShinigamiStore(context);
+        store.setProgress("chapter-a", 62);
+        store.setPage("chapter-a", 9);
+        String response = new JSONObject()
+                .put("retcode", 0).put("data", new JSONObject()
+                        .put("manga_id", id).put("title", "Refreshed title")
+                        .put("latest_chapter_time", JSONObject.NULL)).toString();
+        ShinigamiSource sparse = new ShinigamiSource(context, url -> response);
+        ShinigamiManga refreshed = sparse.detail(id);
+        assertEquals(1793849081000L, refreshed.latestChapterTimeMillis);
+        assertEquals(1793849956000L, refreshed.updatedAtMillis);
+        assertEquals("Refreshed title", refreshed.title);
+        assertEquals(62, store.progress("chapter-a"));
+        assertEquals(9, store.page("chapter-a"));
+    }
+
     @Test public void realCataloguePreservesIdAndPagination() throws Exception {
         ShinigamiSource.Page page = source("live_manga_list.json").catalog(1, ShinigamiSource.Sort.LATEST);
         assertEquals(2, page.items.size());

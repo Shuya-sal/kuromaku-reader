@@ -37,6 +37,8 @@
             android:name=".shinigami.ShinigamiDetailActivity"
             android:exported="false" />
 
+        <activity android:name=".shinigami.ShinigamiImageZoomActivity" android:exported="false" />
+
         <activity
             android:name=".shinigami.ShinigamiReaderActivity"
             android:exported="false" />

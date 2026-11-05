@@ -136,6 +136,59 @@ public class ShinigamiStoreTest {
     }
 
     @Test
+    public void validatedChapterUrlsAndExpectedPagesSurviveForOfflineFallback() {
+        List<String> urls = java.util.Arrays.asList(
+                "https://assets.shngm.id/chapter/a/0.webp",
+                "https://assets.shngm.id/chapter/a/1.webp");
+        store.setChapterPages("chapter-a", urls);
+        assertEquals(urls, store.chapterUrls("chapter-a"));
+        assertEquals(2, store.expectedPages("chapter-a"));
+        assertTrue(store.prefs().contains("chapter_urls:chapter-a"));
+    }
+
+    @Test
+    public void unsafeOrCorruptChapterUrlsAreNeverCached() {
+        store.setChapterPages("chapter-a", java.util.Arrays.asList(
+                "https://assets.shngm.id/chapter/a/0.webp", "http://evil.example/1.webp"));
+        assertTrue(store.chapterUrls("chapter-a").isEmpty());
+        assertEquals(0, store.expectedPages("chapter-a"));
+        store.prefs().edit().putString("chapter_urls:chapter-b", "{rusak").commit();
+        assertTrue(store.chapterUrls("chapter-b").isEmpty());
+    }
+
+    @Test
+    public void metadataMigrationIsAdditiveAndDoesNotTouchLegacyReadingKeys() throws Exception {
+        store.setProgress("chapter-a", 65); store.setPage("chapter-a", 8);
+        store.setLastChapter("manga-a", "chapter-a", 166.5);
+        store.toggleFavorite("manga-a");
+        store.recordRead("manga-a", "Legacy title", "", "chapter-a", 166.5);
+        store.prefs().edit().putString("manga_metadata:manga-a",
+                "{\"title\":\"Legacy title\",\"updated_at\":\"2026-11-05T03:39:16Z\"}").commit();
+        org.json.JSONObject incoming = new org.json.JSONObject()
+                .put("title", "New title").put("updated_at", org.json.JSONObject.NULL);
+        org.json.JSONObject merged = store.mergeMangaMetadata("manga-a", incoming);
+        assertEquals("New title", merged.getString("title"));
+        assertEquals(1793849956000L, merged.getLong("updated_at_millis"));
+        assertEquals(65, store.progress("chapter-a")); assertEquals(8, store.page("chapter-a"));
+        assertEquals("chapter-a", store.lastChapter("manga-a"));
+        assertTrue(store.isFavorite("manga-a")); assertEquals(166.5, store.history().get(0).chapterNumber, 0.001);
+        assertEquals("Legacy title", store.mangaTitle("manga-a"));
+    }
+
+    @Test
+    public void corruptMetadataCacheCanBeRebuiltAndValidDatesCanRefresh() throws Exception {
+        store.prefs().edit().putString("chapter_metadata:chapter-a", "{broken").commit();
+        org.json.JSONObject refreshed = store.mergeChapterMetadata("chapter-a", new org.json.JSONObject()
+                .put("release_date", "2026-11-05T03:24:41Z"));
+        assertEquals(1793849081000L, refreshed.getLong("release_date_millis"));
+        refreshed = store.mergeChapterMetadata("chapter-a", new org.json.JSONObject()
+                .put("release_date", "2026-11-06T03:24:41Z"));
+        assertEquals(1793935481000L, refreshed.getLong("release_date_millis"));
+        refreshed = store.mergeChapterMetadata("chapter-a", new org.json.JSONObject().put("release_date", "invalid"));
+        assertEquals(1793935481000L, refreshed.getLong("release_date_millis"));
+    }
+
+    @Test
     public void favouritesAreRemovedWithoutTouchingTheHistory() {
         store.toggleFavorite("manga-1");
         store.recordRead("manga-1", "Judul Satu", "", "chapter-1", 1);

@@ -1,4 +1,8 @@
-# Kuromaku Reader 2.22.0
+# Kuromaku Reader 2.22.1
+
+Versi 2.22.1 memperbaiki reader Shinigami: loading/error/retry per halaman, ukuran decoding gambar panjang, status lokal tervalidasi, tanggal sumber dalam zona waktu pengguna, dan kartu update terbaru tanpa reset progres. Novel dan Voratoon tidak diubah.
+
+Build debug berhasil. Suite: 494 lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Uji konten nyata terpisah: 156/156 gambar dari sembilan chapter pada tiga judul lolos HTTP/MIME/decoding; rendering di perangkat Android belum diuji. Daftar file, metode tes dan batasan: [SHINIGAMI-TEST-REPORT.md](SHINIGAMI-TEST-REPORT.md).
 
 Versi 2.22.0 menambahkan **Manga Shinigami** sebagai modul native terpisah (eksperimental):
 - Drawer bersama kini berisi **Novel**, **Manga Voratoon**, **Manga Shinigami**, **Backup progres membaca**,

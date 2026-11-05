@@ -122,6 +122,16 @@ public class ShinigamiReaderTest {
             assertEquals(33, store.progress("d6cd3f14-a528-4752-a546-0d14873e9a4a"));
         }
     }
+    @Test public void connectionFailureUsesCachedPageOrder() throws Exception {
+        String id = "d6cd3f14-a528-4752-a546-0d14873e9a4a";
+        new ShinigamiStore(context).setChapterPages(id, java.util.Arrays.asList(
+                "https://storage.shngm.id/one.webp", "https://storage.shngm.id/two.webp"));
+        transport = url -> { throw new ShinigamiSource.SourceException("Koneksi terputus.", new java.io.IOException("disconnect")); };
+        try (ActivityController<Reader> controller = Robolectric.buildActivity(Reader.class, intent()).setup()) {
+            Reader reader=controller.get(); await(reader);
+            assertEquals(2, ((RecyclerView)tagged(reader,"shinigami_reader_list")).getAdapter().getItemCount());
+        }
+    }
     @Test public void deniedSourceShowsErrorAndDoesNotRecordRead() throws Exception {
         transport = url -> { throw new ShinigamiSource.SourceException("Sumber membatasi akses HTTP 403. Tidak melewati CAPTCHA."); };
         try (ActivityController<Reader> controller = Robolectric.buildActivity(Reader.class, intent()).setup()) {
