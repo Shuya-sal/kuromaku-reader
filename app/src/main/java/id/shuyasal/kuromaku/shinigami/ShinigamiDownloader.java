@@ -1,13 +1,56 @@
 package id.shuyasal.kuromaku.shinigami;
 
 import android.content.Context;
+
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public final class ShinigamiDownloader {
     private final Context context;
+    private final Transport transport;
+
+    /** Cara mengambil byte halaman; dapat diganti pada pengujian. */
+    public interface Transport {
+        /** Membuka aliran gambar; melempar {@link IOException} bila respons ditolak. */
+        Stream open(String url, String referer) throws IOException;
+    }
+
+    /** Aliran gambar beserta kode HTTP dan MIME untuk validasi. */
+    public static final class Stream implements java.io.Closeable {
+        public final int code;
+        public final String mime;
+        public final InputStream body;
+        private final java.io.Closeable holder;
+
+        public Stream(int code, String mime, InputStream body) {
+            this(code, mime, body, null);
+        }
+
+        Stream(int code, String mime, InputStream body, java.io.Closeable holder) {
+            this.code = code;
+            this.mime = mime;
+            this.body = body;
+            this.holder = holder;
+        }
+
+        @Override public void close() throws IOException {
+            try {
+                body.close();
+            } finally {
+                if (holder != null) holder.close();
+            }
+        }
+    }
 
     public interface Progress {
         void onProgress(int done, int total);
@@ -27,7 +70,12 @@ public final class ShinigamiDownloader {
     }
 
     public ShinigamiDownloader(Context context) {
+        this(context, new HttpTransport());
+    }
+
+    ShinigamiDownloader(Context context, Transport transport) {
         this.context = context.getApplicationContext();
+        this.transport = transport;
     }
 
     public File chapterDir(String chapterId) {
@@ -90,7 +138,7 @@ public final class ShinigamiDownloader {
         }
         if (read < 8) return null;
         try {
-            ShinigamiImageRequest.validate(200, "image/*", java.util.Arrays.copyOf(head, read));
+            ShinigamiImageRequest.validate(200, "image/*", Arrays.copyOf(head, read));
         } catch (IOException error) {
             return null;
         }
@@ -134,8 +182,106 @@ public final class ShinigamiDownloader {
         }
     }
 
+    /**
+     * Unduh chapter ke penyimpanan khusus aplikasi.
+     *
+     * <p>Halaman yang sudah lengkap dan valid dilewati (resume), tiap gambar
+     * divalidasi sebelum disimpan, dan status baru dianggap selesai bila semua
+     * halaman lolos. Progres baca tidak disentuh di sini.
+     */
     public Result download(String chapterId, List<String> urls, Progress progress) throws IOException {
-        throw new IOException("Unduhan offline dinonaktifkan: izin reader pihak ketiga dari sumber belum terverifikasi.");
+        if (!ShinigamiDownloadPolicy.allowed(context)) {
+            throw new IOException(ShinigamiDownloadPolicy.blockedMessage());
+        }
+        if (urls == null || urls.isEmpty()) throw new IOException("Daftar halaman chapter kosong.");
+        int total = urls.size();
+        String referer = new ShinigamiConfig(context).siteBase() + "/";
+        setRunning(chapterId, true);
+        ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.DOWNLOADING, 0, "");
+        try {
+            for (int index = 0; index < total; index++) {
+                File target = ShinigamiPageStore.fileFor(this, chapterId, index);
+                if (pageFile(chapterId, index) != null) {
+                    report(progress, chapterId, total);
+                    continue;
+                }
+                String url = urls.get(index);
+                if (!ShinigamiConfig.isValidResource(url)) {
+                    return fail(chapterId, total, "Alamat gambar ditolak: bukan HTTPS/host sumber.");
+                }
+                IOException last = null;
+                for (int attempt = 0; attempt < 2; attempt++) {
+                    try {
+                        fetchOnce(url, referer, target);
+                        last = null;
+                        break;
+                    } catch (IOException error) {
+                        last = error;
+                        if (isFatal(error)) break;
+                        sleep(700L * (attempt + 1));
+                    }
+                }
+                if (pageFile(chapterId, index) == null) {
+                    String reason = last == null ? "Gambar tidak lolos validasi." : last.getMessage();
+                    return fail(chapterId, total, "Halaman " + (index + 1) + " gagal: "
+                            + safeMessage(reason));
+                }
+                report(progress, chapterId, total);
+            }
+            boolean complete = isDownloaded(chapterId, total);
+            ShinigamiDownloadStatus.set(chapterId,
+                    complete ? ShinigamiDownloadStatus.SAVED : ShinigamiDownloadStatus.FAILED,
+                    complete ? 100 : ShinigamiPageStore.percent(this, chapterId, total),
+                    complete ? "" : "Sebagian halaman belum lengkap.");
+            return new Result(complete, ShinigamiPageStore.savedCount(this, chapterId, total), total,
+                    complete ? "Chapter tersimpan offline." : "Sebagian halaman belum lengkap.");
+        } finally {
+            setRunning(chapterId, false);
+        }
+    }
+
+    private void fetchOnce(String url, String referer, File target) throws IOException {
+        try (Stream stream = transport.open(url, referer)) {
+            ShinigamiPageStore.save(stream.body, target, stream.code, stream.mime);
+        }
+    }
+
+    /** Catat kegagalan tanpa menghapus halaman yang sudah lengkap (resume aman). */
+    private Result fail(String chapterId, int total, String message) {
+        int saved = ShinigamiPageStore.savedCount(this, chapterId, total);
+        ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.FAILED,
+                ShinigamiPageStore.percent(this, chapterId, total), message);
+        return new Result(false, saved, total, message);
+    }
+
+    private void report(Progress progress, String chapterId, int total) {
+        if (progress == null) return;
+        try {
+            progress.onProgress(ShinigamiPageStore.savedCount(this, chapterId, total), total);
+        } catch (RuntimeException ignored) {
+            // Callback UI yang gagal tidak boleh membatalkan unduhan yang sudah valid.
+        }
+    }
+
+    /** 401/403/429 tidak diulang: itu pembatasan sumber, bukan gangguan jaringan. */
+    private static boolean isFatal(IOException error) {
+        String message = error.getMessage();
+        return message != null && (message.startsWith("HTTP 401") || message.startsWith("HTTP 403")
+                || message.startsWith("HTTP 429"));
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException stopped) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static String safeMessage(String message) {
+        if (message == null || message.isEmpty()) return "Unduhan gagal. Coba lagi.";
+        String clean = message.replaceAll("(?i)(cookie|token|signature|sig|auth)[^\\s]*", "[disensor]");
+        return clean.length() > 160 ? clean.substring(0, 160) : clean;
     }
 
     public boolean deleteChapter(String chapterId) {
@@ -146,6 +292,7 @@ public final class ShinigamiDownloader {
                 if (!file.isFile() || !file.delete()) return false;
             }
         }
+        ShinigamiDownloadStatus.clear(chapterId);
         return !dir.exists() || dir.delete();
     }
 
@@ -161,5 +308,38 @@ public final class ShinigamiDownloader {
             }
         }
         return ids;
+    }
+
+    private static final class HttpTransport implements Transport {
+        private final OkHttpClient client = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .callTimeout(45, TimeUnit.SECONDS)
+                .followRedirects(false).followSslRedirects(false)
+                .retryOnConnectionFailure(false).build();
+
+        @Override public Stream open(String url, String referer) throws IOException {
+            Request request = new Request.Builder().url(url)
+                    .header("User-Agent", id.shuyasal.kuromaku.net.Http.USER_AGENT)
+                    .header("Referer", referer)
+                    .header("Accept", "image/webp,image/*;q=0.8").build();
+            Response response = client.newCall(request).execute();
+            int code = response.code();
+            if (code < 200 || code >= 300) {
+                response.close();
+                ShinigamiImageRequest.validate(code, "", new byte[0]);
+                throw new IOException("Gambar gagal dimuat (HTTP " + code + ").");
+            }
+            ResponseBody body = response.body();
+            if (body == null) {
+                response.close();
+                throw new IOException("Respons gambar kosong.");
+            }
+            if (body.contentLength() > 32L * 1024 * 1024) {
+                response.close();
+                throw new IOException("Gambar terlalu besar.");
+            }
+            return new Stream(code, response.header("Content-Type"), body.byteStream(), response);
+        }
     }
 }

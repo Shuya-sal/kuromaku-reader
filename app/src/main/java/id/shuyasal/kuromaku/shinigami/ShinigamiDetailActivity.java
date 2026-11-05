@@ -482,17 +482,15 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
     private void downloadSelected() {
         if (selected.isEmpty()) return;
-        if (!ShinigamiDownloadPolicy.allowed(this)) {
-            explainDownloadUnavailable();
-            return;
-        }
-        int queued = ShinigamiDownloadQueue.enqueueChapters(this, mangaId, title,
-                new ArrayList<>(selected));
-        selected.clear();
-        renderChapters();
-        Toast.makeText(this, queued == 0
-                ? "Chapter terpilih sudah tersimpan offline."
-                : "Mengunduh " + queued + " chapter.", Toast.LENGTH_SHORT).show();
+        ensureDownloadAllowed(() -> {
+            int queued = ShinigamiDownloadQueue.enqueueChapters(this, mangaId, title,
+                    new ArrayList<>(selected));
+            selected.clear();
+            renderChapters();
+            Toast.makeText(this, queued == 0
+                    ? "Chapter terpilih sudah tersimpan offline."
+                    : "Mengunduh " + queued + " chapter.", Toast.LENGTH_SHORT).show();
+        });
     }
 
     private void onDownloadAction(ShinigamiChapter chapter, String status) {
@@ -514,7 +512,14 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             return;
         }
         if (!ShinigamiDownloadPolicy.allowed(this)) {
-            explainDownloadUnavailable();
+            ensureDownloadAllowed(() -> {
+                if (state == ShinigamiDownloadStatus.FAILED) {
+                    ShinigamiDownloadQueue.retryChapter(this, mangaId, title, chapter.id);
+                } else {
+                    ShinigamiDownloadQueue.enqueueChapter(this, chapter.id);
+                }
+                renderChapters();
+            });
             return;
         }
         if (state == ShinigamiDownloadStatus.FAILED) {
@@ -566,11 +571,24 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    private void explainDownloadUnavailable() {
+    /**
+     * Unduhan hanya berjalan setelah pengguna membaca pemberitahuan dan
+     * menyetujui penyimpanan untuk pemakaian pribadi. Persetujuan disimpan,
+     * jadi dialog tidak muncul berulang.
+     */
+    private void ensureDownloadAllowed(Runnable action) {
+        if (ShinigamiDownloadPolicy.allowed(this)) {
+            action.run();
+            return;
+        }
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Unduhan tidak tersedia")
-                .setMessage(ShinigamiDownloadPolicy.blockedMessage())
-                .setPositiveButton("Tutup", null)
+                .setTitle("Unduhan offline")
+                .setMessage(ShinigamiDownloadPolicy.notice())
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Saya mengerti", (dialog, which) -> {
+                    ShinigamiDownloadPolicy.acknowledge(this);
+                    action.run();
+                })
                 .show();
     }
 

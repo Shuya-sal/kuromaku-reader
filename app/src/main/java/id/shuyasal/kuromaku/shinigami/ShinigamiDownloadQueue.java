@@ -18,8 +18,8 @@ import java.util.List;
  * chapter (tidak ganda), batch multi-chapter berurutan, cancel/resume/refresh,
  * dan penghapusan file tidak pernah menyentuh progres baca di
  * {@link ShinigamiStore}. Worker-nya sendiri tetap gated oleh
- * {@link ShinigamiDownloadPolicy}: bila izin sumber belum terverifikasi,
- * enqueue ditolak sebelum WorkManager dijadwalkan.
+ * {@link ShinigamiDownloadPolicy}: unduhan hanya dijadwalkan setelah pengguna
+ * menyetujui pemberitahuan penyimpanan offline untuk pemakaian pribadi.
  */
 public final class ShinigamiDownloadQueue {
     static final String KEY_CHAPTERS = "chapters";

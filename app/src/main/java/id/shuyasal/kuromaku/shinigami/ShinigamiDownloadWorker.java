@@ -39,7 +39,8 @@ public class ShinigamiDownloadWorker extends Worker {
     @Override
     public Result doWork() {
         if (!ShinigamiDownloadPolicy.allowed(getApplicationContext())) {
-            return Result.failure(failData("Unduhan dinonaktifkan: izin sumber belum terverifikasi."));
+            return Result.failure(failData("Unduhan menunggu persetujuan pengguna. "
+                    + "Buka halaman manga lalu tekan Unduh untuk menyetujui."));
         }
         List<String> chapters = chapters();
         if (chapters.isEmpty()) return Result.failure(failData("Chapter tidak dikenal."));

@@ -2,7 +2,6 @@ package id.shuyasal.kuromaku.shinigami;
 
 import android.content.Intent;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -12,7 +11,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -20,12 +18,6 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DataSource;
-import com.bumptech.glide.load.engine.GlideException;
-import com.bumptech.glide.request.RequestListener;
-import com.bumptech.glide.request.target.Target;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -69,6 +61,9 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private TextView errorText;
     private Button retryButton;
     private TextView offlineNotice;
+    private Button qualityButton;
+    private ShinigamiPageCache cache;
+    private ShinigamiQuality quality = ShinigamiQuality.AUTO;
     private boolean fullscreen;
     private boolean offlineChapter;
     private boolean progressReliable = true;
@@ -81,6 +76,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         source = createSource();
         store = new ShinigamiStore(this);
         downloader = new ShinigamiDownloader(this);
+        cache = new ShinigamiPageCache(this);
+        quality = ShinigamiQuality.stored(this);
         ShinigamiImageRequest.register(this);
 
         mangaId = getIntent().getStringExtra(EXTRA_MANGA_ID);
@@ -201,11 +198,46 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         bar.addView(menu, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
+        qualityButton = Ui.chip(this, "Kualitas: " + quality.label, palette);
+        qualityButton.setTag("shinigami_reader_quality");
+        qualityButton.setOnClickListener(v -> cycleQuality());
+        bar.addView(qualityButton);
+
         Button zoomButton = Ui.chip(this, "Layar penuh", palette);
         zoomButton.setTag("shinigami_reader_fullscreen");
         zoomButton.setOnClickListener(v -> toggleFullscreen());
         bar.addView(zoomButton);
         return bar;
+    }
+
+    private void cycleQuality() {
+        ShinigamiQuality[] modes = ShinigamiQuality.values();
+        String[] items = new String[modes.length];
+        int checked = 0;
+        for (int index = 0; index < modes.length; index++) {
+            items[index] = modes[index].label;
+            if (modes[index] == quality) checked = index;
+        }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Kualitas gambar")
+                .setSingleChoiceItems(items, checked, (dialog, which) -> {
+                    quality = modes[which];
+                    quality.save(this);
+                    qualityButton.setText("Kualitas: " + quality.label);
+                    Toast.makeText(this, quality.summary(pageSourceWidth()), Toast.LENGTH_LONG).show();
+                    if (adapter != null) adapter.notifyDataSetChanged();
+                    dialog.dismiss();
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
+    }
+
+    /** Lebar sumber yang diketahui, untuk teks pengaturan kualitas. */
+    private int pageSourceWidth() {
+        if (pages.isEmpty() || offlineChapter) return 800;
+        File local = downloader.pageFile(chapterId, 0);
+        int[] size = ShinigamiPageTiles.bounds(local);
+        return size == null ? 800 : size[0];
     }
 
     private void toggleFullscreen() {
@@ -373,8 +405,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private final class PageAdapter extends RecyclerView.Adapter<PageAdapter.Holder> {
         class Holder extends RecyclerView.ViewHolder {
             final ShinigamiPageView cell;
-            com.bumptech.glide.request.target.CustomTarget<android.graphics.Bitmap> target;
             int bound = -1;
+            int generation;
             Holder(ShinigamiPageView item) { super(item); cell = item; }
         }
 
@@ -387,89 +419,82 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         @Override public void onBindViewHolder(Holder holder, int position) {
             holder.bound = position;
             holder.cell.setRetryAction(() -> {
-                if (holder.bound >= 0 && holder.bound < pages.size()) load(holder, true);
+                if (holder.bound >= 0 && holder.bound < pages.size()) load(holder);
             });
-            holder.cell.image.setOnClickListener(v -> {
-                if (holder.bound >= 0 && holder.bound < pages.size()) openZoomed(pages.get(holder.bound));
+            holder.cell.setOnClickListener(v -> {
+                if (holder.bound >= 0 && holder.bound < pages.size()) openZoomed(holder.bound);
             });
-            load(holder, false);
+            load(holder);
         }
 
-        private void load(Holder holder, boolean retry) {
-            if (holder.target != null) Glide.with(ShinigamiReaderActivity.this).clear(holder.target);
+        /**
+         * Halaman dibaca dari berkas: unduhan offline bila ada, kalau tidak
+         * dari cache halaman (diunduh sekali, bukan per tampilan). Tidak ada
+         * decode seluruh halaman, jadi lebar asli sumber tidak dikorbankan.
+         */
+        private void load(Holder holder) {
             holder.cell.showLoading();
-            int position = holder.bound;
-            String url = offlineChapter ? "" : pages.get(position);
+            final int position = holder.bound;
+            if (position < 0 || position >= pages.size()) return;
+            final int generation = ++holder.generation;
+
             File local = downloader.pageFile(chapterId, position);
-            if (local == null && offlineChapter) {
+            if (local != null) {
+                holder.cell.showFile(local, quality);
+                return;
+            }
+            if (offlineChapter) {
                 holder.cell.showFailure("Halaman " + (position + 1)
                         + " tidak tersedia lagi di penyimpanan. Unduh ulang chapter ini.");
                 return;
             }
-            Object model = local != null ? local : new ShinigamiImageRequest(url, source.config().siteBase());
-            int width = Math.max(1, Math.min(1080, getResources().getDisplayMetrics().widthPixels));
-            holder.target = new com.bumptech.glide.request.target.CustomTarget<android.graphics.Bitmap>(width, 4096) {
-                @Override public void onResourceReady(android.graphics.Bitmap bitmap,
-                        com.bumptech.glide.request.transition.Transition<? super android.graphics.Bitmap> transition) {
-                    if (holder.bound != position || isDestroyed()) return;
-                    holder.cell.showReady(bitmap);
-                    android.util.Log.i("ShinigamiReader", "decoded page=" + (position + 1)
-                            + "/" + pages.size() + " size=" + bitmap.getWidth() + "x" + bitmap.getHeight());
-                }
-                @Override public void onLoadFailed(Drawable drawable) {
-                    if (holder.bound == position) holder.cell.showFailure("Gambar halaman " + (position + 1)
-                            + " gagal dimuat. Periksa koneksi atau coba lagi.");
-                }
-                @Override public void onLoadCleared(Drawable drawable) { holder.cell.showLoading(); }
-            };
-            try {
-                Glide.with(ShinigamiReaderActivity.this).asBitmap().load(model)
-                        .disallowHardwareConfig().format(com.bumptech.glide.load.DecodeFormat.PREFER_RGB_565)
-                        .downsample(com.bumptech.glide.load.resource.bitmap.DownsampleStrategy.AT_MOST)
-                        .diskCacheStrategy(com.bumptech.glide.load.engine.DiskCacheStrategy.DATA)
-                        .skipMemoryCache(retry)
-                        .listener(new RequestListener<android.graphics.Bitmap>() {
-                            @Override public boolean onLoadFailed(GlideException failure, Object ignored,
-                                    Target<android.graphics.Bitmap> target, boolean first) {
-                                String reason = safeFailure(failure);
-                                android.util.Log.w("ShinigamiReader", "image_failed page=" + (position + 1) + " " + reason);
-                                if (holder.bound == position) holder.cell.showFailure("Halaman " + (position + 1) + ": " + reason);
-                                return true;
-                            }
-                            @Override public boolean onResourceReady(android.graphics.Bitmap bitmap, Object ignored,
-                                    Target<android.graphics.Bitmap> target, DataSource data, boolean first) { return false; }
-                        }).into(holder.target);
-            } catch (Exception failure) {
-                holder.cell.showFailure("Pemuat gambar gagal. Coba muat ulang.");
-                android.util.Log.w("ShinigamiReader", "loader_failed page=" + (position + 1) + " type=" + failure.getClass().getSimpleName());
+            String url = pages.get(position);
+            if (url == null || url.isEmpty()) {
+                holder.cell.showFailure("Alamat gambar halaman " + (position + 1) + " tidak dikenal.");
+                return;
             }
+            final String referer = source.config().siteBase() + "/";
+            worker.execute(() -> {
+                File file = null;
+                String failure = null;
+                try {
+                    file = cache.fetch(url, referer);
+                } catch (java.io.IOException error) {
+                    failure = error.getMessage() == null ? "Gambar gagal dimuat." : error.getMessage();
+                }
+                final File ready = file;
+                final String reason = failure;
+                main.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    if (holder.bound != position || holder.generation != generation) return;
+                    if (ready != null) {
+                        holder.cell.showFile(ready, quality);
+                        int[] size = ShinigamiPageTiles.bounds(ready);
+                        android.util.Log.i("ShinigamiReader", "page " + (position + 1) + "/" + pages.size()
+                                + " source=" + (size == null ? "?" : size[0] + "x" + size[1])
+                                + " quality=" + quality.name());
+                    } else {
+                        holder.cell.showFailure("Halaman " + (position + 1) + ": " + reason);
+                    }
+                });
+            });
         }
 
         @Override public void onViewRecycled(Holder holder) {
-            if (holder.target != null) Glide.with(ShinigamiReaderActivity.this).clear(holder.target);
-            holder.target = null;
+            holder.generation++;
             holder.bound = -1;
+            holder.cell.showLoading();
             super.onViewRecycled(holder);
         }
         @Override public int getItemCount() { return pages.size(); }
     }
 
-    static String safeFailure(GlideException failure) {
-        if (failure != null) for (Throwable cause : failure.getRootCauses()) {
-            String message = cause.getMessage();
-            if (message != null && !message.contains("://") && !message.contains("Cookie")
-                    && (message.startsWith("HTTP ") || message.startsWith("Gambar ")
-                    || message.startsWith("Respons ") || message.startsWith("Redirect "))) return message;
-        }
-        return "Koneksi, waktu tunggu, atau decoding gambar gagal. Coba lagi.";
-    }
-
-    private void openZoomed(String url) {
-        if (url == null || url.isEmpty()) return;
+    private void openZoomed(int position) {
+        if (position < 0 || position >= pages.size()) return;
         Intent intent = new Intent(this, ShinigamiImageZoomActivity.class);
-        intent.putExtra("url", url);
+        intent.putExtra("url", pages.get(position));
         intent.putExtra("chapter_id", chapterId);
-        intent.putExtra("page", pages.indexOf(url));
+        intent.putExtra("page", position);
         startActivity(intent);
     }
 }
