@@ -2,7 +2,15 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.21.1** (versionCode 47) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.22.0** (versionCode 48) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* **2.22.0 — Manga Shinigami native (eksperimental).**
+  - Drawer bersama lima entri: Novel, Manga Voratoon, Manga Shinigami, Backup, Restore. Voratoon tetap WebView.
+  - Katalog grid, pencarian, terbaru, detail, reader vertikal dengan pemuatan bertahap, zoom, layar penuh,
+    progres per chapter, riwayat, dan favorit, tanpa iklan atau navigasi website.
+  - Domain API/situs dapat dikonfigurasi dengan validasi HTTPS dan host. Pembatasan sumber (Cloudflare, 401/403/429)
+    ditampilkan sebagai kesalahan dan tidak dilewati.
+  - Unduhan offline Shinigami dinonaktifkan sampai izin sumber terverifikasi.
+  - Progres Shinigami ikut backup/restore tanpa merusak format backup lama.
 * **2.21.1 — Penanganan Google Login & Pemblokiran Iklan Terarah Manga.**
   - **Autentikasi Google via Browser/Custom Tabs**: Navigasi OAuth Google (`accounts.google.com`, `oauth2.googleapis.com`) dideteksi otomatis dan diluncurkan melalui Chrome Custom Tabs atau browser eksternal. Mencegah error penolakan embedded webview dari Google (`403 disallowed_useragent`) tanpa pernah meminta atau menyimpan password pengguna di aplikasi.
   - **Pemblokiran Iklan Terarah & Perlindungan Resource Autentikasi (`MangaAdFilter`)**: Jaringan iklan agresif (`doubleclick.net`, `googleads.g.doubleclick.net`, `adservice.google.com`, `adsterra`, `monetag`, `highperformancegate`, `popads`, `propellerads`, `exoclick`, `histats`, `mgid`, popunder, dan banner promosi) dicegat dengan respon 204 No Content. Di saat yang sama, layanan krusial TIDAK diblokir: endpoint autentikasi Google, token discovery, `api.voratoon.com`, cookie sesi, serta Cloudflare Turnstile (`challenges.cloudflare.com`, `cloudflareinsights.com`).

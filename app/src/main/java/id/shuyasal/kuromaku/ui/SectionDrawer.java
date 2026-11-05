@@ -6,7 +6,6 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
-import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
@@ -23,12 +22,14 @@ public final class SectionDrawer {
 
     public enum Section {
         NOVEL,
-        MANGA
+        MANGA_VORATON,
+        MANGA_SHINIGAMI
     }
 
     public interface Listener {
         void onNovel();
-        void onManga();
+        void onMangaVoratoon();
+        void onShinigami();
         void onBackup();
         void onRestore();
     }
@@ -40,7 +41,42 @@ public final class SectionDrawer {
         drawer.setCanceledOnTouchOutside(true);
         drawer.setCancelable(true);
 
-        LinearLayout panel = new LinearLayout(activity);
+        final float threshold = Ui.dp(activity, 30);
+        LinearLayout panel = new LinearLayout(activity) {
+            private float startX;
+            private float startY;
+            private boolean tracking;
+
+            @Override
+            public boolean dispatchTouchEvent(MotionEvent event) {
+                switch (event.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startX = event.getRawX();
+                        startY = event.getRawY();
+                        tracking = true;
+                        break;
+                    case MotionEvent.ACTION_MOVE:
+                    case MotionEvent.ACTION_UP:
+                        if (tracking) {
+                            float deltaX = event.getRawX() - startX;
+                            float deltaY = event.getRawY() - startY;
+                            if (deltaX < -threshold && Math.abs(deltaX) > Math.abs(deltaY)) {
+                                tracking = false;
+                                drawer.dismiss();
+                                return true;
+                            }
+                        }
+                        if (event.getActionMasked() == MotionEvent.ACTION_UP) tracking = false;
+                        break;
+                    case MotionEvent.ACTION_CANCEL:
+                        tracking = false;
+                        break;
+                    default:
+                        break;
+                }
+                return super.dispatchTouchEvent(event);
+            }
+        };
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackgroundColor(palette.surface);
         panel.setPadding(Ui.dp(activity, 20), Ui.dp(activity, 30), Ui.dp(activity, 20), Ui.dp(activity, 24));
@@ -54,10 +90,19 @@ public final class SectionDrawer {
             if (listener != null) listener.onNovel();
         });
 
-        String mangaLabel = currentSection == Section.MANGA ? "Manga  ✓" : "Manga";
-        addDrawerItem(activity, panel, mangaLabel, "drawer_manga", currentSection == Section.MANGA, palette, () -> {
+        String mangaLabel = currentSection == Section.MANGA_VORATON ? "Manga Voratoon  ✓" : "Manga Voratoon";
+        addDrawerItem(activity, panel, mangaLabel, "drawer_manga_voratoon",
+                currentSection == Section.MANGA_VORATON, palette, () -> {
             drawer.dismiss();
-            if (listener != null) listener.onManga();
+            if (listener != null) listener.onMangaVoratoon();
+        });
+
+        String shinigamiLabel = currentSection == Section.MANGA_SHINIGAMI
+                ? "Manga Shinigami  ✓" : "Manga Shinigami";
+        addDrawerItem(activity, panel, shinigamiLabel, "drawer_manga_shinigami",
+                currentSection == Section.MANGA_SHINIGAMI, palette, () -> {
+            drawer.dismiss();
+            if (listener != null) listener.onShinigami();
         });
 
         View separator = new View(activity);
@@ -74,35 +119,6 @@ public final class SectionDrawer {
         addDrawerItem(activity, panel, "Restore progres membaca", "drawer_restore", false, palette, () -> {
             drawer.dismiss();
             if (listener != null) listener.onRestore();
-        });
-
-        final GestureDetector detector = new GestureDetector(activity, new GestureDetector.SimpleOnGestureListener() {
-            @Override
-            public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX, float velocityY) {
-                if (e1 != null && e2 != null) {
-                    float deltaX = e2.getX() - e1.getX();
-                    float deltaY = e2.getY() - e1.getY();
-                    if (deltaX < -Ui.dp(activity, 35) && Math.abs(deltaX) > Math.abs(deltaY)) {
-                        drawer.dismiss();
-                        return true;
-                    }
-                }
-                return false;
-            }
-
-            @Override
-            public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
-                if (distanceX > Ui.dp(activity, 30) && Math.abs(distanceX) > Math.abs(distanceY)) {
-                    drawer.dismiss();
-                    return true;
-                }
-                return false;
-            }
-        });
-
-        panel.setOnTouchListener((v, event) -> {
-            detector.onTouchEvent(event);
-            return false;
         });
 
         ViewCompat.setOnApplyWindowInsetsListener(panel, (v, insets) -> {

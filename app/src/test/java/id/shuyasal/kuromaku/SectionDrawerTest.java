@@ -127,12 +127,14 @@ public class SectionDrawerTest {
         LinearLayout panel = openDrawer(host);
 
         View novel = item(panel, "drawer_novel");
-        View manga = item(panel, "drawer_manga");
+        View voratoon = item(panel, "drawer_manga_voratoon");
+        View shinigami = item(panel, "drawer_manga_shinigami");
         View backup = item(panel, "drawer_backup");
         View restore = item(panel, "drawer_restore");
 
         assertEquals("Novel  ✓", ((TextView) novel).getText().toString());
-        assertEquals("Manga", ((TextView) manga).getText().toString());
+        assertEquals("Manga Voratoon", ((TextView) voratoon).getText().toString());
+        assertEquals("Manga Shinigami", ((TextView) shinigami).getText().toString());
         assertEquals("Backup progres membaca", ((TextView) backup).getText().toString());
         assertEquals("Restore progres membaca", ((TextView) restore).getText().toString());
     }
@@ -360,5 +362,46 @@ public class SectionDrawerTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals("tidak boleh ada animasi susulan",
                 0f, decor.getTranslationX(), 0.001f);
+    }
+
+    @Test
+    public void theShinigamiEntryOpensTheNativeCataloguePage() {
+        MainActivity host = open();
+        LinearLayout panel = openDrawer(host);
+        item(panel, "drawer_manga_shinigami").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        Intent started = Shadows.shadowOf(host).getNextStartedActivity();
+        assertNotNull("halaman shinigami harus dibuka", started);
+        assertEquals(id.shuyasal.kuromaku.shinigami.ShinigamiActivity.class.getName(),
+                started.getComponent().getClassName());
+    }
+
+    @Test
+    public void theVoratoonEntryStillOpensTheWebViewPage() {
+        MainActivity host = open();
+        LinearLayout panel = openDrawer(host);
+        item(panel, "drawer_manga_voratoon").performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        Intent started = Shadows.shadowOf(host).getNextStartedActivity();
+        assertNotNull(started);
+        assertEquals(MangaActivity.class.getName(), started.getComponent().getClassName());
+    }
+
+    @Test
+    public void theBackupFileCarriesTheShinigamiSection() throws Exception {
+        context.getSharedPreferences(Prefs.FILE_NAME, Context.MODE_PRIVATE).edit().clear().commit();
+        SharedPreferences manga = context.getSharedPreferences(
+                id.shuyasal.kuromaku.shinigami.ShinigamiStore.FILE_NAME, Context.MODE_PRIVATE);
+        manga.edit().clear().putInt("progress:chapter-x", 66).commit();
+        MainActivity host = open();
+        Uri target = Uri.parse("content://test/backup-shinigami.json");
+        ByteArrayOutputStream written = new ByteArrayOutputStream();
+        Shadows.shadowOf(context.getContentResolver()).registerOutputStream(target, written);
+        host.onActivityResult(MainActivity.REQUEST_BACKUP, Activity.RESULT_OK, new Intent().setData(target));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        JSONObject root = new JSONObject(written.toString(StandardCharsets.UTF_8.name()));
+        assertEquals(66, root.getJSONObject("shinigami_preferences")
+                .getJSONObject("progress:chapter-x").getInt("value"));
+        manga.edit().clear().commit();
     }
 }

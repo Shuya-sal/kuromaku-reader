@@ -305,17 +305,20 @@ public class MangaScreenTest {
         LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
 
         TextView novel = panel.findViewWithTag("drawer_novel");
-        TextView manga = panel.findViewWithTag("drawer_manga");
+        TextView voratoon = panel.findViewWithTag("drawer_manga_voratoon");
+        TextView shinigami = panel.findViewWithTag("drawer_manga_shinigami");
         TextView backup = panel.findViewWithTag("drawer_backup");
         TextView restore = panel.findViewWithTag("drawer_restore");
 
         assertNotNull(novel);
-        assertNotNull(manga);
+        assertNotNull(voratoon);
+        assertNotNull(shinigami);
         assertNotNull(backup);
         assertNotNull(restore);
 
         assertEquals("Novel", novel.getText().toString());
-        assertEquals("Manga  ✓", manga.getText().toString());
+        assertEquals("Manga Voratoon  ✓", voratoon.getText().toString());
+        assertEquals("Manga Shinigami", shinigami.getText().toString());
         assertEquals("Backup progres membaca", backup.getText().toString());
         assertEquals("Restore progres membaca", restore.getText().toString());
 
@@ -471,7 +474,7 @@ public class MangaScreenTest {
 
         View root = dialog.findViewById(android.R.id.content);
         LinearLayout panel = (LinearLayout) ((ViewGroup) root).getChildAt(0);
-        panel.findViewWithTag("drawer_manga").performClick();
+        panel.findViewWithTag("drawer_manga_voratoon").performClick();
         Shadows.shadowOf(Looper.getMainLooper()).idle();
 
         assertFalse(dialog.isShowing());

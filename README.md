@@ -1,4 +1,24 @@
-# Kuromaku Reader 2.21.1
+# Kuromaku Reader 2.22.0
+
+Versi 2.22.0 menambahkan **Manga Shinigami** sebagai modul native terpisah (eksperimental):
+- Drawer bersama kini berisi **Novel**, **Manga Voratoon**, **Manga Shinigami**, **Backup progres membaca**,
+  dan **Restore progres membaca** di semua halaman. Manga Voratoon tetap WebView seperti sebelumnya.
+- Katalog grid cover dan judul, urutan terbaru/terpopuler, pencarian, detail (cover, sinopsis, genre,
+  status, daftar chapter berhalaman), reader vertikal RecyclerView dengan pemuatan bertahap, zoom gambar,
+  layar penuh, progres per chapter, riwayat, dan favorit.
+- `ShinigamiSource` membaca JSON dari `api.shngm.io/v1`. Endpoint katalog, pencarian, detail, chapter,
+  dan gambar diverifikasi melalui respons nyata; struktur halaman situs yang tertahan Cloudflare belum terverifikasi. Domain API dan situs dapat diganti lewat pengaturan, hanya HTTPS dan host
+  di bawah `shinigami.asia`, `shinigami.to`, `shngm.io`, atau `shngm.id`; port, userinfo, path traversal,
+  dan pengalihan ditolak.
+- Identitas memakai `manga_id` dan `chapter_id` sumber (UUID), bukan nomor chapter, karena nomor chapter
+  sumber bisa desimal dan ganda.
+- Progres, riwayat, dan favorit Shinigami disimpan di berkas preferensi tersendiri dan ikut backup/restore
+  sebagai bagian opsional; berkas backup lama tetap bisa dipulihkan.
+- Batasan: halaman `shinigami.asia` dan `11.shinigami.asia` tertahan pemeriksaan Cloudflare saat diuji;
+  aplikasi tidak melewatinya. HTTP 401/403/429, halaman CAPTCHA, dan perubahan struktur data ditampilkan
+  sebagai pesan kesalahan yang jelas. Unduhan offline **dinonaktifkan** karena sumber belum menyatakan izin
+  untuk reader pihak ketiga.
+
 
 Aplikasi pembaca Android **native** untuk novel ringan berbahasa Indonesia dengan
 dukungan multi-sumber (**Kaori Translation**, **Megumi Novel**, dan **Sakura Novel**)

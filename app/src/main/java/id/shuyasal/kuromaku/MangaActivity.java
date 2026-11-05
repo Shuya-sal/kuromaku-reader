@@ -37,6 +37,7 @@ import java.io.ByteArrayInputStream;
 import java.util.Collections;
 import java.util.Locale;
 import id.shuyasal.kuromaku.manga.MangaAdFilter;
+import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.SectionDrawer;
@@ -314,7 +315,7 @@ public class MangaActivity extends AppCompatActivity {
     private void showSectionDrawer() {
         int theme = new Prefs(this, null).theme();
         Palette palette = Palette.of(theme);
-        SectionDrawer.show(this, SectionDrawer.Section.MANGA, palette, new SectionDrawer.Listener() {
+        SectionDrawer.show(this, SectionDrawer.Section.MANGA_VORATON, palette, new SectionDrawer.Listener() {
             @Override
             public void onNovel() {
                 startActivity(new Intent(MangaActivity.this, MainActivity.class)
@@ -323,7 +324,13 @@ public class MangaActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onManga() {
+            public void onMangaVoratoon() {
+            }
+
+            @Override
+            public void onShinigami() {
+                startActivity(new Intent(MangaActivity.this, ShinigamiActivity.class));
+                finish();
             }
 
             @Override

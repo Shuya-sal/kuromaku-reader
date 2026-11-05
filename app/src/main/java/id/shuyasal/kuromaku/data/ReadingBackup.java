@@ -40,11 +40,29 @@ public final class ReadingBackup {
     private static final String KEY_TYPE = "type";
     private static final String KEY_VALUE = "value";
 
+    private static final String KEY_SHINIGAMI = "shinigami_preferences";
+
     private ReadingBackup() {
     }
 
     /** The whole store as a JSON document, every value tagged with its type. */
     public static String export(SharedPreferences store) throws JSONException {
+        return export(store, null);
+    }
+
+    public static String export(SharedPreferences store, SharedPreferences shinigami)
+            throws JSONException {
+        JSONObject document = new JSONObject();
+        document.put(KEY_FORMAT, FORMAT);
+        document.put(KEY_PREFS, values(store));
+        if (shinigami != null) {
+            JSONObject extra = values(shinigami);
+            if (extra.length() > 0) document.put(KEY_SHINIGAMI, extra);
+        }
+        return document.toString(2);
+    }
+
+    private static JSONObject values(SharedPreferences store) throws JSONException {
         JSONObject values = new JSONObject();
         for (Map.Entry<String, ?> entry : store.getAll().entrySet()) {
             String key = entry.getKey();
@@ -82,10 +100,7 @@ public final class ReadingBackup {
             }
             values.put(key, typed);
         }
-        JSONObject document = new JSONObject();
-        document.put(KEY_FORMAT, FORMAT);
-        document.put(KEY_PREFS, values);
-        return document.toString(2);
+        return values;
     }
 
     /**
@@ -97,6 +112,11 @@ public final class ReadingBackup {
      * wipe another novel's bookmark.
      */
     public static int restore(SharedPreferences store, String document) throws JSONException {
+        return restore(store, document, null);
+    }
+
+    public static int restore(SharedPreferences store, String document,
+                              SharedPreferences shinigami) throws JSONException {
         if (document == null) throw new JSONException("Berkas backup kosong");
         if (document.length() > MAX_BYTES) throw new JSONException("Berkas backup terlalu besar");
 
@@ -111,6 +131,58 @@ public final class ReadingBackup {
         // Validate everything first; only then touch the store.
         List<String> keys = new ArrayList<>();
         List<Object> pending = new ArrayList<>();
+        readTyped(values, keys, pending);
+
+        List<String> extraKeys = new ArrayList<>();
+        List<Object> extraPending = new ArrayList<>();
+        JSONObject extraValues = root.optJSONObject(KEY_SHINIGAMI);
+        if (extraValues != null) {
+            readTyped(extraValues, extraKeys, extraPending);
+        }
+
+        SharedPreferences.Editor editor = store.edit();
+        for (int i = 0; i < keys.size(); i++) {
+            String key = keys.get(i);
+            Object value = pending.get(i);
+            if (value instanceof String) editor.putString(key, (String) value);
+            else if (value instanceof Integer) editor.putInt(key, (Integer) value);
+            else if (value instanceof Long) editor.putLong(key, (Long) value);
+            else if (value instanceof Float) editor.putFloat(key, (Float) value);
+            else if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
+            else if (value instanceof Set) {
+                @SuppressWarnings("unchecked")
+                Set<String> set = (Set<String>) value;
+                editor.putStringSet(key, set);
+            }
+        }
+        if (!editor.commit()) throw new JSONException("Gagal menyimpan progres");
+
+        int restoredExtra = 0;
+        if (shinigami != null && !extraKeys.isEmpty()) {
+            SharedPreferences.Editor extraEditor = shinigami.edit();
+            for (int i = 0; i < extraKeys.size(); i++) {
+                String key = extraKeys.get(i);
+                Object value = extraPending.get(i);
+                if (value instanceof String) extraEditor.putString(key, (String) value);
+                else if (value instanceof Integer) extraEditor.putInt(key, (Integer) value);
+                else if (value instanceof Long) extraEditor.putLong(key, (Long) value);
+                else if (value instanceof Float) extraEditor.putFloat(key, (Float) value);
+                else if (value instanceof Boolean) extraEditor.putBoolean(key, (Boolean) value);
+                else if (value instanceof Set) {
+                    @SuppressWarnings("unchecked")
+                    Set<String> set = (Set<String>) value;
+                    extraEditor.putStringSet(key, set);
+                }
+            }
+            if (!extraEditor.commit()) throw new JSONException("Gagal menyimpan progres manga");
+            restoredExtra = extraKeys.size();
+        }
+
+        return keys.size() + restoredExtra;
+    }
+
+    private static void readTyped(JSONObject values, List<String> keys, List<Object> pending)
+            throws JSONException {
         Iterator<String> iterator = values.keys();
         while (iterator.hasNext()) {
             String key = iterator.next();
@@ -147,23 +219,5 @@ public final class ReadingBackup {
             keys.add(key);
             pending.add(value);
         }
-
-        SharedPreferences.Editor editor = store.edit();
-        for (int i = 0; i < keys.size(); i++) {
-            String key = keys.get(i);
-            Object value = pending.get(i);
-            if (value instanceof String) editor.putString(key, (String) value);
-            else if (value instanceof Integer) editor.putInt(key, (Integer) value);
-            else if (value instanceof Long) editor.putLong(key, (Long) value);
-            else if (value instanceof Float) editor.putFloat(key, (Float) value);
-            else if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
-            else if (value instanceof Set) {
-                @SuppressWarnings("unchecked")
-                Set<String> set = (Set<String>) value;
-                editor.putStringSet(key, set);
-            }
-        }
-        if (!editor.commit()) throw new JSONException("Gagal menyimpan progres");
-        return keys.size();
     }
 }

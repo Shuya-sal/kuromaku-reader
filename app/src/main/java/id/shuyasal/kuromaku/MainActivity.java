@@ -46,6 +46,8 @@ import id.shuyasal.kuromaku.data.ReadingBackup;
 import id.shuyasal.kuromaku.net.CatalogLoader;
 import id.shuyasal.kuromaku.net.NovelUrl;
 import id.shuyasal.kuromaku.parser.NovelDiscovery;
+import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
+import id.shuyasal.kuromaku.shinigami.ShinigamiStore;
 import id.shuyasal.kuromaku.offline.DownloadQueue;
 import id.shuyasal.kuromaku.offline.DownloadStatusStore;
 import id.shuyasal.kuromaku.offline.OfflineStore;
@@ -362,8 +364,13 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onManga() {
+            public void onMangaVoratoon() {
                 startActivity(new Intent(MainActivity.this, MangaActivity.class));
+            }
+
+            @Override
+            public void onShinigami() {
+                startActivity(new Intent(MainActivity.this, ShinigamiActivity.class));
             }
 
             @Override
@@ -421,7 +428,8 @@ public class MainActivity extends AppCompatActivity {
         try {
             if (requestCode == REQUEST_BACKUP) {
                 SharedPreferences store = getSharedPreferences(Prefs.FILE_NAME, MODE_PRIVATE);
-                String document = ReadingBackup.export(store);
+                SharedPreferences manga = getSharedPreferences(ShinigamiStore.FILE_NAME, MODE_PRIVATE);
+                String document = ReadingBackup.export(store, manga);
                 try (OutputStream out = getContentResolver().openOutputStream(data.getData())) {
                     if (out == null) throw new java.io.IOException("Berkas tujuan tidak bisa dibuka");
                     out.write(document.getBytes(StandardCharsets.UTF_8));
@@ -444,7 +452,8 @@ public class MainActivity extends AppCompatActivity {
                     bytes = out.toByteArray();
                 }
                 SharedPreferences store = getSharedPreferences(Prefs.FILE_NAME, MODE_PRIVATE);
-                int restored = ReadingBackup.restore(store, new String(bytes, StandardCharsets.UTF_8));
+                SharedPreferences manga = getSharedPreferences(ShinigamiStore.FILE_NAME, MODE_PRIVATE);
+                int restored = ReadingBackup.restore(store, new String(bytes, StandardCharsets.UTF_8), manga);
                 Toast.makeText(this, restored + " progres dipulihkan", Toast.LENGTH_LONG).show();
                 // No catalogue reload needed: progress is read from the store while
                 // rendering, so going back to the shelf shows the restored bookmark

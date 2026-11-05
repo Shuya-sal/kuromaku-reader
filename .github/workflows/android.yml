@@ -154,7 +154,7 @@ jobs:
           # at it, so a zip without it cannot assemble. It is a debug key -- public by
           # design, grants no publishing rights.
           FILES="app/src app/build.gradle.kts build.gradle.kts settings.gradle.kts
-                 gradle.properties .gitignore README.md .github keystore"
+                 gradle.properties .gitignore README.md SHINIGAMI-TEST-REPORT.md .github keystore"
           for f in $FILES; do
             if [ ! -e "$f" ]; then
               echo "::error::berkas sumber tidak ada: $f"

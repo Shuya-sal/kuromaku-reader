@@ -30,6 +30,18 @@
             android:exported="false" />
 
         <activity
+            android:name=".shinigami.ShinigamiActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".shinigami.ShinigamiDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".shinigami.ShinigamiReaderActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ReaderActivity"
             android:exported="false"
             android:parentActivityName=".MainActivity"
