@@ -68,7 +68,11 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private TextView statusText;
     private TextView errorText;
     private Button retryButton;
+    private TextView offlineNotice;
     private boolean fullscreen;
+    private boolean offlineChapter;
+    private boolean progressReliable = true;
+    private boolean positionReady;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -147,6 +151,15 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER));
 
+        offlineNotice = Ui.label(this, "", 12, 0xFFFFE082);
+        offlineNotice.setTag("shinigami_reader_offline_notice");
+        offlineNotice.setVisibility(View.GONE);
+        offlineNotice.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
+        offlineNotice.setBackgroundColor(0xCC1A1A1A);
+        body.addView(offlineNotice, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP));
+
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
@@ -215,18 +228,33 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         statusText.setVisibility(View.VISIBLE);
         errorText.setVisibility(View.GONE);
         retryButton.setVisibility(View.GONE);
+
+        int expected = expectedPages();
+        if (expected > 0 && downloader.isDownloaded(chapterId, expected)) {
+            showOfflineChapter(expected);
+            return;
+        }
+        offlineChapter = false;
         worker.execute(() -> {
             List<String> urls = new ArrayList<>();
             String failure = null;
+            boolean usedCache = false;
             try {
                 urls.addAll(source.chapterImages(chapterId).urls);
             } catch (ShinigamiSource.SourceException error) {
-                // Only connectivity failures may use the prior, validated page order.
-                // Access-denied/CAPTCHA responses are never worked around.
-                if (error.getCause() instanceof java.io.IOException) urls.addAll(store.chapterUrls(chapterId));
-                if (urls.isEmpty()) failure = error.getMessage();
+                failure = error.getCause() instanceof java.io.IOException
+                        ? null
+                        : error.getMessage();
+                if (failure == null) {
+                    // Only connectivity failures may reuse the prior, validated page order.
+                    // Access-denied/CAPTCHA responses are never worked around.
+                    urls.addAll(store.chapterUrls(chapterId));
+                    usedCache = !urls.isEmpty();
+                }
             }
+            final List<String> result = urls;
             final String message = failure;
+            final boolean cached = usedCache;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (message != null) {
@@ -236,20 +264,57 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     retryButton.setVisibility(View.VISIBLE);
                     return;
                 }
-                pages.clear();
-                pages.addAll(urls);
-                adapter.notifyDataSetChanged();
-                statusText.setVisibility(View.GONE);
-                if (pages.isEmpty()) {
-                    errorText.setText("Gambar chapter tidak tersedia. Periksa koneksi atau coba muat ulang.");
+                if (result.isEmpty()) {
+                    statusText.setVisibility(View.GONE);
+                    errorText.setText(offlineMessage());
                     errorText.setVisibility(View.VISIBLE);
                     retryButton.setVisibility(View.VISIBLE);
                     return;
+                }
+                pages.clear();
+                pages.addAll(result);
+                adapter.notifyDataSetChanged();
+                statusText.setVisibility(View.GONE);
+                progressReliable = !cached;
+                if (cached) {
+                    offlineNotice.setText("Koneksi bermasalah. Chapter ini belum tersimpan "
+                            + "lengkap, jadi sebagian gambar mungkin belum bisa dibuka offline.");
+                    offlineNotice.setVisibility(View.VISIBLE);
+                } else {
+                    offlineNotice.setVisibility(View.GONE);
                 }
                 recordOpen();
                 restorePosition();
             });
         });
+    }
+
+    private int expectedPages() {
+        int expected = store.expectedPages(chapterId);
+        if (expected <= 0) expected = store.chapterUrls(chapterId).size();
+        return expected;
+    }
+
+    private void showOfflineChapter(int expected) {
+        pages.clear();
+        for (int index = 0; index < expected; index++) pages.add("");
+        offlineChapter = true;
+        statusText.setVisibility(View.GONE);
+        errorText.setVisibility(View.GONE);
+        retryButton.setVisibility(View.GONE);
+        offlineNotice.setText("Dibaca dari penyimpanan offline. Tidak perlu koneksi internet.");
+        offlineNotice.setVisibility(View.VISIBLE);
+        progressReliable = true;
+        adapter.notifyDataSetChanged();
+        recordOpen();
+        restorePosition();
+        Toast.makeText(this, "Dibaca dari penyimpanan offline.", Toast.LENGTH_SHORT).show();
+    }
+
+    private static String offlineMessage() {
+        return "Chapter ini belum tersimpan lengkap dan koneksi internet tidak tersedia.\n\n"
+                + "Unduh chapter saat online untuk membacanya offline. Progres membaca tetap "
+                + "tersimpan, jadi posisi terakhir tidak hilang.";
     }
 
     private void recordOpen() {
@@ -259,17 +324,23 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
 
     private void restorePosition() {
         int page = store.page(chapterId);
-        if (page <= 0 || page >= pages.size()) return;
+        if (page <= 0) {
+            positionReady = true;
+            return;
+        }
+        if (page >= pages.size()) return;
         list.scrollToPosition(page);
+        positionReady = true;
     }
 
     private void saveProgress() {
-        if (pages.isEmpty()) return;
+        if (pages.isEmpty() || !positionReady) return;
         LinearLayoutManager manager = (LinearLayoutManager) list.getLayoutManager();
         if (manager == null) return;
         int first = manager.findFirstVisibleItemPosition();
         if (first < 0) return;
         store.setPage(chapterId, first);
+        if (!progressReliable) return;
         int percent = (int) Math.round(((first + 1) * 100.0) / pages.size());
         store.setProgress(chapterId, percent);
     }
@@ -328,8 +399,13 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             if (holder.target != null) Glide.with(ShinigamiReaderActivity.this).clear(holder.target);
             holder.cell.showLoading();
             int position = holder.bound;
-            String url = pages.get(position);
+            String url = offlineChapter ? "" : pages.get(position);
             File local = downloader.pageFile(chapterId, position);
+            if (local == null && offlineChapter) {
+                holder.cell.showFailure("Halaman " + (position + 1)
+                        + " tidak tersedia lagi di penyimpanan. Unduh ulang chapter ini.");
+                return;
+            }
             Object model = local != null ? local : new ShinigamiImageRequest(url, source.config().siteBase());
             int width = Math.max(1, Math.min(1080, getResources().getDisplayMetrics().widthPixels));
             holder.target = new com.bumptech.glide.request.target.CustomTarget<android.graphics.Bitmap>(width, 4096) {

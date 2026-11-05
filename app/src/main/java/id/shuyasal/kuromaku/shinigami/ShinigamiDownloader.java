@@ -40,6 +40,7 @@ public final class ShinigamiDownloader {
     public static final String LABEL_SAVED = "Tersimpan offline";
     public static final String LABEL_NOT_SAVED = "Belum diunduh";
     public static final String LABEL_RUNNING = "Mengunduh...";
+    public static final String LABEL_FAILED = "Unduhan gagal";
     private static final java.util.Set<String> RUNNING =
             java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
 
@@ -61,8 +62,19 @@ public final class ShinigamiDownloader {
     }
 
     public String storageLabel(String chapterId, int expectedPages) {
-        if (isRunning(chapterId)) return LABEL_RUNNING;
-        return isDownloaded(chapterId, expectedPages) ? LABEL_SAVED : LABEL_NOT_SAVED;
+        if (isDownloaded(chapterId, expectedPages)) return LABEL_SAVED;
+        int state = ShinigamiDownloadStatus.state(chapterId);
+        if (state == ShinigamiDownloadStatus.FAILED
+                || state == ShinigamiDownloadStatus.CANCELLED
+                || state == ShinigamiDownloadStatus.PARTIAL) return LABEL_FAILED;
+        if (state == ShinigamiDownloadStatus.QUEUED
+                || state == ShinigamiDownloadStatus.DOWNLOADING
+                || state == ShinigamiDownloadStatus.VERIFYING
+                || isRunning(chapterId)) {
+            int percent = ShinigamiDownloadStatus.percent(chapterId);
+            return percent > 0 ? "Mengunduh " + percent + "%" : LABEL_RUNNING;
+        }
+        return LABEL_NOT_SAVED;
     }
 
     public File pageFile(String chapterId, int index) {

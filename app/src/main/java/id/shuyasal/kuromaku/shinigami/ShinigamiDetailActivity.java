@@ -23,7 +23,9 @@ import com.bumptech.glide.Glide;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -67,6 +69,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private int chapterTotalPages = 1;
     private boolean loading;
 
+    private final Set<String> selected = new LinkedHashSet<>();
+    private LinearLayout selectionBar;
+    private TextView selectionCount;
+    private Button selectionDownload;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -85,9 +92,12 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         }
 
         buildUi();
+        ShinigamiDownloadStatus.addListener(downloadStateListener);
         loadDetail();
         loadChapters(1);
     }
+
+    private final ShinigamiDownloadStatus.Listener downloadStateListener = this::renderChapters;
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
@@ -172,6 +182,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         chapterList.setOrientation(LinearLayout.VERTICAL);
         chapterList.setTag("shinigami_chapter_list");
         body.addView(chapterList);
+
+        body.addView(buildSelectionBar());
 
         moreButton = Ui.chip(this, "Muat chapter berikutnya", palette);
         moreButton.setTag("shinigami_more_chapters");
@@ -329,6 +341,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     }
 
     private void renderChapters() {
+        if (chapterList == null) return;
         chapterList.removeAllViews();
         for (ShinigamiChapter chapter : chapters) {
             chapterList.addView(buildChapterRow(chapter));
@@ -339,40 +352,207 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             empty.setTag("shinigami_no_chapters");
             chapterList.addView(empty);
         }
+        if (selectionBar != null) {
+            boolean active = !selected.isEmpty();
+            selectionBar.setVisibility(active ? View.VISIBLE : View.GONE);
+            if (active) {
+                selectionCount.setText(selected.size() + " chapter dipilih");
+                selectionDownload.setText("Unduh " + selected.size() + " chapter");
+            }
+        }
     }
 
     private View buildChapterRow(ShinigamiChapter chapter) {
+        boolean picked = selected.contains(chapter.id);
+
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 8));
-        row.setBackground(Ui.rounded(palette.surface, palette.divider, 10, this));
+        row.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 10));
+        row.setBackground(Ui.rounded(palette.surface, picked ? palette.accent : palette.divider, 10, this));
         row.setTag("shinigami_chapter_" + chapter.id);
 
-        TextView label = Ui.label(this, chapter.label() + "\n"
-                + chapter.dateLabel(), 14, palette.text);
+        LinearLayout left = new LinearLayout(this);
+        left.setOrientation(LinearLayout.VERTICAL);
+
+        TextView label = Ui.label(this, chapter.label(), 14, palette.text);
         label.setTag("shinigami_chapter_label");
-        label.setMaxLines(4);
-        label.setPadding(Ui.dp(this, 12), Ui.dp(this, 6), Ui.dp(this, 6), Ui.dp(this, 6));
-        row.addView(label, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        label.setMaxLines(3);
+        left.addView(label);
+
+        TextView date = Ui.label(this, chapter.dateLabel(), 12, palette.muted);
+        date.setTag("shinigami_chapter_date");
+        date.setPadding(0, Ui.dp(this, 2), 0, 0);
+        left.addView(date);
 
         int progress = store.progress(chapter.id);
-        TextView state = Ui.label(this, progress > 0 ? progress + "%" : "", 12,
-                progress > 0 ? palette.accent : palette.muted);
-        state.setTag("shinigami_chapter_progress");
-        state.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 6), 0);
-        row.addView(state);
+        String readLabel = ShinigamiChapterProgress.readLabel(progress);
+        TextView readState = Ui.label(this, readLabel, 12,
+                progress >= 100 ? palette.muted : palette.accent);
+        readState.setTag("shinigami_chapter_progress");
+        readState.setPadding(0, Ui.dp(this, 4), 0, 0);
+        readState.setVisibility(readLabel.isEmpty() ? View.GONE : View.VISIBLE);
+        left.addView(readState);
 
-        Button download = Ui.chip(this, downloader.storageLabel(chapter.id,
-                store.expectedPages(chapter.id)), palette);
-        download.setTag("shinigami_chapter_download");
-        download.setAlpha(0.6f);
-        download.setOnClickListener(v -> explainDownloadUnavailable());
-        row.addView(download);
+        row.addView(left, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        row.setOnClickListener(v -> openChapter(chapter));
+        LinearLayout right = new LinearLayout(this);
+        right.setOrientation(LinearLayout.VERTICAL);
+        right.setGravity(Gravity.END);
+        right.setPadding(Ui.dp(this, 8), 0, 0, 0);
+
+        String status = downloader.storageLabel(chapter.id, store.expectedPages(chapter.id));
+        TextView downloadState = Ui.label(this, status, 12, downloadStateColor(status));
+        downloadState.setTag("shinigami_chapter_download_status");
+        downloadState.setGravity(Gravity.END);
+        downloadState.setSingleLine(true);
+        downloadState.setEllipsize(TextUtils.TruncateAt.END);
+        right.addView(downloadState);
+
+        String actionLabel = downloadActionLabel(status);
+        Button action = Ui.chip(this, actionLabel, palette);
+        action.setTag("shinigami_chapter_download");
+        action.setContentDescription(actionLabel + ": " + chapter.label());
+        action.setOnClickListener(v -> onDownloadAction(chapter, status));
+        action.setOnLongClickListener(v -> {
+            toggleSelection(chapter.id);
+            return true;
+        });
+        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        actionParams.topMargin = Ui.dp(this, 6);
+        right.addView(action, actionParams);
+
+        row.addView(right, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        row.setOnClickListener(v -> {
+            if (selected.isEmpty()) openChapter(chapter);
+            else toggleSelection(chapter.id);
+        });
+        row.setOnLongClickListener(v -> {
+            toggleSelection(chapter.id);
+            return true;
+        });
         return row;
+    }
+
+    private View buildSelectionBar() {
+        selectionBar = new LinearLayout(this);
+        selectionBar.setOrientation(LinearLayout.HORIZONTAL);
+        selectionBar.setGravity(Gravity.CENTER_VERTICAL);
+        selectionBar.setTag("shinigami_selection_bar");
+        selectionBar.setVisibility(View.GONE);
+        selectionBar.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
+        selectionBar.setBackground(Ui.rounded(palette.surface, palette.divider, 10, this));
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        barParams.topMargin = Ui.dp(this, 10);
+        selectionBar.setLayoutParams(barParams);
+
+        selectionCount = Ui.label(this, "", 13, palette.text);
+        selectionCount.setTag("shinigami_selection_count");
+        selectionBar.addView(selectionCount, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        Button cancel = Ui.chip(this, "Batal", palette);
+        cancel.setTag("shinigami_selection_cancel");
+        cancel.setOnClickListener(v -> {
+            selected.clear();
+            renderChapters();
+        });
+        selectionBar.addView(cancel);
+
+        selectionDownload = Ui.chip(this, "Unduh", palette);
+        selectionDownload.setTag("shinigami_selection_download");
+        selectionDownload.setOnClickListener(v -> downloadSelected());
+        LinearLayout.LayoutParams downloadParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        downloadParams.leftMargin = Ui.dp(this, 6);
+        selectionBar.addView(selectionDownload, downloadParams);
+        return selectionBar;
+    }
+
+    private void toggleSelection(String chapterId) {
+        if (chapterId == null || chapterId.isEmpty()) return;
+        if (!selected.remove(chapterId)) selected.add(chapterId);
+        renderChapters();
+    }
+
+    private void downloadSelected() {
+        if (selected.isEmpty()) return;
+        if (!ShinigamiDownloadPolicy.allowed(this)) {
+            explainDownloadUnavailable();
+            return;
+        }
+        int queued = ShinigamiDownloadQueue.enqueueChapters(this, mangaId, title,
+                new ArrayList<>(selected));
+        selected.clear();
+        renderChapters();
+        Toast.makeText(this, queued == 0
+                ? "Chapter terpilih sudah tersimpan offline."
+                : "Mengunduh " + queued + " chapter.", Toast.LENGTH_SHORT).show();
+    }
+
+    private void onDownloadAction(ShinigamiChapter chapter, String status) {
+        int expectedPages = store.expectedPages(chapter.id);
+        if (downloader.isDownloaded(chapter.id, expectedPages)) {
+            confirmDelete(chapter);
+            return;
+        }
+        int state = ShinigamiDownloadStatus.state(chapter.id);
+        boolean running = state == ShinigamiDownloadStatus.QUEUED
+                || state == ShinigamiDownloadStatus.DOWNLOADING
+                || state == ShinigamiDownloadStatus.VERIFYING
+                || downloader.isRunning(chapter.id);
+        if (running) {
+            ShinigamiDownloadQueue.cancelChapter(this, chapter.id);
+            Toast.makeText(this, "Unduhan dihentikan. Halaman yang sudah lengkap tetap tersimpan.",
+                    Toast.LENGTH_SHORT).show();
+            renderChapters();
+            return;
+        }
+        if (!ShinigamiDownloadPolicy.allowed(this)) {
+            explainDownloadUnavailable();
+            return;
+        }
+        if (state == ShinigamiDownloadStatus.FAILED) {
+            ShinigamiDownloadQueue.retryChapter(this, mangaId, title, chapter.id);
+        } else {
+            ShinigamiDownloadQueue.enqueueChapter(this, chapter.id);
+        }
+        renderChapters();
+    }
+
+    private void confirmDelete(ShinigamiChapter chapter) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Hapus unduhan")
+                .setMessage("Hapus file offline " + chapter.label() + "?\n\n"
+                        + "Progres membaca tidak ikut terhapus, jadi chapter ini tetap tercatat "
+                        + "di riwayat dan kembali dibaca dari posisi terakhir.")
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Hapus", (dialog, which) -> {
+                    ShinigamiDownloadQueue.deleteChapter(this, chapter.id);
+                    renderChapters();
+                    Toast.makeText(this, "Unduhan dihapus. Progres membaca tetap tersimpan.",
+                            Toast.LENGTH_SHORT).show();
+                })
+                .show();
+    }
+
+    static String downloadActionLabel(String status) {
+        if (ShinigamiDownloader.LABEL_SAVED.equals(status)) return "Hapus";
+        if (ShinigamiDownloader.LABEL_FAILED.equals(status)) return "Ulangi";
+        if (status != null && status.startsWith("Mengunduh")) return "Batal";
+        return "Unduh";
+    }
+
+    private int downloadStateColor(String status) {
+        if (ShinigamiDownloader.LABEL_SAVED.equals(status)) return palette.accent;
+        if (ShinigamiDownloader.LABEL_FAILED.equals(status)) return Color.rgb(190, 60, 60);
+        if (status != null && status.startsWith("Mengunduh")) return palette.accent;
+        return palette.muted;
     }
 
     private void openChapter(ShinigamiChapter chapter) {
@@ -386,15 +566,10 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    static final String DOWNLOAD_UNAVAILABLE =
-            "Unduhan offline Shinigami dinonaktifkan. Sumber belum menyatakan izin "
-            + "pengambilan konten untuk reader pihak ketiga, jadi aplikasi tidak menyimpan "
-            + "gambar chapter secara permanen. Chapter tetap dapat dibaca secara online.";
-
     private void explainDownloadUnavailable() {
         new android.app.AlertDialog.Builder(this)
                 .setTitle("Unduhan tidak tersedia")
-                .setMessage(DOWNLOAD_UNAVAILABLE)
+                .setMessage(ShinigamiDownloadPolicy.blockedMessage())
                 .setPositiveButton("Tutup", null)
                 .show();
     }
@@ -432,6 +607,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        ShinigamiDownloadStatus.removeListener(downloadStateListener);
         worker.shutdownNow();
         super.onDestroy();
     }

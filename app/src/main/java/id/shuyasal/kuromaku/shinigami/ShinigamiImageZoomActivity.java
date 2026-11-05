@@ -59,10 +59,12 @@ public class ShinigamiImageZoomActivity extends AppCompatActivity {
     }
     private void load() {
         if(target!=null) Glide.with(this).clear(target);
-        if(!ShinigamiConfig.isValidResource(url)) { failure("Alamat gambar tidak valid atau bukan HTTPS."); return; }
-        image.setVisibility(View.INVISIBLE); loading.setVisibility(View.VISIBLE); error.setVisibility(View.GONE);
         String chapter=getIntent().getStringExtra("chapter_id");
         File local=new ShinigamiDownloader(this).pageFile(chapter,getIntent().getIntExtra("page",-1));
+        if(local==null && !ShinigamiConfig.isValidResource(url)) {
+            failure("Alamat gambar tidak valid atau bukan HTTPS."); return;
+        }
+        image.setVisibility(View.INVISIBLE); loading.setVisibility(View.VISIBLE); error.setVisibility(View.GONE);
         Object model=local!=null ? local : new ShinigamiImageRequest(url,new ShinigamiConfig(this).siteBase());
         target=new CustomTarget<Bitmap>(1080,8192) {
             @Override public void onResourceReady(Bitmap bitmap,Transition<? super Bitmap> transition) {

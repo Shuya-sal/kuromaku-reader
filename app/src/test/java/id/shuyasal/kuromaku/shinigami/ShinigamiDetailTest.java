@@ -78,8 +78,8 @@ public class ShinigamiDetailTest {
         try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
             Detail detail = controller.get(); await(detail);
             LinearLayout list = (LinearLayout) tagged(detail, "shinigami_chapter_list");
-            TextView label = list.getChildAt(0).findViewWithTag("shinigami_chapter_label");
-            assertTrue(label.getText().toString(), label.getText().toString().contains("Rilis: 2026-11-05 10:24"));
+            TextView date = list.getChildAt(0).findViewWithTag("shinigami_chapter_date");
+            assertTrue(date.getText().toString(), date.getText().toString().contains("Rilis: 2026-11-05 10:24"));
         } finally {
             java.util.TimeZone.setDefault(previous);
         }
@@ -110,8 +110,8 @@ public class ShinigamiDetailTest {
         try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
             Detail detail = controller.get(); await(detail);
             LinearLayout list = (LinearLayout) tagged(detail, "shinigami_chapter_list");
-            TextView label = list.getChildAt(0).findViewWithTag("shinigami_chapter_label");
-            assertTrue(label.getText().toString(), label.getText().toString().contains("Diperbarui: 2026-11-05 03:39"));
+            TextView date = list.getChildAt(0).findViewWithTag("shinigami_chapter_date");
+            assertTrue(date.getText().toString(), date.getText().toString().contains("Diperbarui: 2026-11-05 03:39"));
         } finally { java.util.TimeZone.setDefault(previous); }
     }
 
@@ -126,12 +126,19 @@ public class ShinigamiDetailTest {
         try (ActivityController<Detail> controller = Robolectric.buildActivity(Detail.class, intent()).setup()) {
             Detail detail = controller.get(); await(detail);
             View row = tagged(detail, "shinigami_chapter_" + id);
-            assertEquals("100%", ((TextView) row.findViewWithTag("shinigami_chapter_progress")).getText().toString());
-            assertEquals("Belum diunduh", ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
+            assertEquals("Selesai",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_progress")).getText().toString());
+            assertEquals("Belum diunduh",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_download_status")).getText().toString());
+            assertEquals("Unduh",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
             downloader.setRunning(id, true);
             controller.pause().resume();
             row = tagged(detail, "shinigami_chapter_" + id);
-            assertEquals("Mengunduh...", ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
+            assertEquals("Mengunduh...",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_download_status")).getText().toString());
+            assertEquals("Batal",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
             downloader.setRunning(id, false);
             downloader.chapterDir(id).mkdirs();
             try (java.io.FileOutputStream output = new java.io.FileOutputStream(new java.io.File(downloader.chapterDir(id), "0.img"))) {
@@ -140,7 +147,10 @@ public class ShinigamiDetailTest {
             }
             controller.pause().resume();
             row = tagged(detail, "shinigami_chapter_" + id);
-            assertEquals("Tersimpan offline", ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
+            assertEquals("Tersimpan offline",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_download_status")).getText().toString());
+            assertEquals("Hapus",
+                    ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
         } finally { downloader.setRunning(id, false); downloader.deleteChapter(id); }
     }
 
