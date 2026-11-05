@@ -1,0 +1,180 @@
+package id.shuyasal.kuromaku;
+
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
+import android.text.TextUtils;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
+import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
+import id.shuyasal.kuromaku.ui.Palette;
+import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.Ui;
+
+/**
+ * Halaman awal aplikasi: pemilih sumber bacaan.
+ *
+ * <p>Tiga kartu menuju Novel, Manga Voratoon, dan Manga Shinigami. Halaman ini
+ * hanya pintu masuk — tidak mengubah tampilan maupun data ketiga sumber.
+ * Latar memakai gambar lokal dengan {@code centerCrop} dan lapisan gelap agar
+ * teks tetap terbaca di mode terang maupun gelap.
+ */
+public class SourceHubActivity extends AppCompatActivity {
+
+    private Palette palette;
+
+    @Override protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        palette = Palette.of(new Prefs(this).theme());
+
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(palette.background);
+
+        ImageView background = new ImageView(this);
+        background.setTag("source_hub_background");
+        background.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        background.setImageResource(R.drawable.source_hub_background);
+        background.setContentDescription(getString(R.string.source_hub_background_description));
+        root.addView(background, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Lapisan gelap: gambar tetap terlihat, teks tetap kontras.
+        View scrim = new View(this);
+        scrim.setTag("source_hub_scrim");
+        GradientDrawable shade = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0xF2111318, 0xCC111318, 0xE6111318});
+        scrim.setBackground(shade);
+        root.addView(scrim, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setTag("source_hub_scroll");
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(Ui.dp(this, 20), Ui.dp(this, 28), Ui.dp(this, 20), Ui.dp(this, 28));
+
+        TextView eyebrow = Ui.label(this, getString(R.string.source_hub_eyebrow), 12, 0xCCE4E2DE);
+        eyebrow.setLetterSpacing(0.18f);
+        eyebrow.setTypeface(Typeface.DEFAULT_BOLD);
+        eyebrow.setTag("source_hub_eyebrow");
+        content.addView(eyebrow);
+
+        TextView title = Ui.label(this, getString(R.string.source_hub_title), 26, Color.WHITE);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setPadding(0, Ui.dp(this, 6), 0, 0);
+        title.setTag("source_hub_title");
+        content.addView(title);
+
+        TextView subtitle = Ui.label(this, getString(R.string.source_hub_subtitle), 13, 0xCCE4E2DE);
+        subtitle.setPadding(0, Ui.dp(this, 8), 0, 0);
+        content.addView(subtitle);
+
+        LinearLayout cards = new LinearLayout(this);
+        cards.setOrientation(LinearLayout.VERTICAL);
+        cards.setPadding(0, Ui.dp(this, 24), 0, 0);
+
+        cards.addView(card(R.string.source_novel, R.string.source_novel_note, "K", 0xFF7C5CFF,
+                "source_hub_card_novel", () -> open(MainActivity.class)));
+        cards.addView(card(R.string.source_voratoon, R.string.source_voratoon_note, "V", 0xFF1FA2A6,
+                "source_hub_card_voratoon", () -> open(MangaActivity.class)));
+        cards.addView(card(R.string.source_shinigami, R.string.source_shinigami_note, "S", 0xFFC2453F,
+                "source_hub_card_shinigami", () -> open(ShinigamiActivity.class)));
+
+        content.addView(cards);
+
+        TextView footer = Ui.label(this, getString(R.string.source_hub_footer), 11, 0x99E4E2DE);
+        footer.setGravity(Gravity.CENTER);
+        footer.setPadding(0, Ui.dp(this, 28), 0, 0);
+        content.addView(footer);
+
+        scroll.addView(content, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(scroll, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(0, 0, 0, 0);
+            scroll.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return insets;
+        });
+
+        setContentView(root);
+    }
+
+    private void open(Class<?> target) {
+        // SINGLE_TOP + CLEAR_TOP: berpindah sumber tidak menumpuk activity.
+        startActivity(new Intent(this, target)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+    }
+
+    private View card(int titleRes, int noteRes, String monogram, int accent,
+                      String tag, Runnable action) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setMinimumHeight(Ui.dp(this, 88));
+        card.setPadding(Ui.dp(this, 14), Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14));
+        card.setBackground(Ui.ripple(this, palette.surface, palette.divider, 18,
+                Ui.defaultRipple(palette)));
+        card.setElevation(Ui.dp(this, 3));
+        card.setTag(tag);
+        card.setContentDescription(getString(titleRes));
+        card.setOnClickListener(v -> action.run());
+
+        TextView badge = Ui.label(this, monogram, 20, Color.WHITE);
+        badge.setTypeface(Typeface.DEFAULT_BOLD);
+        badge.setGravity(Gravity.CENTER);
+        badge.setBackground(Ui.rounded(accent, accent, 14, this));
+        card.addView(badge, new LinearLayout.LayoutParams(
+                Ui.dp(this, 52), Ui.dp(this, 52)));
+
+        LinearLayout text = new LinearLayout(this);
+        text.setOrientation(LinearLayout.VERTICAL);
+        text.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 8), 0);
+
+        TextView name = Ui.label(this, getString(titleRes), 16, palette.text);
+        name.setTypeface(Typeface.DEFAULT_BOLD);
+        name.setMaxLines(1);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        text.addView(name);
+
+        TextView note = Ui.label(this, getString(noteRes), 12, palette.muted);
+        note.setMaxLines(2);
+        note.setEllipsize(TextUtils.TruncateAt.END);
+        note.setPadding(0, Ui.dp(this, 3), 0, 0);
+        text.addView(note);
+
+        card.addView(text, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        ImageView chevron = new ImageView(this);
+        chevron.setImageDrawable(Ui.tinted(this, R.drawable.ic_chevron_right, palette.muted));
+        chevron.setContentDescription(getString(R.string.source_hub_open));
+        card.addView(chevron, new LinearLayout.LayoutParams(
+                Ui.dp(this, 24), Ui.dp(this, 24)));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = Ui.dp(this, 12);
+        card.setLayoutParams(params);
+        return card;
+    }
+}

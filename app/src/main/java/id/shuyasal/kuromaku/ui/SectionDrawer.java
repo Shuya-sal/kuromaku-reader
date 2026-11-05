@@ -32,6 +32,10 @@ public final class SectionDrawer {
         void onShinigami();
         void onBackup();
         void onRestore();
+
+        /** Kembali ke halaman pemilih sumber. Implementasi boleh diabaikan. */
+        default void onHome() {
+        }
     }
 
     private SectionDrawer() {}
@@ -83,6 +87,12 @@ public final class SectionDrawer {
 
         TextView heading = Ui.label(activity, "Kuromaku Reader", 21, palette.text);
         panel.addView(heading);
+
+        addDrawerItem(activity, panel, activity.getString(
+                id.shuyasal.kuromaku.R.string.home), "drawer_home", false, palette, () -> {
+            drawer.dismiss();
+            if (listener != null) listener.onHome();
+        });
 
         String novelLabel = currentSection == Section.NOVEL ? "Novel  ✓" : "Novel";
         addDrawerItem(activity, panel, novelLabel, "drawer_novel", currentSection == Section.NOVEL, palette, () -> {

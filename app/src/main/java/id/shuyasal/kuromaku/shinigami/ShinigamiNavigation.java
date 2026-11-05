@@ -17,6 +17,15 @@ public final class ShinigamiNavigation {
         return SectionDrawer.show(activity, SectionDrawer.Section.MANGA_SHINIGAMI, palette,
                 new SectionDrawer.Listener() {
                     @Override
+                    public void onHome() {
+                        activity.startActivity(new Intent(activity,
+                                id.shuyasal.kuromaku.SourceHubActivity.class)
+                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                        activity.finish();
+                    }
+
+                    @Override
                     public void onNovel() {
                         activity.startActivity(new Intent(activity, MainActivity.class));
                         activity.finish();

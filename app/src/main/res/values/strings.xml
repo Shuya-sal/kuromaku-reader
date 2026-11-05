@@ -3,4 +3,36 @@
     <string name="app_name">Kuromaku Reader</string>
     <string name="library">Perpustakaan</string>
     <string name="source_note">Konten milik Kaori Translation. Aplikasi ini hanya membuka dan merapikan tampilan; tidak menyimpan salinan novel.</string>
+
+    <string name="source_hub_eyebrow">KUROMAKU READER</string>
+    <string name="source_hub_title">Pilih sumber bacaan</string>
+    <string name="source_hub_subtitle">Tiga perpustakaan dalam satu aplikasi. Progres, bookmark, dan favorit tetap tersimpan per sumber.</string>
+    <string name="source_hub_footer">Ketuk kartu untuk mulai membaca</string>
+    <string name="source_hub_open">Buka sumber</string>
+    <string name="source_hub_background_description">Latar halaman pemilih sumber</string>
+
+    <string name="source_novel">Novel</string>
+    <string name="source_novel_note">Katalog novel Kaori Translation dengan progres per volume.</string>
+    <string name="source_voratoon">Manga Voratoon</string>
+    <string name="source_voratoon_note">Baca manga Voratoon langsung di dalam aplikasi.</string>
+    <string name="source_shinigami">Manga Shinigami</string>
+    <string name="source_shinigami_note">Baca manga Shinigami, lengkap dengan unduhan offline.</string>
+
+    <string name="home">Beranda</string>
+
+    <string name="shinigami_downloads_title">Unduhan</string>
+    <string name="shinigami_downloads_open">Buka unduhan</string>
+    <string name="shinigami_downloads_scanning">Memindai unduhan...</string>
+    <string name="shinigami_downloads_empty_title">Belum ada unduhan</string>
+    <string name="shinigami_downloads_empty_body">Buka manga, lalu tekan Unduh pada chapter untuk membacanya tanpa internet.</string>
+    <string name="shinigami_downloads_count">%1$d chapter offline</string>
+    <string name="shinigami_downloads_summary">%1$d manga - %2$d chapter - %3$s</string>
+    <string name="shinigami_downloads_continue">Lanjut membaca</string>
+    <string name="shinigami_downloads_delete_chapter">Hapus unduhan</string>
+    <string name="shinigami_downloads_delete_title">Hapus chapter offline?</string>
+    <string name="shinigami_downloads_delete_body">%1$s akan dihapus dari penyimpanan. Progres membaca dan riwayat tidak berubah.</string>
+    <string name="shinigami_downloads_delete_confirm">Hapus</string>
+    <string name="shinigami_downloads_cancel">Batal</string>
+    <string name="shinigami_downloads_deleted">Chapter offline dihapus</string>
+    <string name="shinigami_downloads_chapters">Chapter tersimpan</string>
 </resources>

@@ -317,6 +317,13 @@ public class MangaActivity extends AppCompatActivity {
         Palette palette = Palette.of(theme);
         SectionDrawer.show(this, SectionDrawer.Section.MANGA_VORATON, palette, new SectionDrawer.Listener() {
             @Override
+            public void onHome() {
+                startActivity(new Intent(MangaActivity.this, SourceHubActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                finish();
+            }
+
+            @Override
             public void onNovel() {
                 startActivity(new Intent(MangaActivity.this, MainActivity.class)
                         .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));

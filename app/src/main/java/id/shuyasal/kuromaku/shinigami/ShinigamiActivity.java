@@ -274,6 +274,15 @@ public class ShinigamiActivity extends AppCompatActivity {
         headingParams.leftMargin = Ui.dp(this, 8);
         header.addView(heading, headingParams);
 
+        android.widget.ImageButton downloads = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_download,
+                getString(id.shuyasal.kuromaku.R.string.shinigami_downloads_open), palette);
+        downloads.setTag("shinigami_downloads_button");
+        downloads.setOnClickListener(v -> startActivity(new android.content.Intent(
+                ShinigamiActivity.this, ShinigamiDownloadsActivity.class)));
+        header.addView(downloads, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
         android.widget.ImageButton settings = Ui.iconButton(this,
                 id.shuyasal.kuromaku.R.drawable.ic_settings, "Atur domain sumber", palette);
         settings.setTag("shinigami_settings");

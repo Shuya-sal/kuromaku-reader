@@ -359,6 +359,14 @@ public class MainActivity extends AppCompatActivity {
     private void showSectionDrawer() {
         SectionDrawer.show(this, SectionDrawer.Section.NOVEL, palette, new SectionDrawer.Listener() {
             @Override
+            public void onHome() {
+                // Beranda = Source Hub; CLEAR_TOP mencegah tumpukan activity.
+                startActivity(new Intent(MainActivity.this, SourceHubActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                finish();
+            }
+
+            @Override
             public void onNovel() {
                 showLibrary();
             }

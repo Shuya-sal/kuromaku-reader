@@ -146,4 +146,30 @@ public class ShinigamiCatalogTest {
                     .contains("Belum ada chapter tersimpan"));
         }
     }
+
+    @Test public void toolbarHasDownloadButtonBeforeSettings() throws Exception {
+        try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
+            Catalog host = controller.get(); await(host);
+            View downloads = tagged(host, "shinigami_downloads_button");
+            assertNotNull(downloads);
+            android.view.ViewGroup header = (android.view.ViewGroup) downloads.getParent();
+            int downloadIndex = header.indexOfChild(downloads);
+            int settingsIndex = -1;
+            for (int i = 0; i < header.getChildCount(); i++) {
+                CharSequence description = header.getChildAt(i).getContentDescription();
+                if (description != null && description.toString().contains("domain")) settingsIndex = i;
+            }
+            assertTrue("ikon settings harus ada", settingsIndex >= 0);
+            assertTrue("unduhan harus di kiri settings", downloadIndex < settingsIndex);
+            int minTouch = id.shuyasal.kuromaku.ui.Ui.dp(host, id.shuyasal.kuromaku.ui.Ui.TOUCH_DP);
+            assertTrue("touch target minimal 48dp",
+                    downloads.getLayoutParams().width >= minTouch);
+
+            downloads.performClick();
+            android.content.Intent started = Shadows.shadowOf(host).getNextStartedActivity();
+            assertNotNull(started);
+            assertEquals(ShinigamiDownloadsActivity.class.getName(),
+                    started.getComponent().getClassName());
+        }
+    }
 }
