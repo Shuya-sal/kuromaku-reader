@@ -38,6 +38,14 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     public static final String EXTRA_CHAPTER_NUMBER = "chapter_number";
     public static final String EXTRA_CHAPTER_TITLE = "chapter_title";
 
+    private static final String STATE_NOTICE_SHOWN = "reader_notice_shown";
+    private static final int MENU_QUALITY = 1;
+    private static final int MENU_FULLSCREEN = 2;
+    private static final int MENU_RELOAD = 3;
+    private static final int MENU_MAIN = 4;
+    /** Lama notifikasi offline terlihat (maksimal 3 detik). */
+    private static final long NOTICE_MS = 3000L;
+
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<String> pages = new ArrayList<>();
@@ -61,13 +69,16 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private TextView errorText;
     private Button retryButton;
     private TextView offlineNotice;
-    private Button qualityButton;
+    private TextView titleView;
     private ShinigamiPageCache cache;
     private ShinigamiQuality quality = ShinigamiQuality.AUTO;
     private boolean fullscreen;
     private boolean offlineChapter;
     private boolean progressReliable = true;
     private boolean positionReady;
+    /** Notifikasi offline hanya sekali per pembukaan chapter. */
+    private boolean noticeShown;
+    private final Runnable hideNotice = this::fadeOutNotice;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,6 +90,9 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         cache = new ShinigamiPageCache(this);
         quality = ShinigamiQuality.stored(this);
         ShinigamiImageRequest.register(this);
+
+        noticeShown = savedInstanceState != null
+                && savedInstanceState.getBoolean(STATE_NOTICE_SHOWN, false);
 
         mangaId = getIntent().getStringExtra(EXTRA_MANGA_ID);
         mangaTitle = getIntent().getStringExtra(EXTRA_MANGA_TITLE);
@@ -100,7 +114,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.BLACK);
+        root.setBackgroundColor(palette.background);
 
         bar = buildBar();
         root.addView(bar, new LinearLayout.LayoutParams(
@@ -109,7 +123,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         FrameLayout body = new FrameLayout(this);
         list = new RecyclerView(this);
         list.setTag("shinigami_reader_list");
-        list.setBackgroundColor(Color.BLACK);
+        list.setBackgroundColor(palette.background);
         adapter = new PageAdapter();
         list.setAdapter(adapter);
         LinearLayoutManager manager = new LinearLayoutManager(this);
@@ -148,14 +162,19 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.CENTER));
 
+        // Overlay kecil di bawah: tidak menyisakan ruang baca dan tidak
+        // menutupi bagian atas gambar.
         offlineNotice = Ui.label(this, "", 12, 0xFFFFE082);
         offlineNotice.setTag("shinigami_reader_offline_notice");
         offlineNotice.setVisibility(View.GONE);
-        offlineNotice.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
-        offlineNotice.setBackgroundColor(0xCC1A1A1A);
-        body.addView(offlineNotice, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP));
+        offlineNotice.setMaxLines(3);
+        offlineNotice.setPadding(Ui.dp(this, 14), Ui.dp(this, 9), Ui.dp(this, 14), Ui.dp(this, 9));
+        offlineNotice.setBackground(Ui.rounded(0xE6202020, 0x33FFFFFF, 16, this));
+        FrameLayout.LayoutParams noticeParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        noticeParams.setMargins(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 28));
+        body.addView(offlineNotice, noticeParams);
 
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -170,47 +189,149 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Toolbar responsif: empat aksi 48 dp + judul yang menyusut, tanpa satu pun
+     * tombol yang perlu digeser. Pengaturan kualitas pindah ke menu overflow.
+     */
     private LinearLayout buildBar() {
-        LinearLayout bar = new LinearLayout(this);
+        bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6));
-        bar.setBackgroundColor(0xFF1A1A1A);
+        bar.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4));
+        bar.setTag("shinigami_reader_bar");
+        // Warna toolbar mengikuti tema; mode terang tetap kontras untuk ikon.
+        bar.setBackgroundColor(palette.surface);
 
-        Button back = Ui.backButton(this, palette);
+        android.widget.ImageButton back = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_arrow_back, "Kembali", palette);
         back.setTag("shinigami_reader_back");
         back.setOnClickListener(v -> finish());
         bar.addView(back, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP)));
-
-        TextView heading = Ui.label(this,
-                ShinigamiManga.chapterLabel(chapterNumber, chapterTitle), 16, 0xFFEEEEEE);
-        heading.setSingleLine(true);
-        heading.setEllipsize(TextUtils.TruncateAt.END);
-        heading.setPadding(Ui.dp(this, 10), 0, 0, 0);
-        bar.addView(heading, new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-
-        android.widget.ImageButton menu = Ui.iconButton(this, id.shuyasal.kuromaku.R.drawable.ic_menu,
-                "Buka menu Novel dan Manga", palette);
-        menu.setTag("section_menu");
-        menu.setOnClickListener(v -> ShinigamiNavigation.showDrawer(this, palette, false));
-        bar.addView(menu, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
-        qualityButton = Ui.chip(this, "Kualitas: " + quality.label, palette);
-        qualityButton.setTag("shinigami_reader_quality");
-        qualityButton.setOnClickListener(v -> cycleQuality());
-        bar.addView(qualityButton);
+        titleView = Ui.label(this, shortTitle(), 15, palette.text);
+        titleView.setTag("shinigami_reader_title");
+        titleView.setSingleLine(true);
+        titleView.setEllipsize(TextUtils.TruncateAt.END);
+        titleView.setPadding(Ui.dp(this, 6), 0, Ui.dp(this, 2), 0);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+        titleParams.weight = 1f;
+        bar.addView(titleView, titleParams);
 
-        Button zoomButton = Ui.chip(this, "Layar penuh", palette);
-        zoomButton.setTag("shinigami_reader_fullscreen");
-        zoomButton.setOnClickListener(v -> toggleFullscreen());
-        bar.addView(zoomButton);
+        android.widget.ImageButton chapters = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_list, "Daftar chapter", palette);
+        chapters.setTag("shinigami_reader_chapters");
+        chapters.setOnClickListener(this::showChapterList);
+        bar.addView(chapters, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        android.widget.ImageButton zoom = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_fullscreen, "Layar penuh", palette);
+        zoom.setTag("shinigami_reader_fullscreen");
+        zoom.setOnClickListener(v -> toggleFullscreen());
+        bar.addView(zoom, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        android.widget.ImageButton more = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_more, "Menu lainnya", palette);
+        more.setTag("shinigami_reader_more");
+        more.setOnClickListener(this::showOverflow);
+        bar.addView(more, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         return bar;
     }
 
-    private void cycleQuality() {
+    /** "Ch. 399" — sengaja pendek supaya tidak mendorong tombol keluar layar. */
+    private String shortTitle() {
+        if (chapterNumber > 0) {
+            return "Ch. " + ShinigamiManga.formatNumber(chapterNumber);
+        }
+        return chapterTitle == null || chapterTitle.isEmpty() ? "Chapter" : chapterTitle;
+    }
+
+    private void showOverflow(View anchor) {
+        android.widget.PopupMenu menu = new android.widget.PopupMenu(this, anchor);
+        menu.getMenu().add(0, MENU_QUALITY, 0, "Kualitas: " + quality.label);
+        menu.getMenu().add(0, MENU_FULLSCREEN, 1,
+                fullscreen ? "Keluar layar penuh" : "Layar penuh");
+        menu.getMenu().add(0, MENU_RELOAD, 2, "Muat ulang chapter");
+        menu.getMenu().add(0, MENU_MAIN, 3, "Buka menu utama");
+        menu.setOnMenuItemClickListener(item -> {
+            switch (item.getItemId()) {
+                case MENU_QUALITY:
+                    cycleQuality(null);
+                    return true;
+                case MENU_FULLSCREEN:
+                    toggleFullscreen();
+                    return true;
+                case MENU_RELOAD:
+                    pages.clear();
+                    adapter.notifyDataSetChanged();
+                    loadPages();
+                    return true;
+                case MENU_MAIN:
+                    ShinigamiNavigation.showDrawer(this, palette, false);
+                    return true;
+                default:
+                    return false;
+            }
+        });
+        menu.show();
+    }
+
+    /** Daftar chapter dari sumber; kegagalan jaringan dilaporkan apa adanya. */
+    private void showChapterList(View anchor) {
+        Toast.makeText(this, "Memuat daftar chapter...", Toast.LENGTH_SHORT).show();
+        worker.execute(() -> {
+            List<ShinigamiChapter> found = new ArrayList<>();
+            String failure = null;
+            try {
+                ShinigamiSource.ChapterPage page = source.chapters(mangaId, 1);
+                if (page != null && page.items != null) found.addAll(page.items);
+            } catch (ShinigamiSource.SourceException error) {
+                failure = error.getMessage();
+            }
+            final List<ShinigamiChapter> items = found;
+            final String message = failure;
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (items.isEmpty()) {
+                    Toast.makeText(this, message == null || message.isEmpty()
+                            ? "Daftar chapter tidak tersedia saat offline."
+                            : message, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String[] labels = new String[items.size()];
+                for (int index = 0; index < items.size(); index++) {
+                    labels[index] = ShinigamiManga.chapterLabel(
+                            items.get(index).number, items.get(index).title);
+                }
+                new android.app.AlertDialog.Builder(this)
+                        .setTitle("Daftar chapter")
+                        .setItems(labels, (dialog, which) -> openChapter(items.get(which)))
+                        .setNegativeButton("Tutup", null)
+                        .show();
+            });
+        });
+    }
+
+    /** Pindah chapter tanpa menumpuk activity: pakai ulang activity ini. */
+    private void openChapter(ShinigamiChapter chapter) {
+        Intent next = new Intent(this, getClass());
+        next.putExtra(EXTRA_MANGA_ID, mangaId);
+        next.putExtra(EXTRA_MANGA_TITLE, mangaTitle);
+        next.putExtra(EXTRA_MANGA_COVER, mangaCover);
+        next.putExtra(EXTRA_CHAPTER_ID, chapter.id);
+        next.putExtra(EXTRA_CHAPTER_NUMBER, chapter.number);
+        next.putExtra(EXTRA_CHAPTER_TITLE, chapter.title);
+        next.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        startActivity(next);
+        overridePendingTransition(0, 0);
+        finish();
+    }
+
+    private void cycleQuality(View anchor) {
         ShinigamiQuality[] modes = ShinigamiQuality.values();
         String[] items = new String[modes.length];
         int checked = 0;
@@ -223,7 +344,6 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 .setSingleChoiceItems(items, checked, (dialog, which) -> {
                     quality = modes[which];
                     quality.save(this);
-                    qualityButton.setText("Kualitas: " + quality.label);
                     Toast.makeText(this, quality.summary(pageSourceWidth()), Toast.LENGTH_LONG).show();
                     if (adapter != null) adapter.notifyDataSetChanged();
                     dialog.dismiss();
@@ -309,11 +429,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 statusText.setVisibility(View.GONE);
                 progressReliable = !cached;
                 if (cached) {
-                    offlineNotice.setText("Koneksi bermasalah. Chapter ini belum tersimpan "
-                            + "lengkap, jadi sebagian gambar mungkin belum bisa dibuka offline.");
-                    offlineNotice.setVisibility(View.VISIBLE);
-                } else {
-                    offlineNotice.setVisibility(View.GONE);
+                    showNoticeOnce("Koneksi bermasalah. Chapter ini belum tersimpan lengkap, "
+                            + "jadi sebagian gambar mungkin belum bisa dibuka offline.");
                 }
                 recordOpen();
                 restorePosition();
@@ -334,13 +451,11 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         statusText.setVisibility(View.GONE);
         errorText.setVisibility(View.GONE);
         retryButton.setVisibility(View.GONE);
-        offlineNotice.setText("Dibaca dari penyimpanan offline. Tidak perlu koneksi internet.");
-        offlineNotice.setVisibility(View.VISIBLE);
+        showNoticeOnce("Dibaca dari penyimpanan offline. Tidak perlu koneksi internet.");
         progressReliable = true;
         adapter.notifyDataSetChanged();
         recordOpen();
         restorePosition();
-        Toast.makeText(this, "Dibaca dari penyimpanan offline.", Toast.LENGTH_SHORT).show();
     }
 
     private static String offlineMessage() {
@@ -377,6 +492,44 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         store.setProgress(chapterId, percent);
     }
 
+    /** Tampilkan sekali per pembukaan chapter, lalu hilang sendiri. */
+    private void showNoticeOnce(String text) {
+        if (offlineNotice == null) return;
+        if (noticeShown) {
+            if (offlineNotice.getVisibility() != View.VISIBLE) offlineNotice.setVisibility(View.GONE);
+            return;
+        }
+        noticeShown = true;
+        offlineNotice.setText(text);
+        offlineNotice.animate().cancel();
+        offlineNotice.setAlpha(1f);
+        offlineNotice.setVisibility(View.VISIBLE);
+        // Satu timer saja: timer lama dibatalkan supaya tidak ada fade ganda.
+        main.removeCallbacks(hideNotice);
+        main.postDelayed(hideNotice, NOTICE_MS);
+    }
+
+    private void fadeOutNotice() {
+        if (offlineNotice == null || offlineNotice.getVisibility() != View.VISIBLE) return;
+        offlineNotice.animate().alpha(0f).setDuration(220)
+                .withEndAction(() -> {
+                    if (offlineNotice != null) offlineNotice.setVisibility(View.GONE);
+                })
+                .start();
+    }
+
+    /** Timer & animasi dibatalkan saat activity berhenti agar tidak bocor. */
+    private void cancelNotice() {
+        main.removeCallbacks(hideNotice);
+        if (offlineNotice != null) offlineNotice.animate().cancel();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putBoolean(STATE_NOTICE_SHOWN, noticeShown);
+    }
+
     protected ShinigamiSource createSource() {
         return new ShinigamiSource(this);
     }
@@ -394,10 +547,13 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     protected void onPause() {
         super.onPause();
         saveProgress();
+        // Timer/animasi notifikasi dibatalkan saat activity tidak terlihat.
+        cancelNotice();
     }
 
     @Override
     protected void onDestroy() {
+        cancelNotice();
         worker.shutdownNow();
         super.onDestroy();
     }
@@ -463,6 +619,13 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 holder.cell.showFailure("Alamat gambar halaman " + (position + 1) + " tidak dikenal.");
                 return;
             }
+            // Perbaikan gambar hitam: cache halaman (online) dicek sebelum jaringan,
+            // jadi menggulir balik tidak pernah memicu unduhan ulang.
+            File cached = cache.file(url);
+            if (cached != null) {
+                holder.cell.showFile(cached, quality);
+                return;
+            }
             final String referer = source.config().siteBase() + "/";
             worker.execute(() -> {
                 File file = null;
@@ -491,9 +654,13 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         }
 
         @Override public void onViewRecycled(Holder holder) {
+            // Perbaikan gambar hitam: state dibersihkan agar rebinding selalu memuat
+            // ulang dari berkas (offline/cache), bukan mewarisi tampilan holder lama.
             holder.generation++;
             holder.bound = -1;
-            holder.cell.showLoading();
+            // Bitmap dan decoder di TiledSurface sengaja TIDAK dibersihkan di sini;
+            // showLoading() menutup permukaan, dan load() berikutnya membuka ulang
+            // decoder dari berkas yang sama (murah, file-based).
             super.onViewRecycled(holder);
         }
         @Override public int getItemCount() { return pages.size(); }

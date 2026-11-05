@@ -80,6 +80,17 @@ public final class Prefs {
         return night ? THEME_DARK : THEME_LIGHT;
     }
 
+    /** Urutan chapter manga: 0 = Terbaru dulu (default), 1 = Terlama dulu. */
+    private static final String KEY_CHAPTER_SORT = "shinigami_chapter_sort";
+
+    public int chapterSortOrder() {
+        return prefs.getInt(KEY_CHAPTER_SORT, 0);
+    }
+
+    public void setChapterSortOrder(int order) {
+        prefs.edit().putInt(KEY_CHAPTER_SORT, order == 1 ? 1 : 0).apply();
+    }
+
     public int fontSize() {
         return prefs.getInt(KEY_FONT, 18);
     }

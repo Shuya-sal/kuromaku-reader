@@ -160,7 +160,7 @@ public class ShinigamiCatalogTest {
             int settingsIndex = -1;
             for (int i = 0; i < header.getChildCount(); i++) {
                 CharSequence description = header.getChildAt(i).getContentDescription();
-                if (description != null && description.toString().contains("domain")) settingsIndex = i;
+                if (description != null && description.toString().contains("Pengaturan")) settingsIndex = i;
             }
             assertTrue("ikon settings harus ada", settingsIndex >= 0);
             assertTrue("unduhan harus di kiri settings", downloadIndex < settingsIndex);

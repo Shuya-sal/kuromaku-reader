@@ -21,6 +21,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
+import id.shuyasal.kuromaku.ui.GlassCard;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.Ui;
@@ -36,6 +37,7 @@ import id.shuyasal.kuromaku.ui.Ui;
 public class SourceHubActivity extends AppCompatActivity {
 
     private Palette palette;
+    private ImageView background;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -44,7 +46,7 @@ public class SourceHubActivity extends AppCompatActivity {
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(palette.background);
 
-        ImageView background = new ImageView(this);
+        background = new ImageView(this);
         background.setTag("source_hub_background");
         background.setScaleType(ImageView.ScaleType.CENTER_CROP);
         background.setImageResource(R.drawable.source_hub_background);
@@ -57,7 +59,7 @@ public class SourceHubActivity extends AppCompatActivity {
         scrim.setTag("source_hub_scrim");
         GradientDrawable shade = new GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0xF2111318, 0xCC111318, 0xE6111318});
+                new int[]{0xB3111318, 0x73111318, 0xC7111318});
         scrim.setBackground(shade);
         root.addView(scrim, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -89,11 +91,14 @@ public class SourceHubActivity extends AppCompatActivity {
         cards.setOrientation(LinearLayout.VERTICAL);
         cards.setPadding(0, Ui.dp(this, 24), 0, 0);
 
-        cards.addView(card(R.string.source_novel, R.string.source_novel_note, "K", 0xFF7C5CFF,
+        cards.addView(card(R.string.source_novel, R.string.source_novel_note,
+                R.drawable.ic_book, 0xFF7C5CFF,
                 "source_hub_card_novel", () -> open(MainActivity.class)));
-        cards.addView(card(R.string.source_voratoon, R.string.source_voratoon_note, "V", 0xFF1FA2A6,
+        cards.addView(card(R.string.source_voratoon, R.string.source_voratoon_note,
+                R.drawable.ic_panels, 0xFF1FA2A6,
                 "source_hub_card_voratoon", () -> open(MangaActivity.class)));
-        cards.addView(card(R.string.source_shinigami, R.string.source_shinigami_note, "S", 0xFFC2453F,
+        cards.addView(card(R.string.source_shinigami, R.string.source_shinigami_note,
+                R.drawable.ic_moon, 0xFFC2453F,
                 "source_hub_card_shinigami", () -> open(ShinigamiActivity.class)));
 
         content.addView(cards);
@@ -125,51 +130,64 @@ public class SourceHubActivity extends AppCompatActivity {
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
     }
 
-    private View card(int titleRes, int noteRes, String monogram, int accent,
+    private View card(int titleRes, int noteRes, int iconRes, int accent,
                       String tag, Runnable action) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setGravity(Gravity.CENTER_VERTICAL);
-        card.setMinimumHeight(Ui.dp(this, 88));
-        card.setPadding(Ui.dp(this, 14), Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14));
-        card.setBackground(Ui.ripple(this, palette.surface, palette.divider, 18,
-                Ui.defaultRipple(palette)));
-        card.setElevation(Ui.dp(this, 3));
+        // Kartu kaca: latar semi-transparan + salinan ilustrasi yang diburamkan.
+        GlassCard card = new GlassCard(this, palette, "source_hub_background");
+        card.setBackgroundView(background);
         card.setTag(tag);
         card.setContentDescription(getString(titleRes));
         card.setOnClickListener(v -> action.run());
+        card.setMinimumHeight(Ui.dp(this, 92));
 
-        TextView badge = Ui.label(this, monogram, 20, Color.WHITE);
-        badge.setTypeface(Typeface.DEFAULT_BOLD);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(Ui.rounded(accent, accent, 14, this));
-        card.addView(badge, new LinearLayout.LayoutParams(
-                Ui.dp(this, 52), Ui.dp(this, 52)));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(Ui.dp(this, 14), Ui.dp(this, 14), Ui.dp(this, 12), Ui.dp(this, 14));
+
+        ImageView badge = new ImageView(this);
+        badge.setImageDrawable(Ui.tinted(this, iconRes, Color.WHITE));
+        badge.setBackground(Ui.rounded(accent, 0x40FFFFFF, 14, this));
+        badge.setPadding(Ui.dp(this, 13), Ui.dp(this, 13), Ui.dp(this, 13), Ui.dp(this, 13));
+        badge.setContentDescription(getString(titleRes));
+        row.addView(badge, new LinearLayout.LayoutParams(
+                Ui.dp(this, 48), Ui.dp(this, 48)));
 
         LinearLayout text = new LinearLayout(this);
         text.setOrientation(LinearLayout.VERTICAL);
         text.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 8), 0);
 
-        TextView name = Ui.label(this, getString(titleRes), 16, palette.text);
+        // Kaca selalu gelap sehingga teks putih tetap kontras di kedua tema.
+        int textColor = 0xFFF7F5F3;
+        int noteColor = 0xD9F7F5F3;
+
+        TextView name = Ui.label(this, getString(titleRes), 16, textColor);
         name.setTypeface(Typeface.DEFAULT_BOLD);
         name.setMaxLines(1);
         name.setEllipsize(TextUtils.TruncateAt.END);
         text.addView(name);
 
-        TextView note = Ui.label(this, getString(noteRes), 12, palette.muted);
+        TextView note = Ui.label(this, getString(noteRes), 12, noteColor);
         note.setMaxLines(2);
         note.setEllipsize(TextUtils.TruncateAt.END);
         note.setPadding(0, Ui.dp(this, 3), 0, 0);
         text.addView(note);
 
-        card.addView(text, new LinearLayout.LayoutParams(0,
+        row.addView(text, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         ImageView chevron = new ImageView(this);
-        chevron.setImageDrawable(Ui.tinted(this, R.drawable.ic_chevron_right, palette.muted));
+        chevron.setImageDrawable(Ui.tinted(this, R.drawable.ic_chevron_right, 0xCCF7F5F3));
         chevron.setContentDescription(getString(R.string.source_hub_open));
-        card.addView(chevron, new LinearLayout.LayoutParams(
+        row.addView(chevron, new LinearLayout.LayoutParams(
                 Ui.dp(this, 24), Ui.dp(this, 24)));
+
+        card.addView(row, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        if (card.backdropView() != null) {
+            card.backdropView().setImageResource(R.drawable.source_hub_background);
+        }
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

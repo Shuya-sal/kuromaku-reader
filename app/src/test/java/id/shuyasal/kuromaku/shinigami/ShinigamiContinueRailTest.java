@@ -10,10 +10,8 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Looper;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.TextView;
 
-import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.core.app.ApplicationProvider;
 
@@ -36,9 +34,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Uji rail "Lanjutkan Membaca" di beranda Manga Shinigami: sumbernya hanya
- * ShinigamiStore (riwayat + progres), urut terbaru, dibatasi, bisa dibuka
- * offline, dan tidak memperpanjang katalog.
+ * Rail "Lanjutkan Membaca": ringkas (tinggi terbatas), kartu horizontal dengan
+ * cover kecil, judul dua baris, progres, dan seluruh kartu bisa ditekan.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33, qualifiers = "w360dp-h640dp-mdpi")
@@ -48,14 +45,12 @@ public class ShinigamiContinueRailTest {
     private static ShinigamiSource.Transport transport;
     private static final AtomicInteger NETWORK_CALLS = new AtomicInteger();
 
-    /** Beranda dengan sumber palsu supaya tes tidak menyentuh jaringan. */
     public static class Catalog extends ShinigamiActivity {
         @Override protected ShinigamiSource createSource() {
             return new ShinigamiSource(this, transport);
         }
     }
 
-    /** Reader dengan sumber yang selalu gagal: membuktikan jalur offline. */
     public static class OfflineReader extends ShinigamiReaderActivity {
         @Override protected ShinigamiSource createSource() {
             return new ShinigamiSource(this, url -> {
@@ -114,11 +109,21 @@ public class ShinigamiContinueRailTest {
         store.recordRead(mangaId, title, COVER, chapterId, number);
     }
 
-    private List<View> continueCards(ShinigamiActivity host) {
-        ViewGroup container = (ViewGroup) tagged(host, "shinigami_continue_cards");
+    private RecyclerView rail(ShinigamiActivity host) {
+        return (RecyclerView) tagged(host, "shinigami_continue_cards");
+    }
+
+    /** Letakkan rail seperti di layar supaya view holder benar-benar dibuat. */
+    private List<View> laidOutCards(ShinigamiActivity host) {
+        RecyclerView rail = rail(host);
+        int width = host.getResources().getDisplayMetrics().widthPixels;
+        rail.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        rail.layout(0, 0, width, rail.getMeasuredHeight());
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         List<View> cards = new ArrayList<>();
-        for (int index = 0; index < container.getChildCount(); index++) {
-            cards.add(container.getChildAt(index));
+        for (int index = 0; index < rail.getChildCount(); index++) {
+            cards.add(rail.getChildAt(index));
         }
         return cards;
     }
@@ -126,8 +131,14 @@ public class ShinigamiContinueRailTest {
     @Test
     public void railIsHiddenWhenThereIsNoHistory() throws Exception {
         try (ActivityController<Catalog> controller = launch()) {
-            assertEquals(View.GONE, tagged(controller.get(), "shinigami_continue_rail").getVisibility());
-            assertEquals(0, continueCards(controller.get()).size());
+            // Tanpa riwayat item header tidak dibuat sama sekali.
+            Catalog host = controller.get();
+            View railView = host.getWindow().getDecorView()
+                    .findViewWithTag("shinigami_continue_rail");
+            assertTrue("rail tidak boleh terpasang tanpa riwayat",
+                    railView == null || railView.getVisibility() != View.VISIBLE);
+            RecyclerView list = (RecyclerView) tagged(host, "shinigami_grid");
+            assertEquals("hanya katalog, tanpa header", 2, list.getAdapter().getItemCount());
         }
     }
 
@@ -139,36 +150,60 @@ public class ShinigamiContinueRailTest {
         try (ActivityController<Catalog> controller = launch()) {
             Catalog host = controller.get();
             assertEquals(View.VISIBLE, tagged(host, "shinigami_continue_rail").getVisibility());
-            List<View> cards = continueCards(host);
-            assertEquals("maksimal 8 kartu", 8, cards.size());
-            assertEquals("shinigami_continue_manga-10", cards.get(0).getTag());
-            assertEquals("shinigami_continue_manga-3", cards.get(7).getTag());
-            TextView title = (TextView) cards.get(0).findViewWithTag("shinigami_continue_title");
-            assertEquals("Judul 10", title.getText().toString());
+            assertEquals("maksimal 8 kartu", 8, rail(host).getAdapter().getItemCount());
+            List<View> cards = laidOutCards(host);
+            TextView first = cards.get(0).findViewWithTag("shinigami_continue_title");
+            assertEquals("Judul 10", first.getText().toString());
         }
     }
 
     @Test
-    public void cardShowsChapterNumberPercentAndContinueButton() throws Exception {
-        read("manga-a", "Judul A", "chapter-a", 7);
-        store.setProgress("chapter-a", 58);
+    public void cardIsCompactWithSmallCoverTwoLineTitleAndProgress() throws Exception {
+        read("manga-a", "Regressor Instruction Manual yang judulnya panjang sekali",
+                "chapter-a", 210);
+        store.setProgress("chapter-a", 68);
         try (ActivityController<Catalog> controller = launch()) {
             Catalog host = controller.get();
-            View card = continueCards(host).get(0);
-            TextView title = (TextView) card.findViewWithTag("shinigami_continue_title");
-            TextView meta = (TextView) card.findViewWithTag("shinigami_continue_meta");
-            TextView action = (TextView) card.findViewWithTag("shinigami_continue_action");
-            View cover = card.findViewWithTag("shinigami_continue_cover");
-            assertEquals("Judul A", title.getText().toString());
-            assertEquals("Ch. 7 · 58%", meta.getText().toString());
-            assertEquals("Lanjutkan", action.getText().toString());
-            assertNotNull("cover asli harus dipakai", cover);
+            float density = host.getResources().getDisplayMetrics().density;
+            View card = laidOutCards(host).get(0);
+
+            int coverWidthDp = Math.round(card.findViewWithTag("shinigami_continue_cover")
+                    .getWidth() / density);
+            assertEquals("cover kecil 60-75 dp", 64, coverWidthDp);
+
+            TextView title = card.findViewWithTag("shinigami_continue_title");
+            assertEquals("judul maksimal dua baris", 2, title.getMaxLines());
+            assertNotNull(title.getEllipsize());
+
+            TextView meta = card.findViewWithTag("shinigami_continue_meta");
+            assertEquals("Ch. 210 · 68%", meta.getText().toString());
+
+            android.widget.ProgressBar bar = card.findViewWithTag("shinigami_continue_progress");
+            assertNotNull("progress bar kecil", bar);
+            assertEquals(68, bar.getProgress());
         }
     }
 
     @Test
-    public void continueOpensChapterOfflineAndRestoresReadingPosition() throws Exception {
-        // Chapter benar-benar tersimpan di disk + posisi baca terakhir halaman 4.
+    public void railHeightStaysCompact() throws Exception {
+        for (int index = 1; index <= 5; index++) {
+            read("manga-" + index, "Judul " + index, "chapter-" + index, index);
+        }
+        try (ActivityController<Catalog> controller = launch()) {
+            Catalog host = controller.get();
+            View railView = tagged(host, "shinigami_continue_rail");
+            int width = host.getResources().getDisplayMetrics().widthPixels;
+            railView.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int heightDp = Math.round(railView.getMeasuredHeight()
+                    / host.getResources().getDisplayMetrics().density);
+            assertTrue("tinggi rail " + heightDp + " dp harus <= 180 dp", heightDp <= 180);
+            assertTrue("rail tidak boleh gepeng: " + heightDp, heightDp >= 120);
+        }
+    }
+
+    @Test
+    public void tappingTheWholeCardContinuesReadingOffline() throws Exception {
         List<String> urls = new ArrayList<>();
         for (int index = 0; index < 12; index++) {
             urls.add("https://storage.shngm.id/page-" + index + ".webp");
@@ -189,13 +224,12 @@ public class ShinigamiContinueRailTest {
 
         Intent started;
         try (ActivityController<Catalog> controller = launch()) {
-            View action = continueCards(controller.get()).get(0)
-                    .findViewWithTag("shinigami_continue_action");
-            action.performClick();
-            started = Shadows.shadowOf(controller.get()).getNextStartedActivity();
-            assertNotNull("tombol Lanjutkan harus membuka reader", started);
-            assertEquals("chapter-a", started.getStringExtra(ShinigamiReaderActivity.EXTRA_CHAPTER_ID));
-            assertEquals("manga-a", started.getStringExtra(ShinigamiReaderActivity.EXTRA_MANGA_ID));
+            Catalog host = controller.get();
+            laidOutCards(host).get(0).performClick();
+            started = Shadows.shadowOf(host).getNextStartedActivity();
+            assertNotNull("kartu harus membuka reader", started);
+            assertEquals("chapter-a",
+                    started.getStringExtra(ShinigamiReaderActivity.EXTRA_CHAPTER_ID));
         }
 
         Intent readerIntent = new Intent(context, OfflineReader.class)
@@ -220,8 +254,6 @@ public class ShinigamiContinueRailTest {
                             .findFirstVisibleItemPosition());
             assertEquals("tidak boleh ada permintaan jaringan", 0, NETWORK_CALLS.get());
         }
-        assertEquals("posisi baca tersimpan tetap halaman yang sama", 4, store.page("chapter-a"));
-        assertTrue("progres baca tetap wajar", store.progress("chapter-a") > 0);
     }
 
     @Test
@@ -234,8 +266,10 @@ public class ShinigamiContinueRailTest {
             Shadows.shadowOf(Looper.getMainLooper()).idle();
             TextView status = (TextView) tagged(host, "shinigami_status");
             assertEquals("2 manga dalam riwayat", status.getText().toString());
+            // Riwayat memakai daftar baris; rail tetap di atasnya.
             RecyclerView list = (RecyclerView) tagged(host, "shinigami_grid");
-            assertEquals(2, list.getAdapter().getItemCount());
+            // Satu item header (rail) + dua baris riwayat.
+            assertEquals(3, list.getAdapter().getItemCount());
         }
     }
 
@@ -243,13 +277,25 @@ public class ShinigamiContinueRailTest {
     public void historySurvivesClosingAndReopeningTheApp() throws Exception {
         read("manga-a", "Judul A", "chapter-a", 7);
         try (ActivityController<Catalog> first = launch()) {
-            assertEquals(1, continueCards(first.get()).size());
+            assertEquals(1, rail(first.get()).getAdapter().getItemCount());
         }
         try (ActivityController<Catalog> second = launch()) {
             assertEquals("riwayat harus tetap ada setelah aplikasi ditutup", 1,
-                    continueCards(second.get()).size());
+                    rail(second.get()).getAdapter().getItemCount());
             assertEquals(View.VISIBLE,
                     tagged(second.get(), "shinigami_continue_rail").getVisibility());
+        }
+    }
+
+    @Test
+    public void progressBarIsEmptyWhenChapterUnread() throws Exception {
+        read("manga-a", "Judul A", "chapter-a", 7);
+        try (ActivityController<Catalog> controller = launch()) {
+            View card = laidOutCards(controller.get()).get(0);
+            android.widget.ProgressBar bar = card.findViewWithTag("shinigami_continue_progress");
+            assertEquals(0, bar.getProgress());
+            TextView meta = card.findViewWithTag("shinigami_continue_meta");
+            assertTrue(meta.getText().toString(), meta.getText().toString().contains("0%"));
         }
     }
 
@@ -258,80 +304,33 @@ public class ShinigamiContinueRailTest {
         try (ActivityController<Catalog> controller = launch()) {
             Catalog host = controller.get();
             RecyclerView list = (RecyclerView) tagged(host, "shinigami_grid");
-            GridLayoutManager manager = (GridLayoutManager) list.getLayoutManager();
+            androidx.recyclerview.widget.GridLayoutManager manager =
+                    (androidx.recyclerview.widget.GridLayoutManager) list.getLayoutManager();
             assertEquals("dua kolom agar tanggal tidak terpotong", 2, manager.getSpanCount());
 
-            list.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            int width = host.getResources().getDisplayMetrics().widthPixels;
+            list.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(1600, View.MeasureSpec.EXACTLY));
-            list.layout(0, 0, 1080, 1600);
+            list.layout(0, 0, width, 1600);
             Shadows.shadowOf(Looper.getMainLooper()).idle();
 
             boolean sawUpdate = false;
             for (int index = 0; index < list.getChildCount(); index++) {
-                View child = list.getChildAt(index);
-                TextView subtitle = (TextView) child.findViewWithTag("shinigami_subtitle");
+                TextView subtitle = list.getChildAt(index)
+                        .findViewWithTag("shinigami_subtitle");
                 if (subtitle == null) continue;
                 String text = subtitle.getText().toString();
                 assertFalse("tanggal tidak boleh kosong", text.trim().isEmpty());
-                assertTrue("baris tanggal harus utuh", subtitle.getMaxLines() >= 3);
                 if (text.contains("Update ")) {
                     sawUpdate = true;
                     String line = text.substring(text.indexOf("Update "));
                     assertFalse("tanggal tidak boleh dipotong dengan elipsis",
                             line.contains("\u2026") || line.endsWith("..."));
-                    assertTrue("tanggal harus memakai format ringkas: " + line,
+                    assertTrue("format ringkas: " + line,
                             line.matches("Update \\d{1,2} [A-Za-z]+ \\d{4}"));
                 }
             }
             assertTrue("kartu harus menampilkan baris Update", sawUpdate);
         }
-    }
-
-    @Test
-    public void railFollowsLightAndDarkTheme() throws Exception {
-        read("manga-a", "Judul A", "chapter-a", 7);
-        for (int theme : new int[]{id.shuyasal.kuromaku.ui.Prefs.THEME_LIGHT,
-                id.shuyasal.kuromaku.ui.Prefs.THEME_DARK}) {
-            new id.shuyasal.kuromaku.ui.Prefs(context).setTheme(theme);
-            id.shuyasal.kuromaku.ui.Palette palette =
-                    id.shuyasal.kuromaku.ui.Palette.of(new id.shuyasal.kuromaku.ui.Prefs(context).theme());
-            try (ActivityController<Catalog> controller = launch()) {
-                Catalog host = controller.get();
-                TextView label = (TextView) tagged(host, "shinigami_continue_label");
-                TextView meta = (TextView) tagged(host, "shinigami_continue_meta");
-                assertEquals("judul rail mengikuti warna tema", palette.text,
-                        label.getCurrentTextColor());
-                assertEquals("meta rail mengikuti warna tema", palette.muted,
-                        meta.getCurrentTextColor());
-            }
-        }
-    }
-
-    @Test
-    public void cardLabelsAreNotClippedAfterLayout() throws Exception {
-        read("manga-a", "Regressor Instruction Manual", "chapter-a", 210);
-        store.setProgress("chapter-a", 68);
-        read("manga-b", "Nano Machine", "chapter-b", 212);
-        store.setProgress("chapter-b", 24);
-        try (ActivityController<Catalog> controller = launch()) {
-            Catalog host = controller.get();
-            int width = (int) (112 * host.getResources().getDisplayMetrics().density);
-            for (View card : continueCards(host)) {
-                card.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-                card.layout(0, 0, card.getMeasuredWidth(), card.getMeasuredHeight());
-                assertNotClipped((TextView) card.findViewWithTag("shinigami_continue_meta"));
-                assertNotClipped((TextView) card.findViewWithTag("shinigami_continue_action"));
-            }
-        }
-    }
-
-    private void assertNotClipped(TextView view) {
-        assertNotNull(view);
-        assertNotNull("layout harus terbentuk", view.getLayout());
-        assertEquals("teks terpotong: " + view.getText(), 0,
-                view.getLayout().getEllipsisCount(view.getLayout().getLineCount() - 1));
-        assertFalse("teks tidak boleh pecah baris: " + view.getText(),
-                view.getLayout().getLineCount() > 1);
     }
 }

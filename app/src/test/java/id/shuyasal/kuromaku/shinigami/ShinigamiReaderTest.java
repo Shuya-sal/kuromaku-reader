@@ -76,7 +76,12 @@ public class ShinigamiReaderTest {
     @Test public void readerHasSharedDrawerWithFiveEntries() throws Exception {
         try (ActivityController<Reader> controller = Robolectric.buildActivity(Reader.class, intent()).setup()) {
             Reader reader = controller.get(); await(reader);
-            tagged(reader, "section_menu").performClick();
+            // Toolbar reader tidak lagi memuat tombol drawer: menu utama ada di overflow.
+            tagged(reader, "shinigami_reader_more").performClick();
+            android.widget.PopupMenu popup =
+                    org.robolectric.shadows.ShadowPopupMenu.getLatestPopupMenu();
+            assertNotNull("overflow harus terbuka", popup);
+            popup.getMenu().performIdentifierAction(4, 0);
             assertNotNull(ShadowDialog.getLatestDialog().findViewById(android.R.id.content).findViewWithTag("drawer_manga_shinigami"));
             assertNotNull(ShadowDialog.getLatestDialog().findViewById(android.R.id.content).findViewWithTag("drawer_manga_voratoon"));
         }

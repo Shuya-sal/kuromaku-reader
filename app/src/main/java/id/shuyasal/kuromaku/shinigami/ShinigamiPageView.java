@@ -181,12 +181,28 @@ public final class ShinigamiPageView extends FrameLayout {
             return;
         }
         ratio = (double) bitmap.getHeight() / bitmap.getWidth();
-        surface.clear();
-        surface.setVisibility(GONE);
         image.setImageBitmap(bitmap);
         image.setVisibility(VISIBLE);
+        surface.setVisibility(GONE);
         loading.setVisibility(GONE);
         errorBox.setVisibility(GONE);
+        requestLayout();
+    }
+
+    /** Tampilkan berkas lokal dengan pemuatan ulang yang aman. */
+    public void showLocalFile(File file, ShinigamiQuality quality) {
+        int[] size = ShinigamiPageTiles.bounds(file);
+        if (size == null) {
+            showFailure("Gambar halaman tidak dapat dibaca.");
+            return;
+        }
+        ratio = (double) size[1] / size[0];
+        image.setImageDrawable(null);
+        image.setVisibility(GONE);
+        loading.setVisibility(GONE);
+        errorBox.setVisibility(GONE);
+        surface.show(file, size[0], size[1], quality == null ? ShinigamiQuality.AUTO : quality);
+        surface.setVisibility(VISIBLE);
         requestLayout();
     }
 
@@ -231,7 +247,9 @@ public final class ShinigamiPageView extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        surface.clear();
+        // Perbaikan gambar hitam: JANGAN bersihkan surface saat view hanya
+        // sementara keluar dari layar (scroll). Decoder dan tiles dipertahankan;
+        // pembersihan sungguhan dilakukan oleh adapter saat holder didaur ulang.
         super.onDetachedFromWindow();
     }
 

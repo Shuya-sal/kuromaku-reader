@@ -44,6 +44,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
     private static final int PAGE_SIZE = 24;
 
+    // Prioritas pengurutan chapter: Terbaru -> Terlama (default) / Terlama -> Terbaru.
+    private static final int SORT_LATEST = 0;
+    private static final int SORT_OLDEST = 1;
+    private int chapterSortOrder = SORT_LATEST;
+
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<ShinigamiChapter> chapters = new ArrayList<>();
@@ -66,6 +71,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private Button favoriteButton;
     private ProgressBar spinner;
     private ImageView cover;
+    private TextView sortLabel;
 
     private int chapterPage = 1;
     private int chapterTotalPages = 1;
@@ -127,11 +133,14 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(palette.background);
+        chapterSortOrder = new Prefs(this).chapterSortOrder();
 
         root.addView(buildHeader(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setTag("shinigami_detail_scroll");
+        scroll.setFillViewport(true);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(Ui.dp(this, 14), Ui.dp(this, 10), Ui.dp(this, 14), Ui.dp(this, 24));
@@ -201,6 +210,30 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         TextView chapterHeading = Ui.label(this, "Daftar chapter", 16, palette.text);
         chapterHeading.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 4));
         body.addView(chapterHeading);
+
+        // Baris pengurutan: label status urutan + tombol ganti urutan di kanan.
+        LinearLayout sortRow = new LinearLayout(this);
+        sortRow.setOrientation(LinearLayout.HORIZONTAL);
+        sortRow.setGravity(Gravity.CENTER_VERTICAL);
+        sortRow.setPadding(0, 0, 0, Ui.dp(this, 4));
+        sortRow.setTag("shinigami_sort_row");
+
+        sortLabel = Ui.label(this, sortLabel(), 12, palette.muted);
+        sortLabel.setTag("shinigami_sort_label");
+        sortLabel.setPadding(0, 0, 0, 0);
+        sortRow.addView(sortLabel, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        android.widget.ImageButton sortButton = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_sort,
+                chapterSortOrder == SORT_LATEST ? "Urutkan: Terbaru ke Terlama"
+                        : "Urutkan: Terlama ke Terbaru", palette);
+        sortButton.setTag("shinigami_sort_button");
+        sortButton.setOnClickListener(v -> showChapterSortMenu());
+        sortRow.addView(sortButton, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        body.addView(sortRow);
 
         chapterList = new LinearLayout(this);
         chapterList.setOrientation(LinearLayout.VERTICAL);
@@ -401,10 +434,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         if (chapterList == null) return;
         chapterList.removeAllViews();
         rows.clear();
-        for (ShinigamiChapter chapter : chapters) {
+        List<ShinigamiChapter> ordered = sortedChapters();
+        for (ShinigamiChapter chapter : ordered) {
             chapterList.addView(buildChapterRow(chapter));
         }
-        if (chapters.isEmpty()) {
+        if (ordered.isEmpty()) {
             TextView empty = Ui.label(this, "Sumber belum memuat chapter untuk judul ini.",
                     14, palette.muted);
             empty.setTag("shinigami_no_chapters");
@@ -418,6 +452,48 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                 selectionDownload.setText("Unduh " + selected.size() + " chapter");
             }
         }
+    }
+
+    /**
+     * Urutan tampil daftar chapter. Pengurutan memakai nomor chapter numerik
+     * (aman untuk 10.5, prolog, dan spesial), bukan perbandingan teks judul.
+     * Sumber mengirim chapter terbaru lebih dulu; "Terbaru" mempertahankan
+     * urutan sumber, "Terlama" membaliknya.
+     */
+    private List<ShinigamiChapter> sortedChapters() {
+        List<ShinigamiChapter> ordered = new ArrayList<>(chapters);
+        if (chapterSortOrder == SORT_OLDEST) {
+            java.util.Collections.reverse(ordered);
+        }
+        return ordered;
+    }
+
+    private String sortLabel() {
+        return chapterSortOrder == SORT_LATEST
+                ? "Terbaru → Terlama" : "Terlama → Terbaru";
+    }
+
+    /** Menu pilihan urutan; pilihan tersimpan dan daftar langsung menyusut ulang. */
+    private void showChapterSortMenu() {
+        String[] options = {"Terbaru → Terlama", "Terlama → Terbaru"};
+        int checked = chapterSortOrder == SORT_LATEST ? 0 : 1;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Urutkan chapter")
+                .setSingleChoiceItems(options, checked, (dialog, which) -> {
+                    int next = which == 0 ? SORT_LATEST : SORT_OLDEST;
+                    dialog.dismiss();
+                    if (next == chapterSortOrder) return;
+                    chapterSortOrder = next;
+                    new Prefs(this).setChapterSortOrder(next);
+                    if (sortLabel != null) sortLabel.setText(sortLabel());
+                    renderChapters();
+                    if (chapterList != null) chapterList.post(() ->
+                            ((android.widget.ScrollView) chapterList.getRootView()
+                                    .findViewWithTag("shinigami_detail_scroll"))
+                                    .smoothScrollTo(0, 0));
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
     }
 
     private View buildChapterRow(ShinigamiChapter chapter) {
