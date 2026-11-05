@@ -24,7 +24,7 @@ public class ShinigamiImageZoomTest {
             View root=controller.get().getWindow().getDecorView();
             assertEquals(View.VISIBLE,root.findViewWithTag("zoom_error").getVisibility());
             assertEquals(View.VISIBLE,root.findViewWithTag("zoom_retry").getVisibility());
-            assertTrue(root.findViewWithTag("zoom_image") instanceof id.shuyasal.kuromaku.ui.ZoomableImageView);
+            assertTrue(root.findViewWithTag("zoom_image") instanceof id.shuyasal.kuromaku.shinigami.ShinigamiZoomView);
         }
     }
 }

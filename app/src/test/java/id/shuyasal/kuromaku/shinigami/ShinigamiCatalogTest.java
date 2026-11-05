@@ -86,7 +86,7 @@ public class ShinigamiCatalogTest {
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Jakarta"));
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get(); await(host);
-            assertNotNull(tagged(host, "shinigami_chip_Update terbaru"));
+            assertNotNull(tagged(host, "shinigami_chip_Manga terbaru"));
             TextView info = bindFirst(host).findViewWithTag("shinigami_subtitle");
             assertTrue(info.getText().toString(), info.getText().toString().contains("Chapter terbaru: 210"));
             assertTrue(info.getText().toString(), info.getText().toString().contains("Update terakhir: 2026-11-05 10:24"));
@@ -132,6 +132,18 @@ public class ShinigamiCatalogTest {
             field.set(host, new ShinigamiSource(host, transport));
             invoke(host, "reload"); await(host);
             assertEquals(count, list.getAdapter().getItemCount());
+        }
+    }
+
+    @Test public void downloadsTabStartsEmptyAndExplainsHowToSave() throws Exception {
+        try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
+            Catalog host = controller.get(); await(host);
+            tagged(host, "shinigami_chip_Unduhan").performClick(); await(host);
+            assertEquals(View.VISIBLE, tagged(host, "shinigami_downloads_empty").getVisibility());
+            RecyclerView list = (RecyclerView) tagged(host, "shinigami_grid");
+            assertEquals(0, list.getAdapter().getItemCount());
+            assertTrue(((TextView) tagged(host, "shinigami_status")).getText().toString()
+                    .contains("Belum ada chapter tersimpan"));
         }
     }
 }

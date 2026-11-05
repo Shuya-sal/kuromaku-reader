@@ -1,6 +1,5 @@
 package id.shuyasal.kuromaku.shinigami;
 
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -17,27 +16,26 @@ import java.io.File;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import id.shuyasal.kuromaku.ui.ZoomableImageView;
-
 /**
  * Zoom satu halaman Shinigami.
  *
- * <p>Gambar didekode pada resolusi asli sumber (lebar 800 px, tinggi sampai
- * 10.000 px) selama masih di bawah batas piksel; batas itu mencegah
- * {@link OutOfMemoryError} pada halaman ekstra panjang. Versi sebelumnya
- * memaksa hasil muat menjadi 1080×8192 dengan RGB_565 sehingga zoom tampak
- * lunak.
+ * <p>Halaman dirender bertahap dari {@link ShinigamiZoomView}: hanya potongan
+ * yang terlihat yang didekode, pada resolusi asli sumber (800 px). Tidak ada
+ * lagi decode seluruh halaman 800×10.000 ke RAM, sehingga halaman ekstra
+ * panjang tetap stabil.
+ *
+ * <p>Ketukan: dua kali → 2× (ketuk dua lagi kembali ke 1×), tiga kali → 3×,
+ * cubit dua jari dan geser tetap didukung. Reset zoom tidak menyentuh progres
+ * membaca karena activity ini tidak menulis progres apa pun.
  */
 public class ShinigamiImageZoomActivity extends AppCompatActivity {
 
-    /** Batas piksel satu bitmap di layar zoom (~32 MB ARGB_8888). */
-    private static final int MAX_PIXELS = 8_100_000;
-
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private ZoomableImageView image;
+    private ShinigamiZoomView image;
     private ProgressBar loading;
     private LinearLayout error;
     private TextView message;
+    private TextView hint;
     private String url;
 
     @Override public void onCreate(Bundle state) {
@@ -47,7 +45,7 @@ public class ShinigamiImageZoomActivity extends AppCompatActivity {
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
-        image = new ZoomableImageView(this);
+        image = new ShinigamiZoomView(this);
         image.setTag("zoom_image");
         root.addView(image, new FrameLayout.LayoutParams(-1, -1));
         loading = new ProgressBar(this);
@@ -67,13 +65,31 @@ public class ShinigamiImageZoomActivity extends AppCompatActivity {
         retry.setOnClickListener(v -> load());
         error.addView(retry);
         root.addView(error, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
+
+        hint = new TextView(this);
+        hint.setTextColor(0xCCFFFFFF);
+        hint.setTextSize(11f);
+        hint.setText("Ketuk 2×: zoom 2×  •  ketuk 3×: zoom 3×  •  cubit untuk bebas");
+        hint.setPadding(24, 24, 24, 24);
+        hint.setTag("zoom_hint");
+        root.addView(hint, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL));
+
         Button close = new Button(this);
         close.setText("Kembali");
+        close.setTag("zoom_close");
         close.setOnClickListener(v -> finish());
         root.addView(close, new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.START));
         setContentView(root);
+
+        image.setOnTapListener(this::toggleChrome);
         url = getIntent().getStringExtra("url");
         load();
+    }
+
+    /** Ketuk satu kali menyembunyikan/menampilkan tombol supaya gambar lega. */
+    private void toggleChrome() {
+        int next = hint.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE;
+        hint.setVisibility(next);
     }
 
     private void failure(String reason) {
@@ -106,29 +122,31 @@ public class ShinigamiImageZoomActivity extends AppCompatActivity {
                     reason = failure.getMessage() == null ? "Gambar gagal dimuat." : failure.getMessage();
                 }
             }
-            Bitmap bitmap = null;
-            if (file != null) bitmap = ShinigamiPageTiles.decodeFull(file, MAX_PIXELS, true);
-            if (bitmap == null && file != null) {
-                // Halaman ekstra panjang bisa kehabisan heap pada ARGB_8888;
-                // RGB_565 memakai separuh memori dengan lebar tetap sama.
-                bitmap = ShinigamiPageTiles.decodeFull(file, MAX_PIXELS / 2, false);
-            }
-            final Bitmap ready = bitmap;
+            final File ready = file;
             final String failure = reason;
-            final int[] size = file == null ? null : ShinigamiPageTiles.bounds(file);
+            final int[] size = ready == null ? null : ShinigamiPageTiles.bounds(ready);
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (ready == null) {
                     failure(failure != null ? failure : "Gambar tidak dapat didekode.");
                     return;
                 }
-                image.setImageBitmap(ready);
-                image.reset();
+                image.showFile(ready);
+                if (!image.hasPage()) {
+                    failure("Gambar tidak dapat didekode.");
+                    return;
+                }
+                float factor = getIntent().getFloatExtra("zoom_factor", 1f);
+                float focusX = getIntent().getFloatExtra("focus_x", 0.5f) * image.getWidth();
+                float focusY = getIntent().getFloatExtra("focus_y", 0.5f) * image.getHeight();
+                image.post(() -> {
+                    if (factor > 1.01f) image.applyInitialZoom(factor, focusX, focusY);
+                });
                 image.setVisibility(View.VISIBLE);
                 loading.setVisibility(View.GONE);
                 error.setVisibility(View.GONE);
-                android.util.Log.i("ShinigamiZoom", "source=" + (size == null ? "?" : size[0] + "x" + size[1])
-                        + " decoded=" + ready.getWidth() + "x" + ready.getHeight());
+                android.util.Log.i("ShinigamiZoom", "source="
+                        + (size == null ? "?" : size[0] + "x" + size[1]) + " tiled=true");
             });
         });
     }

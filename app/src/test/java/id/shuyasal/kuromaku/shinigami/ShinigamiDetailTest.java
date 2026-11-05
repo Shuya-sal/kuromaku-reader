@@ -135,7 +135,7 @@ public class ShinigamiDetailTest {
             downloader.setRunning(id, true);
             controller.pause().resume();
             row = tagged(detail, "shinigami_chapter_" + id);
-            assertEquals("Mengunduh...",
+            assertEquals("Mengunduh",
                     ((TextView) row.findViewWithTag("shinigami_chapter_download_status")).getText().toString());
             assertEquals("Batal",
                     ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());
@@ -147,7 +147,7 @@ public class ShinigamiDetailTest {
             }
             controller.pause().resume();
             row = tagged(detail, "shinigami_chapter_" + id);
-            assertEquals("Tersimpan offline",
+            assertEquals("Tersimpan",
                     ((TextView) row.findViewWithTag("shinigami_chapter_download_status")).getText().toString());
             assertEquals("Hapus",
                     ((TextView) row.findViewWithTag("shinigami_chapter_download")).getText().toString());

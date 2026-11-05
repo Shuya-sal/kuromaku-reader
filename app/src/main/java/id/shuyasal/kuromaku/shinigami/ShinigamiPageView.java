@@ -7,7 +7,10 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -30,6 +33,42 @@ import java.util.Map;
  * bawah resolusi sumber dan memori tetap terbatas pada beberapa potongan.
  */
 public final class ShinigamiPageView extends FrameLayout {
+
+    /** Permintaan zoom dari gestur ketukan di halaman. */
+    public interface ZoomRequest {
+        /**
+         * @param factor 2 atau 3
+         * @param focusY posisi jari secara vertikal, 0..1 dari tinggi halaman
+         */
+        void onZoom(int factor, float focusY);
+
+        /** Ketukan tunggal (dipakai reader untuk membuka zoom penuh). */
+        default void onSingleTap(float focusY) {
+        }
+    }
+
+    private final Handler tapsHandler = new Handler(Looper.getMainLooper());
+    private final ShinigamiTaps taps = new ShinigamiTaps();
+    private ZoomRequest zoomRequest;
+    private float tapX;
+    private float tapY;
+    private float downX;
+    private float downY;
+    private boolean tapMoved;
+    private final float tapSlop;
+    private final Runnable resolveTaps = () -> {
+        int count = taps.resolve();
+        if (zoomRequest == null) return;
+        float focus = Math.max(0f, Math.min(1f, tapY / Math.max(1, getHeight())));
+        if (count >= 3) {
+            zoomRequest.onZoom(3, focus);
+        } else if (count == 2) {
+            zoomRequest.onZoom(2, focus);
+        } else if (count == 1) {
+            zoomRequest.onSingleTap(focus);
+        }
+    };
+
     final ImageView image;
     private final TiledSurface surface;
     private final LinearLayout loading;
@@ -40,6 +79,7 @@ public final class ShinigamiPageView extends FrameLayout {
 
     public ShinigamiPageView(Context context) {
         super(context);
+        tapSlop = 12f * getResources().getDisplayMetrics().density;
         setBackgroundColor(Color.BLACK);
         image = new ImageView(context);
         image.setTag("shinigami_page_image");
@@ -82,6 +122,47 @@ public final class ShinigamiPageView extends FrameLayout {
     }
 
     public void setRetryAction(Runnable action) { retryAction = action; }
+
+    /** Daftarkan gestur dua/tiga ketukan untuk membuka zoom. */
+    public void setZoomRequest(ZoomRequest request) {
+        zoomRequest = request;
+    }
+
+    @Override public boolean onInterceptTouchEvent(MotionEvent event) {
+        trackTaps(event);
+        return false;
+    }
+
+    private void trackTaps(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                downX = event.getX();
+                downY = event.getY();
+                tapMoved = false;
+                break;
+            case MotionEvent.ACTION_MOVE:
+                if (Math.abs(event.getX() - downX) > tapSlop
+                        || Math.abs(event.getY() - downY) > tapSlop) tapMoved = true;
+                break;
+            case MotionEvent.ACTION_UP:
+                if (tapMoved) {
+                    taps.reset();
+                    break;
+                }
+                tapX = event.getX();
+                tapY = event.getY();
+                taps.register(android.os.SystemClock.uptimeMillis());
+                tapsHandler.removeCallbacks(resolveTaps);
+                tapsHandler.postDelayed(resolveTaps, ShinigamiTaps.WINDOW_MS);
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                taps.reset();
+                tapsHandler.removeCallbacks(resolveTaps);
+                break;
+            default:
+                break;
+        }
+    }
 
     public void showLoading() {
         ratio = 0;

@@ -113,6 +113,84 @@ public final class ShinigamiDownloadQueue {
                         request(mangaId, mangaTitle, single(chapterId)));
     }
 
+    /**
+     * Selaraskan status di memori dengan keadaan WorkManager + berkas nyata.
+     *
+     * <p>Dipakai saat halaman detail dibuka kembali: pekerjaan yang masih
+     * berjalan setelah proses aplikasi dimatikan tetap tampil "Mengunduh" pada
+     * persentase halaman yang benar-benar tersimpan, bukan kembali ke nol.
+     * Panggil dari thread latar.
+     */
+    public static void refreshStatus(Context context, List<String> chapterIds) {
+        if (context == null || chapterIds == null || chapterIds.isEmpty()) return;
+        ShinigamiStore store = new ShinigamiStore(context);
+        ShinigamiDownloader local = new ShinigamiDownloader(context);
+        WorkManager manager;
+        try {
+            manager = WorkManager.getInstance(context.getApplicationContext());
+        } catch (RuntimeException error) {
+            Log.w(TAG, "WorkManager tidak siap saat menyelaraskan status", error);
+            return;
+        }
+        for (String chapterId : chapterIds) {
+            if (chapterId == null || chapterId.isEmpty()) continue;
+            int expected = store.expectedPages(chapterId);
+            if (expected <= 0) continue;
+            boolean complete = local.isDownloaded(chapterId, expected);
+            int percent = ShinigamiPageStore.percent(local, chapterId, expected);
+            int state = ShinigamiDownloadStatus.state(chapterId);
+            boolean working = state == ShinigamiDownloadStatus.QUEUED
+                    || state == ShinigamiDownloadStatus.DOWNLOADING;
+            if (complete && !working) {
+                ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.SAVED, 100, "");
+                continue;
+            }
+            androidx.work.WorkInfo info = latest(manager, chapterId);
+            if (info == null) {
+                if (percent > 0 && state == ShinigamiDownloadStatus.NOT_DOWNLOADED) {
+                    // Sisa halaman dari sesi sebelumnya yang tidak dilanjutkan.
+                    ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.FAILED,
+                            percent, "Unduhan terhenti. Tekan Coba Lagi untuk melanjutkan.");
+                }
+                continue;
+            }
+            switch (info.getState()) {
+                case ENQUEUED:
+                case BLOCKED:
+                    ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.QUEUED, percent, "");
+                    break;
+                case RUNNING:
+                    ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.DOWNLOADING,
+                            percent, "");
+                    break;
+                case SUCCEEDED:
+                    ShinigamiDownloadStatus.set(chapterId,
+                            complete ? ShinigamiDownloadStatus.SAVED : ShinigamiDownloadStatus.FAILED,
+                            complete ? 100 : percent,
+                            complete ? "" : "Sebagian halaman belum lengkap.");
+                    break;
+                case FAILED:
+                case CANCELLED:
+                    ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.FAILED, percent,
+                            ShinigamiDownloadStatus.message(chapterId));
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    private static androidx.work.WorkInfo latest(WorkManager manager, String chapterId) {
+        try {
+            List<androidx.work.WorkInfo> infos = manager
+                    .getWorkInfosForUniqueWork(workName(chapterId)).get();
+            return infos == null || infos.isEmpty() ? null : infos.get(infos.size() - 1);
+        } catch (Exception error) {
+            Log.w(TAG, "gagal membaca status WorkManager", error);
+            return null;
+        }
+    }
+
     /** Hapus file unduhan; progres baca di store TIDAK disentuh. */
     public static boolean deleteChapter(Context context, String chapterId) {
         if (context == null) return false;

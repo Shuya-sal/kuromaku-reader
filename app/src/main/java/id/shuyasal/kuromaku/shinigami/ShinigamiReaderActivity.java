@@ -421,8 +421,18 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             holder.cell.setRetryAction(() -> {
                 if (holder.bound >= 0 && holder.bound < pages.size()) load(holder);
             });
-            holder.cell.setOnClickListener(v -> {
-                if (holder.bound >= 0 && holder.bound < pages.size()) openZoomed(holder.bound);
+            holder.cell.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
+                @Override public void onZoom(int factor, float focusY) {
+                    if (holder.bound >= 0 && holder.bound < pages.size()) {
+                        openZoomed(holder.bound, factor, focusY);
+                    }
+                }
+
+                @Override public void onSingleTap(float focusY) {
+                    if (holder.bound >= 0 && holder.bound < pages.size()) {
+                        openZoomed(holder.bound, 1f, focusY);
+                    }
+                }
             });
             load(holder);
         }
@@ -490,11 +500,18 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     }
 
     private void openZoomed(int position) {
+        openZoomed(position, 1f, 0f);
+    }
+
+    private void openZoomed(int position, float factor, float focusY) {
         if (position < 0 || position >= pages.size()) return;
         Intent intent = new Intent(this, ShinigamiImageZoomActivity.class);
         intent.putExtra("url", pages.get(position));
         intent.putExtra("chapter_id", chapterId);
         intent.putExtra("page", position);
+        intent.putExtra("zoom_factor", factor);
+        intent.putExtra("focus_y", focusY);
+        intent.putExtra("focus_x", 0.5f);
         startActivity(intent);
     }
 }

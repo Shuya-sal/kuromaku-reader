@@ -49,7 +49,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         CATALOGUE,
         NEWEST_CHAPTERS,
         HISTORY,
-        FAVORITES
+        FAVORITES,
+        DOWNLOADS
     }
 
     private static final class Row {
@@ -75,6 +76,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<ShinigamiManga> items = new ArrayList<>();
     private final List<Row> rows = new ArrayList<>();
+    private final List<ShinigamiDownloads.Manga> downloads = new ArrayList<>();
 
     private Palette palette;
     private ShinigamiSource source;
@@ -82,6 +84,9 @@ public class ShinigamiActivity extends AppCompatActivity {
     private RecyclerView list;
     private MangaAdapter adapter;
     private RowAdapter rowAdapter;
+    private DownloadsAdapter downloadsAdapter;
+    private LinearLayout downloadsEmpty;
+    private int downloadsGeneration;
     private TextView statusLine;
     private TextView errorText;
     private Button retryButton;
@@ -174,6 +179,7 @@ public class ShinigamiActivity extends AppCompatActivity {
         list.setBackgroundColor(palette.background);
         adapter = new MangaAdapter();
         rowAdapter = new RowAdapter();
+        downloadsAdapter = new DownloadsAdapter();
         list.setAdapter(adapter);
         list.setLayoutManager(new GridLayoutManager(this, 3));
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -217,6 +223,25 @@ public class ShinigamiActivity extends AppCompatActivity {
         errorBox.addView(retryButton, retryParams);
         body.addView(errorBox, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        LinearLayout empty = new LinearLayout(this);
+        empty.setOrientation(LinearLayout.VERTICAL);
+        empty.setGravity(Gravity.CENTER);
+        empty.setPadding(Ui.dp(this, 32), Ui.dp(this, 32), Ui.dp(this, 32), Ui.dp(this, 32));
+        empty.setVisibility(View.GONE);
+        empty.setTag("shinigami_downloads_empty");
+        TextView emptyTitle = Ui.label(this, "Belum ada unduhan", 16, palette.text);
+        emptyTitle.setGravity(Gravity.CENTER);
+        empty.addView(emptyTitle);
+        TextView emptyHint = Ui.label(this,
+                "Buka manga, lalu tekan Unduh pada chapter untuk membacanya tanpa internet.",
+                13, palette.muted);
+        emptyHint.setGravity(Gravity.CENTER);
+        emptyHint.setPadding(0, Ui.dp(this, 8), 0, 0);
+        empty.addView(emptyHint);
+        body.addView(empty, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        downloadsEmpty = empty;
 
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -271,15 +296,16 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void buildFilterChips() {
         filterGeneration++;
         filterRow.removeAllViews();
-        addChip(sort == ShinigamiSource.Sort.RANK ? "Terpopuler" : "Update terbaru", true, () -> {
+        addChip(sort == ShinigamiSource.Sort.RANK ? "Terpopuler" : "Manga terbaru", mode == Mode.CATALOGUE, () -> {
             sort = sort == ShinigamiSource.Sort.LATEST
                     ? ShinigamiSource.Sort.RANK : ShinigamiSource.Sort.LATEST;
             buildFilterChips();
             loadPage(1, false);
         });
-        addChip("Chapter terbaru", false, () -> showNewestChapters());
-        addChip("Riwayat", false, () -> showHistory());
-        addChip("Favorit", false, () -> showFavorites());
+        addChip("Chapter terbaru", mode == Mode.NEWEST_CHAPTERS, () -> showNewestChapters());
+        addChip("Riwayat", mode == Mode.HISTORY, () -> showHistory());
+        addChip("Favorit", mode == Mode.FAVORITES, () -> showFavorites());
+        addChip("Unduhan", mode == Mode.DOWNLOADS, () -> showDownloads());
         addChip("Berjalan", status.equals("ongoing"), () -> {
             status = status.equals("ongoing") ? "" : "ongoing";
             buildFilterChips();
@@ -357,6 +383,9 @@ public class ShinigamiActivity extends AppCompatActivity {
             case NEWEST_CHAPTERS:
                 showNewestChapters();
                 break;
+            case DOWNLOADS:
+                showDownloads();
+                break;
             default:
                 loadPage(1, false);
                 break;
@@ -385,6 +414,44 @@ public class ShinigamiActivity extends AppCompatActivity {
         rowAdapter.notifyDataSetChanged();
         statusLine.setText(rows.size() + " manga dalam riwayat");
         hideError();
+    }
+
+    /**
+     * Tab Unduhan: hanya judul yang punya berkas halaman nyata di disk.
+     * Pemindaian dilakukan di luar main thread karena memvalidasi setiap halaman.
+     */
+    private void showDownloads() {
+        cancelRemoteView();
+        mode = Mode.DOWNLOADS;
+        buildFilterChips();
+        downloads.clear();
+        downloadsAdapter.notifyDataSetChanged();
+        list.setLayoutManager(new GridLayoutManager(this, 2));
+        list.setAdapter(downloadsAdapter);
+        downloadsEmpty.setVisibility(View.GONE);
+        statusLine.setText("Memindai unduhan...");
+        final int generation = ++downloadsGeneration;
+        worker.execute(() -> {
+            List<ShinigamiDownloads.Manga> found = ShinigamiDownloads.scan(this);
+            long bytes = ShinigamiDownloads.totalBytes(found);
+            main.post(() -> {
+                if (isFinishing() || isDestroyed() || generation != downloadsGeneration) return;
+                downloads.clear();
+                downloads.addAll(found);
+                downloadsAdapter.notifyDataSetChanged();
+                if (found.isEmpty()) {
+                    statusLine.setText("Belum ada chapter tersimpan");
+                    downloadsEmpty.setVisibility(View.VISIBLE);
+                } else {
+                    int chapters = 0;
+                    for (ShinigamiDownloads.Manga manga : found) chapters += manga.chapters.size();
+                    statusLine.setText(found.size() + " manga - " + chapters + " chapter - "
+                            + ShinigamiDownloads.formatBytes(bytes));
+                    downloadsEmpty.setVisibility(View.GONE);
+                }
+                hideError();
+            });
+        });
     }
 
     private void showFavorites() {
@@ -667,6 +734,75 @@ public class ShinigamiActivity extends AppCompatActivity {
         @Override
         public int getItemCount() {
             return items.size();
+        }
+    }
+
+    private final class DownloadsAdapter extends RecyclerView.Adapter<DownloadsAdapter.Holder> {
+
+        class Holder extends RecyclerView.ViewHolder {
+            final ImageView cover;
+            final TextView title;
+            final TextView subtitle;
+
+            Holder(View item) {
+                super(item);
+                cover = item.findViewWithTag("shinigami_download_cover");
+                title = item.findViewWithTag("shinigami_download_title");
+                subtitle = item.findViewWithTag("shinigami_download_subtitle");
+            }
+        }
+
+        @Override
+        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
+            LinearLayout card = new LinearLayout(ShinigamiActivity.this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            card.setPadding(Ui.dp(ShinigamiActivity.this, 6), Ui.dp(ShinigamiActivity.this, 6),
+                    Ui.dp(ShinigamiActivity.this, 6), Ui.dp(ShinigamiActivity.this, 10));
+
+            RatioFrameLayout box = new RatioFrameLayout(ShinigamiActivity.this);
+            box.setRatio(0.68f);
+            ImageView image = new ImageView(ShinigamiActivity.this);
+            image.setTag("shinigami_download_cover");
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setBackgroundColor(palette.surface);
+            box.addView(image, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            card.addView(box, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            TextView name = Ui.label(ShinigamiActivity.this, "", 14, palette.text);
+            name.setTag("shinigami_download_title");
+            name.setMaxLines(2);
+            name.setEllipsize(TextUtils.TruncateAt.END);
+            name.setPadding(0, Ui.dp(ShinigamiActivity.this, 6), 0, 0);
+            card.addView(name);
+
+            TextView info = Ui.label(ShinigamiActivity.this, "", 12, palette.muted);
+            info.setTag("shinigami_download_subtitle");
+            info.setMaxLines(2);
+            info.setEllipsize(TextUtils.TruncateAt.END);
+            card.addView(info);
+
+            return new Holder(card);
+        }
+
+        @Override
+        public void onBindViewHolder(Holder holder, int position) {
+            ShinigamiDownloads.Manga manga = downloads.get(position);
+            holder.title.setText(manga.title.isEmpty() ? "Tanpa judul" : manga.title);
+            holder.subtitle.setText(manga.chapters.size() + " chapter offline - "
+                    + ShinigamiDownloads.formatBytes(manga.bytes()));
+            if (manga.coverUrl.isEmpty()) {
+                holder.cover.setImageDrawable(null);
+            } else {
+                Glide.with(ShinigamiActivity.this).load(manga.coverUrl).centerCrop().into(holder.cover);
+            }
+            holder.itemView.setOnClickListener(v -> openDetail(manga.mangaId, manga.title, manga.coverUrl));
+        }
+
+        @Override
+        public int getItemCount() {
+            return downloads.size();
         }
     }
 

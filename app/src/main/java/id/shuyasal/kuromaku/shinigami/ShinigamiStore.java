@@ -26,6 +26,7 @@ public final class ShinigamiStore {
     private static final String KEY_HISTORY = "history";
     private static final String KEY_MANGA_TITLE = "manga_title:";
     private static final String KEY_MANGA_COVER = "manga_cover:";
+    private static final String KEY_CHAPTER_OWNER = "chapter_owner:";
 
     private static final int HISTORY_LIMIT = 60;
 
@@ -179,6 +180,38 @@ public final class ShinigamiStore {
     public String mangaCover(String mangaId) {
         if (mangaId == null) return "";
         return prefs.getString(KEY_MANGA_COVER + mangaId, "");
+    }
+
+    /**
+     * Catat pemilik chapter (manga) supaya tab Unduhan bisa mengelompokkan
+     * berkas yang benar-benar ada di disk. Tidak menyentuh progres membaca.
+     */
+    public void setChapterOwner(String chapterId, String mangaId, String mangaTitle,
+                                String coverUrl, double chapterNumber, String chapterLabel) {
+        if (chapterId == null || chapterId.isEmpty()) return;
+        JSONObject owner = new JSONObject();
+        try {
+            owner.put("manga_id", mangaId == null ? "" : mangaId);
+            owner.put("title", mangaTitle == null ? "" : mangaTitle);
+            owner.put("cover", coverUrl == null ? "" : coverUrl);
+            owner.put("number", chapterNumber);
+            owner.put("label", chapterLabel == null ? "" : chapterLabel);
+        } catch (Exception ignored) {
+            return;
+        }
+        prefs.edit().putString(KEY_CHAPTER_OWNER + chapterId, owner.toString()).apply();
+    }
+
+    /** Data pemilik chapter, atau {@code null} bila chapter belum pernah dicatat. */
+    public JSONObject chapterOwner(String chapterId) {
+        if (chapterId == null || chapterId.isEmpty()) return null;
+        String raw = prefs.getString(KEY_CHAPTER_OWNER + chapterId, "");
+        if (raw == null || raw.isEmpty()) return null;
+        try {
+            return new JSONObject(raw);
+        } catch (Exception error) {
+            return null;
+        }
     }
 
     public boolean isFavorite(String mangaId) {
