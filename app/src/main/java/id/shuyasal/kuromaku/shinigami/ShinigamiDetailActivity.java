@@ -23,8 +23,10 @@ import com.bumptech.glide.Glide;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -97,7 +99,29 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         loadChapters(1);
     }
 
-    private final ShinigamiDownloadStatus.Listener downloadStateListener = this::renderChapters;
+    /**
+     * Perubahan status unduhan hanya memperbarui baris yang bersangkutan.
+     * Membangun ulang seluruh daftar akan membuat ring selalu mulai dari nol,
+     * sehingga animasinya tidak pernah terlihat.
+     */
+    private final ShinigamiDownloadStatus.Listener downloadStateListener =
+            () -> main.post(this::refreshDownloadStates);
+    private final Map<String, ChapterRow> rows = new HashMap<>();
+
+    private static final class ChapterRow {
+        final ShinigamiChapter chapter;
+        final ShinigamiDownloadRing ring;
+        final TextView status;
+        final Button action;
+
+        ChapterRow(ShinigamiChapter chapter, ShinigamiDownloadRing ring,
+                   TextView status, Button action) {
+            this.chapter = chapter;
+            this.ring = ring;
+            this.status = status;
+            this.action = action;
+        }
+    }
 
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
@@ -376,6 +400,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private void renderChapters() {
         if (chapterList == null) return;
         chapterList.removeAllViews();
+        rows.clear();
         for (ShinigamiChapter chapter : chapters) {
             chapterList.addView(buildChapterRow(chapter));
         }
@@ -498,6 +523,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
         row.addView(right, new LinearLayout.LayoutParams(
                 Ui.dp(this, 88), ViewGroup.LayoutParams.WRAP_CONTENT));
+        rows.put(chapter.id, new ChapterRow(chapter, ring, statusText, action));
 
         row.setOnClickListener(v -> {
             if (selected.isEmpty()) openChapter(chapter);
@@ -508,6 +534,43 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             return true;
         });
         return row;
+    }
+
+    /** Perbarui ring dan label tanpa membangun ulang daftar. */
+    private void refreshDownloadStates() {
+        if (isFinishing() || isDestroyed()) return;
+        for (ChapterRow row : rows.values()) {
+            ShinigamiChapter chapter = row.chapter;
+            int expected = store.expectedPages(chapter.id);
+            String status = downloader.storageLabel(chapter.id, expected);
+            boolean saved = ShinigamiDownloader.LABEL_SAVED.equals(status);
+            boolean running = isRunningState(chapter.id) || status.startsWith("Mengunduh");
+            boolean failed = ShinigamiDownloader.LABEL_FAILED.equals(status);
+            int percent = downloadPercent(chapter.id, expected);
+
+            row.ring.setVisibility(running || saved || failed ? View.VISIBLE : View.INVISIBLE);
+            if (saved) {
+                row.ring.setState(ShinigamiDownloadRing.DONE);
+                row.ring.setPercent(100, true);
+            } else if (failed) {
+                row.ring.setState(ShinigamiDownloadRing.FAILED);
+                row.ring.setPercent(percent, true);
+            } else if (running) {
+                row.ring.setState(ShinigamiDownloadRing.RUNNING);
+                row.ring.setPercent(percent, true);
+            } else {
+                row.ring.setState(ShinigamiDownloadRing.IDLE);
+                row.ring.setPercent(0, false);
+            }
+
+            row.status.setText(shortStatus(status, saved, running, failed));
+            row.status.setTextColor(statusColor(saved, running, failed));
+
+            String label = saved ? "Hapus" : failed ? "Coba Lagi" : running ? "Batal" : "Unduh";
+            row.action.setText(label);
+            row.action.setContentDescription(label + ": " + chapter.label());
+            row.action.setOnClickListener(v -> onDownloadAction(chapter, status));
+        }
     }
 
     private static boolean isRunningState(String chapterId) {

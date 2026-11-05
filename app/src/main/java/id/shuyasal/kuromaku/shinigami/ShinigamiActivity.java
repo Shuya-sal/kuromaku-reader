@@ -337,6 +337,9 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void loadGenres() {
+        // Genre hanya relevan untuk katalog; tab Unduhan/Riwayat/Favorit harus
+        // tetap bisa dibuka tanpa jaringan.
+        if (mode != Mode.CATALOGUE) return;
         final int generation = filterGeneration;
         worker.execute(() -> {
             List<ShinigamiSource.Genre> loaded;
