@@ -8,8 +8,8 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 55
-        versionName = "2.28.0"
+        versionCode = 56
+        versionName = "2.29.0"
     }
 
     // One checked-in debug keystore, used by both CI and local builds.
@@ -46,6 +46,10 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.maxHeapSize = "2048m"
+            it.setForkEvery(100)
+        }
     }
 
     packaging {

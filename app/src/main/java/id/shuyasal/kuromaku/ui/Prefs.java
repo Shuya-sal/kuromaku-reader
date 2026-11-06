@@ -64,6 +64,7 @@ public final class Prefs {
 
     public void setTheme(int theme) {
         prefs.edit().putInt(KEY_THEME, theme).apply();
+        ThemeManager.apply(theme);
     }
 
     /**

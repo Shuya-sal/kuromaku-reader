@@ -24,6 +24,7 @@ import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
 import id.shuyasal.kuromaku.ui.GlassCard;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
 /**
@@ -38,10 +39,13 @@ public class SourceHubActivity extends AppCompatActivity {
 
     private Palette palette;
     private ImageView background;
+    private int activeResolvedTheme = -1;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        palette = Palette.of(new Prefs(this).resolvedTheme());
+        ThemeManager.applyTheme(this);
+        activeResolvedTheme = new Prefs(this).resolvedTheme();
+        palette = Palette.of(activeResolvedTheme);
 
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(palette.background);
@@ -194,5 +198,14 @@ public class SourceHubActivity extends AppCompatActivity {
         params.bottomMargin = Ui.dp(this, 12);
         card.setLayoutParams(params);
         return card;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        int currentResolved = new Prefs(this).resolvedTheme();
+        if (activeResolvedTheme != -1 && currentResolved != activeResolvedTheme) {
+            recreate();
+        }
     }
 }

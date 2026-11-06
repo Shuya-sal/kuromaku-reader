@@ -33,6 +33,8 @@ import java.util.concurrent.Executors;
 import id.shuyasal.kuromaku.R;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.RatioFrameLayout;
+import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
 /**
@@ -57,12 +59,25 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
     private TextView emptyBody;
     private LinearLayout emptyBox;
     private int generation;
+    private int activeResolvedTheme = -1;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        palette = Palette.of(new Prefs(this).resolvedTheme());
+        ThemeManager.applyTheme(this);
+        activeResolvedTheme = new Prefs(this).resolvedTheme();
+        palette = Palette.of(activeResolvedTheme);
         store = new ShinigamiStore(this);
         buildUi();
+        scan();
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        int currentResolved = new Prefs(this).resolvedTheme();
+        if (activeResolvedTheme != -1 && currentResolved != activeResolvedTheme) {
+            recreate();
+            return;
+        }
         scan();
     }
 
@@ -297,11 +312,6 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
         intent.putExtra(ShinigamiReaderActivity.EXTRA_CHAPTER_NUMBER, chapter.number);
         intent.putExtra(ShinigamiReaderActivity.EXTRA_CHAPTER_TITLE, chapter.label);
         startActivity(intent);
-    }
-
-    @Override protected void onResume() {
-        super.onResume();
-        scan();
     }
 
     @Override protected void onDestroy() {

@@ -2,6 +2,7 @@ package id.shuyasal.kuromaku.shinigami;
 
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -29,9 +30,13 @@ import com.bumptech.glide.Glide;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -40,6 +45,7 @@ import java.util.concurrent.Executors;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.RatioFrameLayout;
+import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
 public class ShinigamiDetailActivity extends AppCompatActivity {
@@ -51,13 +57,38 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private static final int PAGE_SIZE = 24;
 
     // Prioritas pengurutan chapter: Terbaru -> Terlama (default) / Terlama -> Terbaru.
-    private static final int SORT_LATEST = 0;
-    private static final int SORT_OLDEST = 1;
+    public static final int SORT_LATEST = 0;
+    public static final int SORT_OLDEST = 1;
     private int chapterSortOrder = SORT_LATEST;
+    private int activeResolvedTheme = -1;
+
+    public static final Comparator<ShinigamiChapter> COMPARATOR_ASC = (a, b) -> {
+        if (a == b) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        int cmp = Double.compare(a.number, b.number);
+        if (cmp != 0) return cmp;
+        String at = a.title == null ? "" : a.title.toLowerCase(Locale.ROOT);
+        String bt = b.title == null ? "" : b.title.toLowerCase(Locale.ROOT);
+        if (at.contains("prolog") && !bt.contains("prolog")) return -1;
+        if (!at.contains("prolog") && bt.contains("prolog")) return 1;
+        if (at.contains("epilog") && !bt.contains("epilog")) return 1;
+        if (!at.contains("epilog") && bt.contains("epilog")) return -1;
+        return a.id.compareTo(b.id);
+    };
+
+    public static final Comparator<ShinigamiChapter> COMPARATOR_DESC = (a, b) -> COMPARATOR_ASC.compare(b, a);
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<ShinigamiChapter> chapters = new ArrayList<>();
+    private final Set<String> knownChapterIds = new HashSet<>();
+    private int chapterTotalRecord = 0;
+    private int chapterRequestGeneration = 0;
+    private boolean loadingMorePages = false;
+    private String currentSearchQuery = "";
+    private android.widget.ScrollView detailScroll;
+    private TextView chapterHeadingView;
 
     private Palette palette;
     private ShinigamiSource source;
@@ -93,7 +124,9 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        palette = Palette.of(new Prefs(this).resolvedTheme());
+        ThemeManager.applyTheme(this);
+        activeResolvedTheme = new Prefs(this).resolvedTheme();
+        palette = Palette.of(activeResolvedTheme);
         source = createSource();
         store = new ShinigamiStore(this);
         downloader = new ShinigamiDownloader(this);
@@ -105,6 +138,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             Toast.makeText(this, "Identitas manga tidak ditemukan.", Toast.LENGTH_LONG).show();
             finish();
             return;
+        }
+
+        chapterSortOrder = new Prefs(this).chapterSortOrder();
+        if (chapterSortOrder != SORT_LATEST && chapterSortOrder != SORT_OLDEST) {
+            chapterSortOrder = SORT_LATEST;
         }
 
         buildUi();
@@ -149,6 +187,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         scroll.setTag("shinigami_detail_scroll");
         scroll.setFillViewport(true);
+        detailScroll = scroll;
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(Ui.dp(this, 14), Ui.dp(this, 10), Ui.dp(this, 14), Ui.dp(this, 24));
@@ -217,6 +256,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
         TextView chapterHeading = Ui.label(this, "Daftar chapter", 16, palette.text);
         chapterHeading.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 4));
+        chapterHeadingView = chapterHeading;
         body.addView(chapterHeading);
 
         // Baris pengurutan: label status urutan + tombol ganti urutan di kanan.
@@ -243,28 +283,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override public void afterTextChanged(android.text.Editable s) {
-                if (s.length() == 0) {
-                    renderChapters();
-                    return;
-                }
-                String query = s.toString().trim();
-                if (query.isEmpty()) return;
-                List<ShinigamiChapter> results = new ArrayList<>();
-                for (ShinigamiChapter chapter : chapters) {
-                    if (String.valueOf(chapter.number).contains(query) ||
-                            chapter.title.toLowerCase(java.util.Locale.ROOT).contains(query.toLowerCase(java.util.Locale.ROOT))) {
-                        results.add(chapter);
-                    }
-                }
-                chapterList.removeAllViews();
-                for (ShinigamiChapter chapter : results) {
-                    chapterList.addView(buildChapterRow(chapter));
-                }
-                if (results.isEmpty()) {
-                    TextView empty = Ui.label(ShinigamiDetailActivity.this, "Tidak ditemukan chapter yang sesuai.", 14, palette.muted);
-                    empty.setTag("shinigami_no_chapters");
-                    chapterList.addView(empty);
-                }
+                currentSearchQuery = s == null ? "" : s.toString().trim();
+                renderChapters();
             }
         });
         sortRow.addView(searchView, new LinearLayout.LayoutParams(0,
@@ -406,13 +426,15 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private void loadChapters(int targetPage) {
         if (loading) return;
         loading = true;
+        final int gen = ++chapterRequestGeneration;
+        final int sortOrder = chapterSortOrder;
         worker.execute(() -> {
             ShinigamiSource.ChapterPage result = null;
             String failure = null;
             ShinigamiDownloads.Manga offline = null;
             try {
                 result = source.chapters(mangaId, targetPage,
-                        chapterSortOrder == SORT_LATEST ? "desc" : "asc");
+                        sortOrder == SORT_LATEST ? "desc" : "asc");
             } catch (ShinigamiSource.SourceException error) {
                 failure = error.getMessage();
                 // Chapter tersimpan tetap bisa dibuka walau katalog gagal dimuat.
@@ -423,6 +445,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             final ShinigamiDownloads.Manga offlineChapterList = offline;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                if (gen != chapterRequestGeneration) return;
                 loading = false;
                 if (message != null) {
                     if (offlineChapterList != null && !offlineChapterList.chapters.isEmpty()
@@ -437,16 +460,30 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                 retryButton.setVisibility(View.GONE);
                 chapterPage = targetPage;
                 chapterTotalPages = Math.max(1, page_result.totalPages);
-                if (targetPage <= 1) chapters.clear();
-                java.util.Set<String> known = new java.util.HashSet<>();
-                for (ShinigamiChapter existing : chapters) known.add(existing.id);
-                for (ShinigamiChapter item : page_result.items) {
-                    if (known.add(item.id)) chapters.add(item);
+                chapterTotalRecord = page_result.totalRecord;
+                if (targetPage <= 1) {
+                    chapters.clear();
+                    knownChapterIds.clear();
                 }
+                for (ShinigamiChapter item : page_result.items) {
+                    if (knownChapterIds.add(item.id)) chapters.add(item);
+                }
+                updateChapterHeading();
                 renderChapters();
                 moreButton.setVisibility(chapterPage < chapterTotalPages ? View.VISIBLE : View.GONE);
             });
         });
+    }
+
+    private void updateChapterHeading() {
+        if (chapterHeadingView == null) return;
+        if (chapterTotalRecord > 0) {
+            chapterHeadingView.setText("Daftar chapter (" + chapterTotalRecord + ")");
+        } else if (!chapters.isEmpty()) {
+            chapterHeadingView.setText("Daftar chapter (" + chapters.size() + ")");
+        } else {
+            chapterHeadingView.setText("Daftar chapter");
+        }
     }
 
     /**
@@ -455,15 +492,18 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
      */
     private boolean renderOfflineChapters(ShinigamiDownloads.Manga offline) {
         chapters.clear();
+        knownChapterIds.clear();
         for (ShinigamiDownloads.Chapter saved : offline.chapters) {
-            chapters.add(new ShinigamiChapter(saved.chapterId, mangaId, saved.number,
+            ShinigamiChapter ch = new ShinigamiChapter(saved.chapterId, mangaId, saved.number,
                     saved.label.replaceFirst("(?i)^chapter\\s*[\\d.,]+\\s*[-–:]?\\s*", ""),
-                    "", ""));
+                    "", "");
+            if (knownChapterIds.add(ch.id)) chapters.add(ch);
         }
         if (chapters.isEmpty()) return false;
         errorText.setVisibility(View.GONE);
         retryButton.setVisibility(View.GONE);
         moreButton.setVisibility(View.GONE);
+        updateChapterHeading();
         renderChapters();
 
         TextView notice = Ui.label(this,
@@ -481,11 +521,27 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         chapterList.removeAllViews();
         rows.clear();
         List<ShinigamiChapter> ordered = sortedChapters();
+        if (!currentSearchQuery.isEmpty()) {
+            List<ShinigamiChapter> filtered = new ArrayList<>();
+            String queryLower = currentSearchQuery.toLowerCase(Locale.ROOT);
+            for (ShinigamiChapter chapter : ordered) {
+                String numStr = ShinigamiManga.formatNumber(chapter.number);
+                if (numStr.equals(currentSearchQuery)
+                        || String.valueOf(chapter.number).contains(currentSearchQuery)
+                        || chapter.label().toLowerCase(Locale.ROOT).contains(queryLower)
+                        || (chapter.title != null && chapter.title.toLowerCase(Locale.ROOT).contains(queryLower))) {
+                    filtered.add(chapter);
+                }
+            }
+            ordered = filtered;
+        }
         for (ShinigamiChapter chapter : ordered) {
             chapterList.addView(buildChapterRow(chapter));
         }
         if (ordered.isEmpty()) {
-            TextView empty = Ui.label(this, "Sumber belum memuat chapter untuk judul ini.",
+            TextView empty = Ui.label(this,
+                    currentSearchQuery.isEmpty() ? "Sumber belum memuat chapter untuk judul ini."
+                            : "Tidak ditemukan chapter yang sesuai.",
                     14, palette.muted);
             empty.setTag("shinigami_no_chapters");
             chapterList.addView(empty);
@@ -503,13 +559,14 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     /**
      * Urutan tampil daftar chapter. Pengurutan memakai nomor chapter numerik
      * (aman untuk 10.5, prolog, dan spesial), bukan perbandingan teks judul.
-     * Sumber mengirim chapter terbaru lebih dulu; "Terbaru" mempertahankan
-     * urutan sumber, "Terlama" membaliknya.
+     * "Terbaru" mengurutkan menurun (descending), "Terlama" menaik (ascending).
      */
     private List<ShinigamiChapter> sortedChapters() {
         List<ShinigamiChapter> ordered = new ArrayList<>(chapters);
         if (chapterSortOrder == SORT_OLDEST) {
-            java.util.Collections.reverse(ordered);
+            Collections.sort(ordered, COMPARATOR_ASC);
+        } else {
+            Collections.sort(ordered, COMPARATOR_DESC);
         }
         return ordered;
     }
@@ -531,6 +588,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         // Reset pagination untuk memuat ulang dari awal
         chapterPage = 1;
         chapters.clear();
+        knownChapterIds.clear();
+        renderChapters();
+        if (detailScroll != null) {
+            detailScroll.post(() -> detailScroll.smoothScrollTo(0, chapterHeadingView != null ? chapterHeadingView.getTop() : 0));
+        }
         loadChapters(1);
     }
 
@@ -906,6 +968,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        int currentResolved = new Prefs(this).resolvedTheme();
+        if (activeResolvedTheme != -1 && currentResolved != activeResolvedTheme) {
+            recreate();
+            return;
+        }
         if (store == null || chapterList == null || chapters.isEmpty()) return;
         renderChapters();
         // Status unduhan bisa berjalan di WorkManager saat halaman ini

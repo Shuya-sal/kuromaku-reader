@@ -287,7 +287,7 @@ public class MainActivity extends AppCompatActivity {
         themeButton = Ui.iconButton(this, palette.themeIcon(), themeDescription(), palette);
         themeButton.setTag("theme");
         themeButton.setOnClickListener(v -> {
-            prefs.setTheme((prefs.theme() + 1) % 4);
+            prefs.setTheme((prefs.theme() + 1) % 3);
             palette = Palette.of(prefs.resolvedTheme());
             rebuildShell();
         });

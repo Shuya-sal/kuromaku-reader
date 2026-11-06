@@ -42,8 +42,12 @@ public final class ShinigamiSource {
         public final List<ShinigamiChapter> items;
         public final int page;
         public final int totalPages;
-        ChapterPage(List<ShinigamiChapter> items, int page, int totalPages) {
-            this.items = items; this.page = page; this.totalPages = totalPages;
+        public final int totalRecord;
+        public ChapterPage(List<ShinigamiChapter> items, int page, int totalPages, int totalRecord) {
+            this.items = items; this.page = page; this.totalPages = totalPages; this.totalRecord = totalRecord;
+        }
+        public ChapterPage(List<ShinigamiChapter> items, int page, int totalPages) {
+            this(items, page, totalPages, items != null ? items.size() : 0);
         }
     }
 
@@ -63,6 +67,7 @@ public final class ShinigamiSource {
 
     interface Transport { String get(String url) throws IOException, SourceException; }
     private static final int PAGE_SIZE = 24;
+    private static final int CHAPTER_PAGE_SIZE = 500;
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS).followRedirects(false)
@@ -149,7 +154,7 @@ public final class ShinigamiSource {
     public ChapterPage chapters(String mangaId, int page, String sortOrder) throws SourceException {
         requireId(mangaId, "manga");
         JSONObject root = getJson(config.apiBase() + "/chapter/" + encode(mangaId)
-                + "/list?page=" + Math.max(1, page) + "&page_size=" + PAGE_SIZE
+                + "/list?page=" + Math.max(1, page) + "&page_size=" + CHAPTER_PAGE_SIZE
                 + "&sort_by=chapter_number&sort_order=" + sortOrder);
         JSONArray data = requireArray(root);
         LinkedHashMap<String, ShinigamiChapter> items = new LinkedHashMap<>();
@@ -167,8 +172,10 @@ public final class ShinigamiSource {
         }
         JSONObject meta = root.optJSONObject("meta");
         if (meta == null) throw changedShape();
+        int totalRecord = meta.optInt("total_record", items.size());
+        int totalPage = Math.max(1, meta.optInt("total_page", 1));
         return new ChapterPage(new ArrayList<>(items.values()), Math.max(1, page),
-                Math.max(1, meta.optInt("total_page", 1)));
+                totalPage, totalRecord);
     }
 
     public ChapterImages chapterImages(String chapterId) throws SourceException {

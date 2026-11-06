@@ -36,6 +36,7 @@ import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.RatioFrameLayout;
 import id.shuyasal.kuromaku.ui.SectionDrawer;
+import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
 public class ShinigamiActivity extends AppCompatActivity {
@@ -113,32 +114,127 @@ public class ShinigamiActivity extends AppCompatActivity {
     private String genre = "";
     private String status = "";
     private Mode mode = Mode.CATALOGUE;
+    private int activeResolvedTheme = -1;
+
+    static final class RetainedState {
+        final List<ShinigamiManga> items;
+        final int page;
+        final int totalPages;
+        final String query;
+        final ShinigamiSource.Sort sort;
+        final String genre;
+        final String status;
+        final Mode mode;
+        final int scrollPosition;
+        final int scrollOffset;
+
+        RetainedState(List<ShinigamiManga> items, int page, int totalPages,
+                      String query, ShinigamiSource.Sort sort, String genre,
+                      String status, Mode mode, int scrollPosition, int scrollOffset) {
+            this.items = items;
+            this.page = page;
+            this.totalPages = totalPages;
+            this.query = query;
+            this.sort = sort;
+            this.genre = genre;
+            this.status = status;
+            this.mode = mode;
+            this.scrollPosition = scrollPosition;
+            this.scrollOffset = scrollOffset;
+        }
+    }
+
+    private static RetainedState sCachedState;
+
+    @Override
+    public Object onRetainCustomNonConfigurationInstance() {
+        return captureRetainedState();
+    }
+
+    private RetainedState captureRetainedState() {
+        int pos = 0;
+        int offset = 0;
+        if (list != null && list.getLayoutManager() instanceof LinearLayoutManager) {
+            LinearLayoutManager lm = (LinearLayoutManager) list.getLayoutManager();
+            pos = lm.findFirstVisibleItemPosition();
+            View first = lm.findViewByPosition(pos);
+            offset = (first == null) ? 0 : (first.getTop() - list.getPaddingTop());
+        }
+        return new RetainedState(
+                new ArrayList<>(items), page, totalPages,
+                query, sort, genre, status, mode, pos, offset);
+    }
+
+    private void applyThemeSelection() {
+        sCachedState = captureRetainedState();
+        recreate();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        palette = Palette.of(new Prefs(this).resolvedTheme());
+        ThemeManager.applyTheme(this);
+        activeResolvedTheme = new Prefs(this).resolvedTheme();
+        palette = Palette.of(activeResolvedTheme);
         source = createSource();
         store = new ShinigamiStore(this);
 
-        if (savedInstanceState != null) {
-            query = savedInstanceState.getString(STATE_QUERY, "");
-            page = savedInstanceState.getInt(STATE_PAGE, 1);
-            sort = "rank".equals(savedInstanceState.getString(STATE_SORT))
-                    ? ShinigamiSource.Sort.RANK : ShinigamiSource.Sort.LATEST;
-            genre = savedInstanceState.getString(STATE_GENRE, "");
-            status = savedInstanceState.getString(STATE_STATUS, "");
+        RetainedState retained = (RetainedState) getLastCustomNonConfigurationInstance();
+        if (retained == null) {
+            retained = sCachedState;
         }
+        sCachedState = null;
 
-        buildUi();
-        searchField.setText(query);
-        refreshContinueRail();
-        loadPage(1, false);
+        if (retained != null && !retained.items.isEmpty()) {
+            items.clear();
+            items.addAll(retained.items);
+            page = retained.page;
+            totalPages = retained.totalPages;
+            query = retained.query;
+            sort = retained.sort;
+            genre = retained.genre;
+            status = retained.status;
+            mode = retained.mode;
+
+            buildUi();
+            searchField.setText(query);
+            refreshContinueRail();
+            useGridAdapter();
+            if (adapter != null) adapter.notifyDataSetChanged();
+
+            final int targetPos = retained.scrollPosition;
+            final int targetOffset = retained.scrollOffset;
+            list.post(() -> {
+                if (list.getLayoutManager() instanceof LinearLayoutManager) {
+                    ((LinearLayoutManager) list.getLayoutManager())
+                            .scrollToPositionWithOffset(targetPos, targetOffset);
+                }
+            });
+        } else {
+            if (savedInstanceState != null) {
+                query = savedInstanceState.getString(STATE_QUERY, "");
+                page = savedInstanceState.getInt(STATE_PAGE, 1);
+                sort = "rank".equals(savedInstanceState.getString(STATE_SORT))
+                        ? ShinigamiSource.Sort.RANK : ShinigamiSource.Sort.LATEST;
+                genre = savedInstanceState.getString(STATE_GENRE, "");
+                status = savedInstanceState.getString(STATE_STATUS, "");
+            }
+
+            buildUi();
+            searchField.setText(query);
+            refreshContinueRail();
+            loadPage(1, false);
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        int currentResolved = new Prefs(this).resolvedTheme();
+        if (activeResolvedTheme != -1 && currentResolved != activeResolvedTheme) {
+            applyThemeSelection();
+            return;
+        }
         // Progres/riwayat bisa berubah setelah membaca; rail ikut segar.
         if (store != null) refreshContinueRail();
     }
@@ -157,6 +253,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         searchField.setHintTextColor(palette.muted);
         searchField.setSingleLine(true);
         searchField.setTag("shinigami_search");
+        searchField.setBackground(Ui.rounded(palette.surface, palette.divider, 16, this));
+        searchField.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
         searchField.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
         searchField.setOnEditorActionListener((v, actionId, event) -> {
             runSearch();
@@ -466,6 +564,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         public void onBindViewHolder(Holder holder, int position) {
             ShinigamiStore.HistoryEntry entry = entries.get(position);
             holder.title.setText(entry.title);
+            holder.title.setTextColor(palette.text);
+            holder.meta.setTextColor(palette.muted);
             int percent = Math.max(0, Math.min(100, store.progress(entry.chapterId)));
             holder.meta.setText(getString(id.shuyasal.kuromaku.R.string.shinigami_continue_progress,
                     ShinigamiManga.formatNumber(entry.chapterNumber), percent));
@@ -857,7 +957,7 @@ public class ShinigamiActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** Pilihan tema Light/Dark/System; tersimpan dan diterapkan tanpa recreate(). */
+    /** Pilihan tema Light/Dark/System; tersimpan dan langsung diterapkan dengan state retained. */
     private void showThemeDialog() {
         String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti Sistem (System)"};
         int checked = new Prefs(this).theme();
@@ -869,27 +969,10 @@ public class ShinigamiActivity extends AppCompatActivity {
                     prefs.setTheme(which);
                     dialog.dismiss();
                     Toast.makeText(this, "Tema disimpan: " + options[which], Toast.LENGTH_SHORT).show();
-                    updateTheme(); // ✅ Ganti recreate() dengan updateTheme()
+                    applyThemeSelection();
                 })
                 .setNegativeButton("Batal", null)
                 .show();
-    }
-
-    /** Update palet tema secara dinamis tanpa recreate(). */
-    private void updateTheme() {
-        palette = Palette.of(new Prefs(this).resolvedTheme());
-        // Update toolbar background
-        if (header != null) header.setBackgroundColor(palette.surface);
-        // Update teks judul
-        if (heading != null) heading.setTextColor(palette.text);
-        // Update tombol
-        if (favoriteButton != null) favoriteButton.setTextColor(palette.text);
-        // Update RecyclerView adapter jika ada
-        if (adapter != null) adapter.notifyDataSetChanged();
-        // Update status bar color
-        getWindow().setStatusBarColor(palette.surface);
-        // Update navigation bar color
-        getWindow().setNavigationBarColor(palette.surface);
     }
 
     private void showDomainDialog() {
@@ -1018,6 +1101,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         public void onBindViewHolder(Holder holder, int position) {
             ShinigamiManga manga = items.get(position);
             holder.title.setText(manga.title);
+            holder.title.setTextColor(palette.text);
+            holder.subtitle.setTextColor(palette.muted);
             StringBuilder info = new StringBuilder();
             if (manga.latestChapterNumber > 0) {
                 info.append("Chapter terbaru: ").append(ShinigamiManga.formatNumber(manga.latestChapterNumber));
