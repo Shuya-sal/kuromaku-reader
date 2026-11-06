@@ -5,12 +5,17 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -18,6 +23,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
 
 import com.bumptech.glide.Glide;
 
@@ -72,6 +78,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private ProgressBar spinner;
     private ImageView cover;
     private TextView sortLabel;
+    private EditText searchView;
+    private android.widget.ImageButton sortButton;
 
     private int chapterPage = 1;
     private int chapterTotalPages = 1;
@@ -218,18 +226,55 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         sortRow.setPadding(0, 0, 0, Ui.dp(this, 4));
         sortRow.setTag("shinigami_sort_row");
 
-        sortLabel = Ui.label(this, sortLabel(), 12, palette.muted);
-        sortLabel.setTag("shinigami_sort_label");
-        sortLabel.setPadding(0, 0, 0, 0);
-        sortRow.addView(sortLabel, new LinearLayout.LayoutParams(0,
+        // Kolom pencarian
+        searchView = new EditText(this);
+        searchView.setHint("Cari Chapter, Contoh: 69 atau 76");
+        searchView.setHintTextColor(palette.muted);
+        searchView.setTextColor(palette.text);
+        searchView.setPadding(Ui.dp(this, 12), Ui.dp(this, 8), Ui.dp(this, 12), Ui.dp(this, 8));
+        searchView.setBackground(Ui.rounded(palette.surface, palette.divider, 16, this));
+        searchView.setTag("shinigami_search_view");
+        searchView.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        // Tambahkan ikon pencarian di kiri
+        Drawable searchIcon = ContextCompat.getDrawable(ShinigamiDetailActivity.this, id.shuyasal.kuromaku.R.drawable.ic_search);
+        searchView.setCompoundDrawablesWithIntrinsicBounds(searchIcon, null, null, null);
+        searchView.setCompoundDrawablePadding(Ui.dp(this, 8));
+        searchView.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                if (s.length() == 0) {
+                    renderChapters();
+                    return;
+                }
+                String query = s.toString().trim();
+                if (query.isEmpty()) return;
+                List<ShinigamiChapter> results = new ArrayList<>();
+                for (ShinigamiChapter chapter : chapters) {
+                    if (String.valueOf(chapter.number).contains(query) ||
+                            chapter.title.toLowerCase(java.util.Locale.ROOT).contains(query.toLowerCase(java.util.Locale.ROOT))) {
+                        results.add(chapter);
+                    }
+                }
+                chapterList.removeAllViews();
+                for (ShinigamiChapter chapter : results) {
+                    chapterList.addView(buildChapterRow(chapter));
+                }
+                if (results.isEmpty()) {
+                    TextView empty = Ui.label(ShinigamiDetailActivity.this, "Tidak ditemukan chapter yang sesuai.", 14, palette.muted);
+                    empty.setTag("shinigami_no_chapters");
+                    chapterList.addView(empty);
+                }
+            }
+        });
+        sortRow.addView(searchView, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        android.widget.ImageButton sortButton = Ui.iconButton(this,
-                id.shuyasal.kuromaku.R.drawable.ic_sort,
-                chapterSortOrder == SORT_LATEST ? "Urutkan: Terbaru ke Terlama"
-                        : "Urutkan: Terlama ke Terbaru", palette);
+        // Tombol urut
+        sortButton = Ui.iconButton(this, id.shuyasal.kuromaku.R.drawable.ic_sort,
+                chapterSortOrder == SORT_LATEST ? "Urutkan dari terbaru" : "Urutkan dari terlama", palette);
         sortButton.setTag("shinigami_sort_button");
-        sortButton.setOnClickListener(v -> showChapterSortMenu());
+        sortButton.setOnClickListener(v -> toggleSortOrder());
         sortRow.addView(sortButton, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
@@ -366,7 +411,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             String failure = null;
             ShinigamiDownloads.Manga offline = null;
             try {
-                result = source.chapters(mangaId, targetPage);
+                result = source.chapters(mangaId, targetPage,
+                        chapterSortOrder == SORT_LATEST ? "desc" : "asc");
             } catch (ShinigamiSource.SourceException error) {
                 failure = error.getMessage();
                 // Chapter tersimpan tetap bisa dibuka walau katalog gagal dimuat.
@@ -473,27 +519,19 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                 ? "Terbaru → Terlama" : "Terlama → Terbaru";
     }
 
-    /** Menu pilihan urutan; pilihan tersimpan dan daftar langsung menyusut ulang. */
-    private void showChapterSortMenu() {
-        String[] options = {"Terbaru → Terlama", "Terlama → Terbaru"};
-        int checked = chapterSortOrder == SORT_LATEST ? 0 : 1;
-        new android.app.AlertDialog.Builder(this)
-                .setTitle("Urutkan chapter")
-                .setSingleChoiceItems(options, checked, (dialog, which) -> {
-                    int next = which == 0 ? SORT_LATEST : SORT_OLDEST;
-                    dialog.dismiss();
-                    if (next == chapterSortOrder) return;
-                    chapterSortOrder = next;
-                    new Prefs(this).setChapterSortOrder(next);
-                    if (sortLabel != null) sortLabel.setText(sortLabel());
-                    renderChapters();
-                    if (chapterList != null) chapterList.post(() ->
-                            ((android.widget.ScrollView) chapterList.getRootView()
-                                    .findViewWithTag("shinigami_detail_scroll"))
-                                    .smoothScrollTo(0, 0));
-                })
-                .setNegativeButton("Tutup", null)
-                .show();
+    /** Ganti urutan pengurutan dan muat ulang daftar. */
+    private void toggleSortOrder() {
+        chapterSortOrder = chapterSortOrder == SORT_LATEST ? SORT_OLDEST : SORT_LATEST;
+        new Prefs(this).setChapterSortOrder(chapterSortOrder);
+        if (sortButton != null) {
+            sortButton.setContentDescription(chapterSortOrder == SORT_LATEST
+                    ? "Urutkan dari terbaru" : "Urutkan dari terlama");
+            sortButton.setImageResource(id.shuyasal.kuromaku.R.drawable.ic_sort);
+        }
+        // Reset pagination untuk memuat ulang dari awal
+        chapterPage = 1;
+        chapters.clear();
+        loadChapters(1);
     }
 
     private View buildChapterRow(ShinigamiChapter chapter) {

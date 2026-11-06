@@ -139,10 +139,18 @@ public final class ShinigamiSource {
     }
 
     public ChapterPage chapters(String mangaId, int page) throws SourceException {
+        return chapters(mangaId, page, "desc");
+    }
+
+    /**
+     * Daftar chapter dengan sorting eksplisit.
+     * @param sortOrder "asc" untuk Terlama → Terbaru, "desc" untuk Terbaru → Terlama
+     */
+    public ChapterPage chapters(String mangaId, int page, String sortOrder) throws SourceException {
         requireId(mangaId, "manga");
         JSONObject root = getJson(config.apiBase() + "/chapter/" + encode(mangaId)
                 + "/list?page=" + Math.max(1, page) + "&page_size=" + PAGE_SIZE
-                + "&sort_by=chapter_number&sort_order=desc");
+                + "&sort_by=chapter_number&sort_order=" + sortOrder);
         JSONArray data = requireArray(root);
         LinkedHashMap<String, ShinigamiChapter> items = new LinkedHashMap<>();
         for (int i = 0; i < data.length(); i++) {

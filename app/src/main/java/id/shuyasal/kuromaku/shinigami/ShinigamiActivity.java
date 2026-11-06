@@ -857,7 +857,7 @@ public class ShinigamiActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** Pilihan tema Light/Dark/System; tersimpan dan langsung diterapkan. */
+    /** Pilihan tema Light/Dark/System; tersimpan dan diterapkan tanpa recreate(). */
     private void showThemeDialog() {
         String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti Sistem (System)"};
         int checked = new Prefs(this).theme();
@@ -869,10 +869,27 @@ public class ShinigamiActivity extends AppCompatActivity {
                     prefs.setTheme(which);
                     dialog.dismiss();
                     Toast.makeText(this, "Tema disimpan: " + options[which], Toast.LENGTH_SHORT).show();
-                    recreate();
+                    updateTheme(); // ✅ Ganti recreate() dengan updateTheme()
                 })
                 .setNegativeButton("Batal", null)
                 .show();
+    }
+
+    /** Update palet tema secara dinamis tanpa recreate(). */
+    private void updateTheme() {
+        palette = Palette.of(new Prefs(this).resolvedTheme());
+        // Update toolbar background
+        if (header != null) header.setBackgroundColor(palette.surface);
+        // Update teks judul
+        if (heading != null) heading.setTextColor(palette.text);
+        // Update tombol
+        if (favoriteButton != null) favoriteButton.setTextColor(palette.text);
+        // Update RecyclerView adapter jika ada
+        if (adapter != null) adapter.notifyDataSetChanged();
+        // Update status bar color
+        getWindow().setStatusBarColor(palette.surface);
+        // Update navigation bar color
+        getWindow().setNavigationBarColor(palette.surface);
     }
 
     private void showDomainDialog() {

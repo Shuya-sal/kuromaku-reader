@@ -42,7 +42,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private static final int MENU_QUALITY = 1;
     private static final int MENU_FULLSCREEN = 2;
     private static final int MENU_RELOAD = 3;
-    private static final int MENU_MAIN = 4;
+    private static final int MENU_DETAIL = 4;
+    private static final int MENU_MAIN = 5;
     /** Lama notifikasi offline terlihat (maksimal 3 detik). */
     private static final long NOTICE_MS = 3000L;
 
@@ -256,7 +257,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         menu.getMenu().add(0, MENU_FULLSCREEN, 1,
                 fullscreen ? "Keluar layar penuh" : "Layar penuh");
         menu.getMenu().add(0, MENU_RELOAD, 2, "Muat ulang chapter");
-        menu.getMenu().add(0, MENU_MAIN, 3, "Buka menu utama");
+        menu.getMenu().add(0, MENU_DETAIL, 3, "Detail Manga");
+        menu.getMenu().add(0, MENU_MAIN, 4, "Buka menu utama");
         menu.setOnMenuItemClickListener(item -> {
             switch (item.getItemId()) {
                 case MENU_QUALITY:
@@ -269,6 +271,9 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     pages.clear();
                     adapter.notifyDataSetChanged();
                     loadPages();
+                    return true;
+                case MENU_DETAIL:
+                    openMangaDetail();
                     return true;
                 case MENU_MAIN:
                     ShinigamiNavigation.showDrawer(this, palette, false);
@@ -309,26 +314,20 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 }
                 new android.app.AlertDialog.Builder(this)
                         .setTitle("Daftar chapter")
-                        .setItems(labels, (dialog, which) -> openChapter(items.get(which)))
+                        .setItems(labels, (dialog, which) -> openMangaDetail())
                         .setNegativeButton("Tutup", null)
                         .show();
             });
         });
     }
 
-    /** Pindah chapter tanpa menumpuk activity: pakai ulang activity ini. */
-    private void openChapter(ShinigamiChapter chapter) {
-        Intent next = new Intent(this, getClass());
-        next.putExtra(EXTRA_MANGA_ID, mangaId);
-        next.putExtra(EXTRA_MANGA_TITLE, mangaTitle);
-        next.putExtra(EXTRA_MANGA_COVER, mangaCover);
-        next.putExtra(EXTRA_CHAPTER_ID, chapter.id);
-        next.putExtra(EXTRA_CHAPTER_NUMBER, chapter.number);
-        next.putExtra(EXTRA_CHAPTER_TITLE, chapter.title);
-        next.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        startActivity(next);
-        overridePendingTransition(0, 0);
-        finish();
+    /** Buka halaman detail manga tanpa reload katalog. */
+    private void openMangaDetail() {
+        Intent intent = new Intent(this, ShinigamiDetailActivity.class);
+        intent.putExtra(ShinigamiDetailActivity.EXTRA_MANGA_ID, mangaId);
+        intent.putExtra(ShinigamiDetailActivity.EXTRA_MANGA_TITLE, mangaTitle);
+        intent.putExtra(ShinigamiDetailActivity.EXTRA_MANGA_COVER, mangaCover);
+        startActivity(intent);
     }
 
     private void cycleQuality(View anchor) {
