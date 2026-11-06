@@ -911,7 +911,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             if (offlineChapter || position < 0 || position >= pages.size()) return;
             final String url = pages.get(position);
             if (url == null || url.isEmpty()) return;
-            if (cache.file(url) != null) return;
+            // Pemeriksaan cache dilakukan di dalam pool: jangan menyentuh disk
+            // dari main thread hanya untuk memutuskan prefetch.
             final String referer = source.config().siteBase() + "/";
             prefetchPool.execute(() -> {
                 try {
