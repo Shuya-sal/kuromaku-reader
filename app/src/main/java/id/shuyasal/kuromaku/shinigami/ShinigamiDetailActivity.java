@@ -75,22 +75,10 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private int chapterSortOrder = SORT_LATEST;
     private int activeResolvedTheme = -1;
 
-    public static final Comparator<ShinigamiChapter> COMPARATOR_ASC = (a, b) -> {
-        if (a == b) return 0;
-        if (a == null) return -1;
-        if (b == null) return 1;
-        int cmp = Double.compare(a.number, b.number);
-        if (cmp != 0) return cmp;
-        String at = a.title == null ? "" : a.title.toLowerCase(Locale.ROOT);
-        String bt = b.title == null ? "" : b.title.toLowerCase(Locale.ROOT);
-        if (at.contains("prolog") && !bt.contains("prolog")) return -1;
-        if (!at.contains("prolog") && bt.contains("prolog")) return 1;
-        if (at.contains("epilog") && !bt.contains("epilog")) return 1;
-        if (!at.contains("epilog") && bt.contains("epilog")) return -1;
-        return a.id.compareTo(b.id);
-    };
+    /** Urutan cerita dipakai bersama reader agar panah dan daftar konsisten. */
+    public static final Comparator<ShinigamiChapter> COMPARATOR_ASC = ShinigamiChapterOrder.ASC;
 
-    public static final Comparator<ShinigamiChapter> COMPARATOR_DESC = (a, b) -> COMPARATOR_ASC.compare(b, a);
+    public static final Comparator<ShinigamiChapter> COMPARATOR_DESC = ShinigamiChapterOrder.DESC;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());

@@ -5,6 +5,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -68,6 +69,27 @@ public final class ShinigamiSource {
     interface Transport { String get(String url) throws IOException, SourceException; }
     private static final int PAGE_SIZE = 24;
     private static final int CHAPTER_PAGE_SIZE = 500;
+    /** Batas halaman saat menyusun indeks chapter lengkap (500 per halaman). */
+    private static final int MAX_INDEX_PAGES = 20;
+    /** Indeks chapter terakhir per manga, supaya panah reader tidak meminta ulang. */
+    private static final java.util.LinkedHashMap<String, CachedIndex> INDEX_CACHE =
+            new java.util.LinkedHashMap<>(4, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(
+                        java.util.Map.Entry<String, CachedIndex> eldest) {
+                    return size() > 3;
+                }
+            };
+    /** Indeks dianggap segar selama ini; chapter baru tetap terlihat setelahnya. */
+    private static final long INDEX_TTL_MS = 5 * 60 * 1000L;
+
+    private static final class CachedIndex {
+        final List<ShinigamiChapter> chapters;
+        final long loadedAt;
+        CachedIndex(List<ShinigamiChapter> chapters, long loadedAt) {
+            this.chapters = chapters;
+            this.loadedAt = loadedAt;
+        }
+    }
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS).followRedirects(false)
@@ -176,6 +198,52 @@ public final class ShinigamiSource {
         int totalPage = Math.max(1, meta.optInt("total_page", 1));
         return new ChapterPage(new ArrayList<>(items.values()), Math.max(1, page),
                 totalPage, totalRecord);
+    }
+
+    /**
+     * Seluruh chapter sebuah manga, urut cerita (Prolog … Epilog).
+     *
+     * <p>Dipakai tombol chapter sebelumnya/berikutnya: chapter tujuan tidak boleh
+     * dicari hanya dari halaman yang kebetulan sudah dimuat, karena chapter yang
+     * dituju bisa berada di halaman pagination lain. Sumber membatasi
+     * {@code page_size} ke 500, jadi halaman diambil berurutan sampai
+     * {@code total_record} terpenuhi lalu diurutkan secara lokal.
+     */
+    public List<ShinigamiChapter> chaptersAll(String mangaId) throws SourceException {
+        requireId(mangaId, "manga");
+        synchronized (INDEX_CACHE) {
+            CachedIndex cached = INDEX_CACHE.get(mangaId);
+            if (cached != null && System.currentTimeMillis() - cached.loadedAt < INDEX_TTL_MS) {
+                return new ArrayList<>(cached.chapters);
+            }
+        }
+        LinkedHashMap<String, ShinigamiChapter> all = new LinkedHashMap<>();
+        int totalPages = 1;
+        int totalRecord = 0;
+        for (int page = 1; page <= MAX_INDEX_PAGES; page++) {
+            ChapterPage result = chapters(mangaId, page, "asc");
+            totalPages = Math.max(1, result.totalPages);
+            totalRecord = Math.max(totalRecord, result.totalRecord);
+            for (ShinigamiChapter chapter : result.items) {
+                if (!chapter.id.isEmpty()) all.putIfAbsent(chapter.id, chapter);
+            }
+            if (page >= totalPages) break;
+            if (totalRecord > 0 && all.size() >= totalRecord) break;
+        }
+        List<ShinigamiChapter> ordered = new ArrayList<>(all.values());
+        Collections.sort(ordered, ShinigamiChapterOrder.ASC);
+        synchronized (INDEX_CACHE) {
+            INDEX_CACHE.put(mangaId, new CachedIndex(ordered, System.currentTimeMillis()));
+        }
+        return new ArrayList<>(ordered);
+    }
+
+    /** Buang indeks tersimpan; dipakai setelah unduhan baru agar panah ikut segar. */
+    public static void clearChapterIndex(String mangaId) {
+        synchronized (INDEX_CACHE) {
+            if (mangaId == null) INDEX_CACHE.clear();
+            else INDEX_CACHE.remove(mangaId);
+        }
     }
 
     public ChapterImages chapterImages(String chapterId) throws SourceException {

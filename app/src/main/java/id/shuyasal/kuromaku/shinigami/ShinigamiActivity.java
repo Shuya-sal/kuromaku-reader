@@ -22,6 +22,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.ConcatAdapter;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -103,7 +104,16 @@ public class ShinigamiActivity extends AppCompatActivity {
     private View continueRail;
     private RecyclerView continueList;
     private ContinueAdapter continueAdapter;
-    private HeaderAdapter headerAdapter;
+    /**
+     * Satu ConcatAdapter per jenis tampilan (grid, baris, unduhan). Instance-nya
+     * dibuat sekali dan dipakai ulang; pagination tidak pernah memasang adapter
+     * baru, karena itu yang membuat RecyclerView membuang posisi scroll.
+     */
+    private ConcatAdapter gridStack;
+    private ConcatAdapter rowStack;
+    private ConcatAdapter downloadsStack;
+    private RecyclerView.Adapter<?> activeContent;
+    private HeaderAdapter activeHeader;
 
     private int page = 1;
     private int totalPages = 1;
@@ -471,10 +481,16 @@ public class ShinigamiActivity extends AppCompatActivity {
             if (entry.chapterId.isEmpty()) continue;
             recent.add(entry);
         }
+        final int before = continueAdapter.getItemCount();
         continueAdapter.submit(recent);
         // Tanpa riwayat item header hilang; katalog naik mendekati pencarian.
         continueRail.setVisibility(recent.isEmpty() ? View.GONE : View.VISIBLE);
-        if (headerAdapter != null) headerAdapter.notifyDataSetChanged();
+        // Jumlah item header hanya berubah saat riwayat pertama kali muncul.
+        // Memberitahu daftar setiap kali Activity kembali dari reader membuat
+        // katalog dirender ulang tanpa alasan; sekarang hanya bila perlu.
+        if (activeHeader != null && before != continueAdapter.getItemCount()) {
+            activeHeader.notifyDataSetChanged();
+        }
     }
 
     private void openHistoryEntry(ShinigamiStore.HistoryEntry entry) {
@@ -809,8 +825,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         buildFilterChips();
         downloads.clear();
         downloadsAdapter.notifyDataSetChanged();
-        list.setLayoutManager(new GridLayoutManager(this, 2));
-        list.setAdapter(stacked(downloadsAdapter));
+        switchContent(downloadsAdapter);
+        applyGridManager();
         downloadsEmpty.setVisibility(View.GONE);
         statusLine.setText("Memindai unduhan...");
         final int generation = ++downloadsGeneration;
@@ -853,11 +869,22 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void useRowAdapter() {
-        list.setLayoutManager(new LinearLayoutManager(this));
-        list.setAdapter(stacked(rowAdapter));
+        if (!(list.getLayoutManager() instanceof LinearLayoutManager)
+                || list.getLayoutManager() instanceof GridLayoutManager) {
+            list.setLayoutManager(new LinearLayoutManager(this));
+        }
+        switchContent(rowAdapter);
     }
 
     private void useGridAdapter() {
+        // switchContent lebih dulu: span lookup membaca activeHeader, dan rail
+        // riwayat harus direntang penuh sejak layout pertama.
+        switchContent(adapter);
+        applyGridManager();
+    }
+
+    /** Grid dua kolom dengan rail riwayat sebagai satu baris penuh. */
+    private void applyGridManager() {
         if (!(list.getLayoutManager() instanceof GridLayoutManager)) {
             list.setLayoutManager(new GridLayoutManager(this, 2));
         }
@@ -866,17 +893,40 @@ public class ShinigamiActivity extends AppCompatActivity {
         manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
             @Override public int getSpanSize(int position) {
                 // Item pertama adalah rail riwayat: satu baris penuh.
-                return headerAdapter != null && position < headerAdapter.getItemCount()
+                return activeHeader != null && position < activeHeader.getItemCount()
                         ? span : 1;
             }
         });
-        list.setAdapter(stacked(adapter));
     }
 
-    /** Rail riwayat + isi halaman dalam satu alur scroll (bukan nested scroll). */
-    private RecyclerView.Adapter<?> stacked(RecyclerView.Adapter<?> content) {
-        if (headerAdapter == null) headerAdapter = new HeaderAdapter();
-        return new androidx.recyclerview.widget.ConcatAdapter(headerAdapter, content);
+    /**
+     * Pasang tampilan yang diminta tanpa membuat adapter baru bila sudah aktif.
+     *
+     * <p>Penyebab katalog melompat ke atas: setiap halaman memanggil
+     * {@code list.setAdapter(new ConcatAdapter(...))}. RecyclerView membuang
+     * posisi scroll setiap kali adapter diganti, jadi begitu pengguna sampai di
+     * dasar daftar dan halaman berikutnya tiba, daftar kembali ke item pertama.
+     * Sekarang penggantian hanya terjadi saat berganti jenis tampilan; pagination
+     * cukup menambah item pada adapter yang sama.
+     */
+    private void switchContent(RecyclerView.Adapter<?> content) {
+        if (activeContent == content) return;
+        ConcatAdapter target;
+        if (content == rowAdapter) {
+            if (rowStack == null) rowStack = new ConcatAdapter(new HeaderAdapter(), rowAdapter);
+            target = rowStack;
+        } else if (content == downloadsAdapter) {
+            if (downloadsStack == null) {
+                downloadsStack = new ConcatAdapter(new HeaderAdapter(), downloadsAdapter);
+            }
+            target = downloadsStack;
+        } else {
+            if (gridStack == null) gridStack = new ConcatAdapter(new HeaderAdapter(), adapter);
+            target = gridStack;
+        }
+        activeContent = content;
+        activeHeader = (HeaderAdapter) target.getAdapters().get(0);
+        if (list.getAdapter() != target) list.setAdapter(target);
     }
 
     private void loadPage(int targetPage, boolean append) {
@@ -932,6 +982,7 @@ public class ShinigamiActivity extends AppCompatActivity {
                     if (!append) rows.clear();
                     java.util.Set<String> known = new java.util.HashSet<>();
                     for (Row row : rows) known.add(row.mangaId);
+                    final int rowStart = rows.size();
                     for (ShinigamiManga manga : page_result.items) {
                         if (manga.latestChapterNumber <= 0 || !known.add(manga.id)) continue;
                         String date = manga.latestChapterTimeMillis > 0
@@ -941,18 +992,42 @@ public class ShinigamiActivity extends AppCompatActivity {
                         rows.add(new Row(manga.id, manga.title, manga.coverUrl, "",
                                 manga.latestChapterNumber, date));
                     }
-                    rowAdapter.notifyDataSetChanged();
+                    // Sama seperti grid: halaman berikutnya hanya ditambahkan.
+                    final int rowAdded = rows.size() - rowStart;
+                    if (append && rowAdded > 0) {
+                        rowAdapter.notifyItemRangeInserted(rowStart, rowAdded);
+                    } else {
+                        rowAdapter.notifyDataSetChanged();
+                    }
                 } else {
                     useGridAdapter();
-                    java.util.LinkedHashMap<String, ShinigamiManga> merged = new java.util.LinkedHashMap<>();
+                    // Halaman berikutnya hanya DITAMBAHKAN: item lama tidak
+                    // dikosongkan dan adapter tidak diganti, jadi posisi scroll
+                    // pengguna tidak berubah. Sebelumnya daftar di-clear lalu
+                    // notifyDataSetChanged() setelah adapter baru dipasang,
+                    // sehingga katalog melompat ke atas.
+                    final int start = items.size();
+                    java.util.LinkedHashMap<String, ShinigamiManga> merged =
+                            new java.util.LinkedHashMap<>();
                     if (append) for (ShinigamiManga manga : items) merged.put(manga.id, manga);
-                    for (ShinigamiManga manga : page_result.items) merged.put(manga.id, manga);
+                    int added = 0;
+                    for (ShinigamiManga manga : page_result.items) {
+                        if (!merged.containsKey(manga.id)) added++;
+                        merged.put(manga.id, manga);
+                    }
                     items.clear();
                     items.addAll(merged.values());
-                    adapter.notifyDataSetChanged();
+                    if (append && added > 0) {
+                        adapter.notifyItemRangeInserted(start, added);
+                    } else {
+                        adapter.notifyDataSetChanged();
+                    }
                 }
                 page = targetPage;
                 totalPages = Math.max(1, page_result.totalPages);
+                // Hanya penggantian daftar (cari/filter/muat ulang manual) yang
+                // kembali ke atas. Pagination tidak pernah menggeser posisi.
+                if (!append && list != null) list.scrollToPosition(0);
                 long total = page_result.totalRecords;
                 statusLine.setText((newest ? rows.size() + " chapter terbaru" : items.size() + " manga")
                         + (total > 0 ? " dari " + total : "")
@@ -1091,6 +1166,16 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private final class MangaAdapter extends RecyclerView.Adapter<MangaAdapter.Holder> {
+
+        MangaAdapter() {
+            setHasStableIds(true);
+        }
+
+        /** ID stabil: RecyclerView tidak perlu membuang posisi saat item ditambah. */
+        @Override public long getItemId(int position) {
+            return position < 0 || position >= items.size()
+                    ? RecyclerView.NO_ID : items.get(position).id.hashCode();
+        }
 
         class Holder extends RecyclerView.ViewHolder {
             final RatioFrameLayout coverBox;
@@ -1247,6 +1332,15 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private final class RowAdapter extends RecyclerView.Adapter<RowAdapter.Holder> {
+
+        RowAdapter() {
+            setHasStableIds(true);
+        }
+
+        @Override public long getItemId(int position) {
+            return position < 0 || position >= rows.size()
+                    ? RecyclerView.NO_ID : rows.get(position).mangaId.hashCode();
+        }
 
         class Holder extends RecyclerView.ViewHolder {
             final ImageView cover;

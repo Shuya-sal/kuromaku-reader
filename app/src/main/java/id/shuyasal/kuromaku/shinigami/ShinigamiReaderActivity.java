@@ -72,6 +72,19 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private Button retryButton;
     private TextView offlineNotice;
     private TextView titleView;
+    /** Navigasi chapter sebelumnya/berikutnya menurut urutan cerita. */
+    private LinearLayout chapterNav;
+    private android.widget.ImageButton prevChapterButton;
+    private android.widget.ImageButton nextChapterButton;
+    private TextView navLabel;
+    private View fullscreenTapStrip;
+    private final List<ShinigamiChapter> storyOrder = new ArrayList<>();
+    private ShinigamiChapter currentChapter;
+    private ShinigamiChapter previousChapter;
+    private ShinigamiChapter nextChapter;
+    /** Menahan ketukan berulang saat perpindahan chapter sedang berjalan. */
+    private boolean switching;
+    private int indexGeneration;
     private ShinigamiPageCache cache;
     private ShinigamiQuality quality = ShinigamiQuality.AUTO;
     private boolean fullscreen;
@@ -105,6 +118,9 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         chapterNumber = getIntent().getDoubleExtra(EXTRA_CHAPTER_NUMBER, 0d);
         chapterTitle = getIntent().getStringExtra(EXTRA_CHAPTER_TITLE);
 
+        currentChapter = new ShinigamiChapter(chapterId == null ? "" : chapterId, mangaId,
+                chapterNumber, chapterTitle, "", "");
+
         if (chapterId == null || chapterId.isEmpty()) {
             Toast.makeText(this, "Chapter tidak ditemukan.", Toast.LENGTH_LONG).show();
             finish();
@@ -113,6 +129,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
 
         buildUi();
         loadPages();
+        loadChapterIndex();
     }
 
     private void buildUi() {
@@ -180,8 +197,21 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         noticeParams.setMargins(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 28));
         body.addView(offlineNotice, noticeParams);
 
+        // Strip tipis di dasar layar: hanya aktif saat layar penuh, supaya
+        // ketukan pada gambar tetap membuka zoom seperti sebelumnya.
+        fullscreenTapStrip = new View(this);
+        fullscreenTapStrip.setTag("shinigami_reader_tap_strip");
+        fullscreenTapStrip.setVisibility(View.GONE);
+        fullscreenTapStrip.setOnClickListener(v -> toggleFullscreen());
+        body.addView(fullscreenTapStrip, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 56), Gravity.BOTTOM));
+
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        chapterNav = buildChapterNav();
+        root.addView(chapterNav, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         setContentView(root);
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
@@ -367,6 +397,14 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private void toggleFullscreen() {
         fullscreen = !fullscreen;
         bar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+        if (chapterNav != null) chapterNav.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+        if (fullscreenTapStrip != null) {
+            fullscreenTapStrip.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
+        }
+        if (fullscreen) {
+            Toast.makeText(this, "Layar penuh. Ketuk bagian bawah layar untuk menampilkan kontrol.",
+                    Toast.LENGTH_SHORT).show();
+        }
         if (fullscreen) {
             androidx.core.view.WindowInsetsControllerCompat controller =
                     androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
@@ -377,6 +415,164 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             androidx.core.view.WindowInsetsControllerCompat controller =
                     androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
             controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+        }
+    }
+
+    /**
+     * Bar navigasi bawah: [←] judul chapter aktif [→].
+     *
+     * <p>Toolbar atas sudah memuat lima aksi 48 dp; menambah dua tombol lagi di
+     * sana menyisakan ruang judul hampir nol pada layar 360 dp. Bar bawah tidak
+     * menutupi gambar karena mengambil ruang tata letak sendiri, dan ikut
+     * tersembunyi saat layar penuh.
+     */
+    private LinearLayout buildChapterNav() {
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setGravity(Gravity.CENTER_VERTICAL);
+        nav.setTag("shinigami_reader_nav");
+        nav.setBackgroundColor(palette.surface);
+        nav.setPadding(Ui.dp(this, 6), Ui.dp(this, 4), Ui.dp(this, 6), Ui.dp(this, 4));
+
+        prevChapterButton = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_chevron_left, "Chapter sebelumnya", palette);
+        prevChapterButton.setTag("shinigami_reader_prev");
+        prevChapterButton.setOnClickListener(v -> navigateTo(previousChapter));
+        nav.addView(prevChapterButton, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        navLabel = Ui.label(this, shortTitle(), 12, palette.muted);
+        navLabel.setTag("shinigami_reader_nav_label");
+        navLabel.setGravity(Gravity.CENTER);
+        navLabel.setSingleLine(true);
+        navLabel.setEllipsize(TextUtils.TruncateAt.END);
+        nav.addView(navLabel, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        nextChapterButton = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_chevron_right, "Chapter berikutnya", palette);
+        nextChapterButton.setTag("shinigami_reader_next");
+        nextChapterButton.setOnClickListener(v -> navigateTo(nextChapter));
+        nav.addView(nextChapterButton, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        updateNavButtons();
+        return nav;
+    }
+
+    /**
+     * Indeks chapter untuk panah kiri/kanan.
+     *
+     * <p>Diambil dari seluruh chapter manga pada sumber (bukan halaman yang
+     * sedang dimuat), lalu diurutkan menurut alur cerita. Saat offline, urutan
+     * disusun dari chapter yang tersimpan di perangkat.
+     */
+    private void loadChapterIndex() {
+        final int generation = ++indexGeneration;
+        final boolean online = hasInternet();
+        worker.execute(() -> {
+            List<ShinigamiChapter> ordered = new ArrayList<>();
+            if (online) {
+                try {
+                    ordered.addAll(source.chaptersAll(mangaId));
+                } catch (ShinigamiSource.SourceException ignored) {
+                    // Jaringan gagal di tengah jalan: pakai chapter offline.
+                }
+            }
+            if (ordered.isEmpty()) ordered.addAll(offlineChapters());
+            final List<ShinigamiChapter> result = ordered;
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (generation != indexGeneration) return;
+                storyOrder.clear();
+                storyOrder.addAll(result);
+                previousChapter = ShinigamiChapterOrder.previous(storyOrder, currentChapter);
+                nextChapter = ShinigamiChapterOrder.next(storyOrder, currentChapter);
+                updateNavButtons();
+            });
+        });
+    }
+
+    /** Chapter yang benar-benar ada di penyimpanan, urut cerita. */
+    private List<ShinigamiChapter> offlineChapters() {
+        List<ShinigamiChapter> local = new ArrayList<>();
+        ShinigamiDownloads.Manga stored = ShinigamiDownloads.forManga(this, mangaId);
+        if (stored == null) return local;
+        for (ShinigamiDownloads.Chapter chapter : stored.chapters) {
+            local.add(new ShinigamiChapter(chapter.chapterId, mangaId, chapter.number,
+                    chapter.label, "", ""));
+        }
+        java.util.Collections.sort(local, ShinigamiChapterOrder.ASC);
+        return local;
+    }
+
+    private void updateNavButtons() {
+        if (prevChapterButton == null || nextChapterButton == null) return;
+        boolean canPrevious = previousChapter != null && !switching;
+        boolean canNext = nextChapter != null && !switching;
+        prevChapterButton.setEnabled(canPrevious);
+        prevChapterButton.setAlpha(canPrevious ? 1f : 0.35f);
+        prevChapterButton.setContentDescription(previousChapter == null
+                ? "Tidak ada chapter sebelumnya" : previousChapter.label());
+        nextChapterButton.setEnabled(canNext);
+        nextChapterButton.setAlpha(canNext ? 1f : 0.35f);
+        nextChapterButton.setContentDescription(nextChapter == null
+                ? "Tidak ada chapter berikutnya" : nextChapter.label());
+        if (navLabel != null) {
+            int index = ShinigamiChapterOrder.indexOf(storyOrder, chapterId);
+            String position = index < 0 ? "" : " · " + (index + 1) + "/" + storyOrder.size();
+            String title = currentChapter == null ? shortTitle() : currentChapter.label();
+            navLabel.setText(title + position);
+        }
+    }
+
+    /**
+     * Pindah ke chapter tujuan bila bisa dibuka; kalau tidak, halaman yang
+     * sedang dibaca tidak disentuh sama sekali.
+     */
+    private void navigateTo(ShinigamiChapter target) {
+        if (target == null || switching) return;
+        switching = true;
+        updateNavButtons();
+        // Progres chapter lama disimpan sebelum activity ini selesai.
+        saveProgress();
+        worker.execute(() -> {
+            final boolean ready = isChapterAvailable(target);
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (!ready) {
+                    switching = false;
+                    updateNavButtons();
+                    Toast.makeText(this, "Chapter " + ShinigamiManga.formatNumber(target.number)
+                            + " belum tersimpan offline dan tidak ada koneksi internet. "
+                            + "Halaman yang sedang dibaca tidak diubah.", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                openChapter(target);
+            });
+        });
+    }
+
+    /** Chapter bisa dibuka bila tersimpan offline atau perangkat online. */
+    private boolean isChapterAvailable(ShinigamiChapter chapter) {
+        int expected = store.expectedPages(chapter.id);
+        if (expected > 0 && downloader.isDownloaded(chapter.id, expected)) return true;
+        return hasInternet();
+    }
+
+    /** Bisa dioverride di tes agar jalur online/offline bisa diuji tanpa jaringan. */
+    protected boolean hasInternet() {
+        try {
+            android.net.ConnectivityManager manager = (android.net.ConnectivityManager)
+                    getSystemService(CONNECTIVITY_SERVICE);
+            if (manager == null) return true;
+            android.net.Network network = manager.getActiveNetwork();
+            if (network == null) return false;
+            android.net.NetworkCapabilities caps = manager.getNetworkCapabilities(network);
+            return caps != null && caps.hasCapability(
+                    android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (RuntimeException ignored) {
+            return true;
         }
     }
 
