@@ -20,6 +20,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -51,7 +52,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     private static final int CONTINUE_LIMIT = 8;
     private static final int CONTINUE_TEXT_DP = 104;
 
-    private enum Mode {
+    enum Mode {
         CATALOGUE,
         NEWEST_CHAPTERS,
         HISTORY,
@@ -59,7 +60,7 @@ public class ShinigamiActivity extends AppCompatActivity {
         DOWNLOADS
     }
 
-    private static final class Row {
+    static final class Row {
         final String mangaId;
         final String title;
         final String coverUrl;
@@ -118,6 +119,8 @@ public class ShinigamiActivity extends AppCompatActivity {
 
     static final class RetainedState {
         final List<ShinigamiManga> items;
+        final List<Row> rows;
+        final List<ShinigamiDownloads.Manga> downloads;
         final int page;
         final int totalPages;
         final String query;
@@ -128,10 +131,14 @@ public class ShinigamiActivity extends AppCompatActivity {
         final int scrollPosition;
         final int scrollOffset;
 
-        RetainedState(List<ShinigamiManga> items, int page, int totalPages,
+        RetainedState(List<ShinigamiManga> items, List<Row> rows,
+                      List<ShinigamiDownloads.Manga> downloads,
+                      int page, int totalPages,
                       String query, ShinigamiSource.Sort sort, String genre,
                       String status, Mode mode, int scrollPosition, int scrollOffset) {
             this.items = items;
+            this.rows = rows;
+            this.downloads = downloads;
             this.page = page;
             this.totalPages = totalPages;
             this.query = query;
@@ -161,13 +168,26 @@ public class ShinigamiActivity extends AppCompatActivity {
             offset = (first == null) ? 0 : (first.getTop() - list.getPaddingTop());
         }
         return new RetainedState(
-                new ArrayList<>(items), page, totalPages,
+                new ArrayList<>(items), new ArrayList<>(rows),
+                new ArrayList<>(downloads), page, totalPages,
                 query, sort, genre, status, mode, pos, offset);
     }
 
+    /**
+     * Terapkan tema yang baru dipilih.
+     *
+     * AppCompatDelegate sudah menjadwalkan pembuatan ulang Activity sendiri
+     * begitu mode malam berubah. Memanggil {@code recreate()} langsung membuat
+     * Activity dibuat ulang dua kali (state bisa hilang pada putaran kedua),
+     * jadi di sini hanya dipasang jaring aman: bila setelah satu putaran main
+     * thread tema efektif masih berbeda, barulah recreate manual dijalankan.
+     */
     private void applyThemeSelection() {
         sCachedState = captureRetainedState();
-        recreate();
+        main.postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (new Prefs(this).resolvedTheme() != activeResolvedTheme) recreate();
+        }, 150);
     }
 
     @Override
@@ -185,9 +205,13 @@ public class ShinigamiActivity extends AppCompatActivity {
         }
         sCachedState = null;
 
-        if (retained != null && !retained.items.isEmpty()) {
+        if (retained != null && (!retained.items.isEmpty() || !retained.rows.isEmpty() || retained.mode == Mode.DOWNLOADS)) {
             items.clear();
             items.addAll(retained.items);
+            rows.clear();
+            rows.addAll(retained.rows);
+            downloads.clear();
+            downloads.addAll(retained.downloads);
             page = retained.page;
             totalPages = retained.totalPages;
             query = retained.query;
@@ -199,8 +223,25 @@ public class ShinigamiActivity extends AppCompatActivity {
             buildUi();
             searchField.setText(query);
             refreshContinueRail();
-            useGridAdapter();
-            if (adapter != null) adapter.notifyDataSetChanged();
+            buildFilterChips();
+
+            if (mode == Mode.HISTORY) {
+                useRowAdapter();
+                rowAdapter.notifyDataSetChanged();
+                statusLine.setText(rows.size() + " manga dalam riwayat");
+            } else if (mode == Mode.DOWNLOADS) {
+                showDownloads();
+            } else if (mode == Mode.FAVORITES) {
+                useGridAdapter();
+                adapter.notifyDataSetChanged();
+                statusLine.setText(items.size() + " manga favorit");
+            } else if (mode == Mode.NEWEST_CHAPTERS) {
+                useRowAdapter();
+                rowAdapter.notifyDataSetChanged();
+            } else {
+                useGridAdapter();
+                if (adapter != null) adapter.notifyDataSetChanged();
+            }
 
             final int targetPos = retained.scrollPosition;
             final int targetOffset = retained.scrollOffset;
@@ -947,7 +988,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     /** Menu Pengaturan: tema (Light/Dark/System) dan domain sumber. */
     private void showSettingsMenu() {
         String[] options = {"Tema tampilan", "Domain sumber"};
-        new android.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Pengaturan Manga Shinigami")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) showThemeDialog();
@@ -959,10 +1000,13 @@ public class ShinigamiActivity extends AppCompatActivity {
 
     /** Pilihan tema Light/Dark/System; tersimpan dan langsung diterapkan dengan state retained. */
     private void showThemeDialog() {
-        String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti Sistem (System)"};
+        // Urutan pilihan sengaja sama dengan nilai Prefs.THEME_* supaya indeks
+        // dialog bisa dipakai langsung, dan tema Sepia tidak lagi tampil
+        // sebagai "Ikuti Sistem" pada daftar pilihan.
+        String[] options = {"Terang (Light)", "Gelap (Dark)", "Sepia", "Ikuti Sistem (System)"};
         int checked = new Prefs(this).theme();
         if (checked < Prefs.THEME_LIGHT || checked > Prefs.THEME_SYSTEM) checked = Prefs.THEME_SYSTEM;
-        new android.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Tema Manga Shinigami")
                 .setSingleChoiceItems(options, checked, (dialog, which) -> {
                     Prefs prefs = new Prefs(this);
@@ -1009,7 +1053,7 @@ public class ShinigamiActivity extends AppCompatActivity {
         problem.setVisibility(View.GONE);
         box.addView(problem);
 
-        new android.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Domain sumber")
                 .setView(box)
                 .setPositiveButton("Simpan", (d, which) -> {

@@ -96,4 +96,24 @@ public class ShinigamiChapterSortingAndThemeTest {
         assertEquals("0", list.get(4).id);
         assertEquals("p", list.get(5).id);
     }
+
+    @Test
+    public void retainedStateStoresAllModesAndItems() {
+        List<ShinigamiManga> mangas = new ArrayList<>();
+        mangas.add(new ShinigamiManga("m1", "Manga 1", "", "cover1", "", 1, "2024", 9.0, 1000L, 1.0, "1d", Collections.emptyList(), Collections.emptyList(), "manga"));
+        List<ShinigamiActivity.Row> rows = new ArrayList<>();
+        rows.add(new ShinigamiActivity.Row("m1", "Manga 1", "cover1", "ch1", 1.0, "today"));
+        List<ShinigamiDownloads.Manga> downloads = new ArrayList<>();
+
+        ShinigamiActivity.RetainedState state = new ShinigamiActivity.RetainedState(
+                mangas, rows, downloads, 1, 10, "query", ShinigamiSource.Sort.LATEST,
+                "", "", ShinigamiActivity.Mode.HISTORY, 5, 20);
+
+        assertEquals(1, state.items.size());
+        assertEquals(1, state.rows.size());
+        assertEquals("query", state.query);
+        assertEquals(ShinigamiActivity.Mode.HISTORY, state.mode);
+        assertEquals(5, state.scrollPosition);
+        assertEquals(20, state.scrollOffset);
+    }
 }

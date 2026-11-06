@@ -23,6 +23,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
@@ -55,6 +56,18 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     public static final String EXTRA_MANGA_COVER = "manga_cover";
 
     private static final int PAGE_SIZE = 24;
+    /**
+     * Batas halaman chapter yang diambil berurutan untuk membentuk indeks penuh.
+     * Sumber membatasi page_size ke 500, jadi 20 halaman menampung 10.000 chapter
+     * — jauh di atas judul terpanjang yang tersedia saat ini.
+     */
+    private static final int MAX_INDEX_PAGES = 20;
+    /** Batas halaman yang diambil bertahap saat pencarian butuh indeks penuh. */
+    private static final int MAX_DEEP_SEARCH_PAGES = 12;
+    /** Batas baris hasil pencarian yang dirender agar daftar tetap ringan. */
+    private static final int MAX_SEARCH_ROWS = 200;
+    /** Jeda sebelum indeks chapter tambahan diambil saat pengguna mengetik. */
+    private static final long SEARCH_DEBOUNCE_MS = 400L;
 
     // Prioritas pengurutan chapter: Terbaru -> Terlama (default) / Terlama -> Terbaru.
     public static final int SORT_LATEST = 0;
@@ -81,6 +94,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable deepSearchTask = this::ensureFullIndexForSearch;
     private final List<ShinigamiChapter> chapters = new ArrayList<>();
     private final Set<String> knownChapterIds = new HashSet<>();
     private int chapterTotalRecord = 0;
@@ -92,6 +106,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
     private Palette palette;
     private ShinigamiSource source;
+    private ShinigamiManga lastDetail;
     private ShinigamiStore store;
     private ShinigamiDownloader downloader;
 
@@ -121,6 +136,53 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private TextView selectionCount;
     private Button selectionDownload;
 
+    /**
+     * State yang dibawa melewati pembuatan ulang Activity (misalnya saat tema
+     * diganti). Tanpa ini, pergantian tema akan memicu fetch ulang detail dan
+     * chapter sekaligus mengembalikan posisi scroll ke atas.
+     */
+    static final class RetainedState {
+        final ShinigamiManga detail;
+        final List<ShinigamiChapter> chapters;
+        final int page;
+        final int totalPages;
+        final int totalRecord;
+        final int sortOrder;
+        final String query;
+        final Set<String> selected;
+        final int scrollY;
+
+        RetainedState(ShinigamiManga detail, List<ShinigamiChapter> chapters,
+                      int page, int totalPages, int totalRecord, int sortOrder,
+                      String query, Set<String> selected, int scrollY) {
+            this.detail = detail;
+            this.chapters = chapters;
+            this.page = page;
+            this.totalPages = totalPages;
+            this.totalRecord = totalRecord;
+            this.sortOrder = sortOrder;
+            this.query = query;
+            this.selected = selected;
+            this.scrollY = scrollY;
+        }
+    }
+
+    @Override
+    public Object onRetainCustomNonConfigurationInstance() {
+        return captureRetainedState();
+    }
+
+    private RetainedState captureRetainedState() {
+        int scrollY = detailScroll == null ? 0 : detailScroll.getScrollY();
+        return new RetainedState(lastDetail, new ArrayList<>(chapters),
+                chapterPage, chapterTotalPages, chapterTotalRecord, chapterSortOrder,
+                currentSearchQuery, new LinkedHashSet<>(selected), scrollY);
+    }
+
+    private void applyThemeSelection() {
+        recreate();
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -140,15 +202,55 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             return;
         }
 
-        chapterSortOrder = new Prefs(this).chapterSortOrder();
-        if (chapterSortOrder != SORT_LATEST && chapterSortOrder != SORT_OLDEST) {
-            chapterSortOrder = SORT_LATEST;
+        RetainedState retained = (RetainedState) getLastCustomNonConfigurationInstance();
+        if (retained != null) {
+            chapterSortOrder = retained.sortOrder;
+        } else {
+            chapterSortOrder = new Prefs(this).chapterSortOrder();
+            if (chapterSortOrder != SORT_LATEST && chapterSortOrder != SORT_OLDEST) {
+                chapterSortOrder = SORT_LATEST;
+            }
         }
 
         buildUi();
         ShinigamiDownloadStatus.addListener(downloadStateListener);
+
+        if (retained != null) {
+            restoreRetainedState(retained);
+            return;
+        }
+
         loadDetail();
         loadChapters(1);
+    }
+
+    /** Kembalikan tampilan tanpa menyentuh jaringan setelah Activity dibuat ulang. */
+    private void restoreRetainedState(RetainedState retained) {
+        lastDetail = retained.detail;
+        if (lastDetail != null) {
+            title = lastDetail.title.isEmpty() ? title : lastDetail.title;
+            if (!lastDetail.coverUrl.isEmpty()) coverUrl = lastDetail.coverUrl;
+            applyManga(lastDetail);
+        }
+        chapters.clear();
+        chapters.addAll(retained.chapters);
+        knownChapterIds.clear();
+        for (ShinigamiChapter item : chapters) knownChapterIds.add(item.id);
+        chapterPage = retained.page;
+        chapterTotalPages = retained.totalPages;
+        chapterTotalRecord = retained.totalRecord;
+        selected.clear();
+        selected.addAll(retained.selected);
+        currentSearchQuery = retained.query == null ? "" : retained.query;
+        if (searchView != null && !currentSearchQuery.isEmpty()) {
+            searchView.setText(currentSearchQuery);
+            searchView.setSelection(searchView.getText().length());
+        }
+        updateChapterHeading();
+        renderChapters();
+        moreButton.setVisibility(chapterPage < chapterTotalPages ? View.VISIBLE : View.GONE);
+        final int restoreY = retained.scrollY;
+        detailScroll.post(() -> detailScroll.scrollTo(0, restoreY));
     }
 
     /**
@@ -285,6 +387,14 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             @Override public void afterTextChanged(android.text.Editable s) {
                 currentSearchQuery = s == null ? "" : s.toString().trim();
                 renderChapters();
+                // Pencarian tidak boleh berhenti pada halaman yang sudah dimuat:
+                // ambil sisa halaman dari sumber agar chapter lama tetap
+                // ditemukan. Ditunda sebentar supaya tiap ketikan tidak
+                // melepaskan rangkaian permintaan baru ke sumber.
+                main.removeCallbacks(deepSearchTask);
+                if (!currentSearchQuery.isEmpty()) {
+                    main.postDelayed(deepSearchTask, SEARCH_DEBOUNCE_MS);
+                }
             }
         });
         sortRow.addView(searchView, new LinearLayout.LayoutParams(0,
@@ -394,6 +504,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     }
 
     private void applyManga(ShinigamiManga manga) {
+        lastDetail = manga;
         StringBuilder facts = new StringBuilder();
         facts.append(manga.statusLabel());
         if (!manga.releaseYear.isEmpty()) {
@@ -424,53 +535,134 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     }
 
     private void loadChapters(int targetPage) {
-        if (loading) return;
+        loadChapters(targetPage, false);
+    }
+
+    /**
+     * @param force true untuk memaksa permintaan baru walau permintaan lain
+     *              masih berjalan. Dipakai saat arah pengurutan berubah: daftar
+     *              sudah dikosongkan, jadi menolak memuat ulang akan
+     *              meninggalkan layar kosong dan urutan lama tetap terpakai.
+     *              Permintaan lama otomatis diabaikan lewat nomor generasi.
+     */
+    private void loadChapters(int targetPage, boolean force) {
+        if (loading && !force) return;
         loading = true;
         final int gen = ++chapterRequestGeneration;
-        final int sortOrder = chapterSortOrder;
+        final String order = chapterSortOrder == SORT_LATEST ? "desc" : "asc";
+        final int firstPage = Math.max(1, targetPage);
         worker.execute(() -> {
-            ShinigamiSource.ChapterPage result = null;
+            // Indeks chapter harus lengkap, bukan satu halaman. Sumber membatasi
+            // page_size (maksimum 500), jadi judul dengan 579 chapter mengembalikan
+            // halaman 1 berisi chapter 575..80 pada urutan desc; tanpa perulangan
+            // halaman chapter 1..79 tidak pernah masuk dan "Terlama" berhenti di
+            // tengah daftar. Perulangan di bawah mengambil seluruh halaman sampai
+            // total_record terpenuhi, lalu pengurutan dilakukan pada data penuh.
+            List<ShinigamiChapter> collected = new ArrayList<>();
+            int loadedThrough = firstPage - 1;
+            int totalPages = 1;
+            int totalRecord = 0;
             String failure = null;
-            ShinigamiDownloads.Manga offline = null;
             try {
-                result = source.chapters(mangaId, targetPage,
-                        sortOrder == SORT_LATEST ? "desc" : "asc");
+                for (int page = firstPage; page <= firstPage + MAX_INDEX_PAGES - 1; page++) {
+                    ShinigamiSource.ChapterPage result = source.chapters(mangaId, page, order);
+                    totalPages = Math.max(1, result.totalPages);
+                    totalRecord = Math.max(totalRecord, result.totalRecord);
+                    collected.addAll(result.items);
+                    loadedThrough = page;
+                    if (page >= totalPages) break;
+                    if (totalRecord > 0 && collected.size() >= totalRecord) break;
+                }
             } catch (ShinigamiSource.SourceException error) {
                 failure = error.getMessage();
-                // Chapter tersimpan tetap bisa dibuka walau katalog gagal dimuat.
-                offline = ShinigamiDownloads.forManga(this, mangaId);
             }
-            final ShinigamiSource.ChapterPage page_result = result;
+            final List<ShinigamiChapter> fetched = collected;
+            final int reachedPage = loadedThrough;
+            final int pages = totalPages;
+            final int record = totalRecord;
             final String message = failure;
-            final ShinigamiDownloads.Manga offlineChapterList = offline;
+            final ShinigamiDownloads.Manga offline = fetched.isEmpty()
+                    ? ShinigamiDownloads.forManga(this, mangaId) : null;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (gen != chapterRequestGeneration) return;
                 loading = false;
-                if (message != null) {
-                    if (offlineChapterList != null && !offlineChapterList.chapters.isEmpty()
-                            && renderOfflineChapters(offlineChapterList)) return;
+                if (message != null && fetched.isEmpty()) {
+                    if (offline != null && !offline.chapters.isEmpty()
+                            && renderOfflineChapters(offline)) return;
                     errorText.setText(message);
                     errorText.setVisibility(View.VISIBLE);
                     retryButton.setVisibility(View.VISIBLE);
                     return;
                 }
-                if (page_result == null) return;
                 errorText.setVisibility(View.GONE);
                 retryButton.setVisibility(View.GONE);
-                chapterPage = targetPage;
-                chapterTotalPages = Math.max(1, page_result.totalPages);
-                chapterTotalRecord = page_result.totalRecord;
-                if (targetPage <= 1) {
-                    chapters.clear();
-                    knownChapterIds.clear();
-                }
-                for (ShinigamiChapter item : page_result.items) {
+                chapters.clear();
+                knownChapterIds.clear();
+                for (ShinigamiChapter item : fetched) {
                     if (knownChapterIds.add(item.id)) chapters.add(item);
                 }
+                chapterPage = Math.max(1, reachedPage);
+                chapterTotalPages = Math.max(pages, chapterPage);
+                chapterTotalRecord = Math.max(record, chapters.size());
+                updateChapterHeading();
+                renderChapters();
+                moreButton.setVisibility(View.GONE);
+                if (message != null) {
+                    Toast.makeText(ShinigamiDetailActivity.this,
+                            "Sebagian chapter gagal dimuat: " + message,
+                            Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
+
+    /**
+     * Ambil sisa halaman chapter dari sumber ketika pengguna mencari. Dengan
+     * begitu pencarian "1" pada manga 1000+ chapter tetap menemukan chapter
+     * paling awal walau halaman tersebut belum pernah dimuat.
+     */
+    private void ensureFullIndexForSearch() {
+        if (loadingMorePages || chapterPage >= chapterTotalPages) return;
+        if (chapters.size() >= chapterTotalRecord && chapterTotalRecord > 0) return;
+        loadingMorePages = true;
+        final int gen = chapterRequestGeneration;
+        final int start = chapterPage + 1;
+        final int last = Math.min(chapterTotalPages, start + MAX_DEEP_SEARCH_PAGES - 1);
+        final String order = chapterSortOrder == SORT_LATEST ? "desc" : "asc";
+        worker.execute(() -> {
+            List<ShinigamiChapter> collected = new ArrayList<>();
+            String failure = null;
+            int reached = chapterPage;
+            for (int page = start; page <= last; page++) {
+                try {
+                    ShinigamiSource.ChapterPage result = source.chapters(mangaId, page, order);
+                    collected.addAll(result.items);
+                    reached = page;
+                    if (page >= result.totalPages) break;
+                } catch (ShinigamiSource.SourceException error) {
+                    failure = error.getMessage();
+                    break;
+                }
+            }
+            final List<ShinigamiChapter> extra = collected;
+            final int loadedThrough = reached;
+            final String message = failure;
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                loadingMorePages = false;
+                if (gen != chapterRequestGeneration) return;
+                for (ShinigamiChapter item : extra) {
+                    if (knownChapterIds.add(item.id)) chapters.add(item);
+                }
+                chapterPage = Math.max(chapterPage, loadedThrough);
                 updateChapterHeading();
                 renderChapters();
                 moreButton.setVisibility(chapterPage < chapterTotalPages ? View.VISIBLE : View.GONE);
+                if (message != null && !currentSearchQuery.isEmpty()) {
+                    Toast.makeText(this, "Sebagian chapter gagal dimuat: " + message,
+                            Toast.LENGTH_SHORT).show();
+                }
             });
         });
     }
@@ -521,6 +713,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         chapterList.removeAllViews();
         rows.clear();
         List<ShinigamiChapter> ordered = sortedChapters();
+        boolean truncated = false;
         if (!currentSearchQuery.isEmpty()) {
             List<ShinigamiChapter> filtered = new ArrayList<>();
             String queryLower = currentSearchQuery.toLowerCase(Locale.ROOT);
@@ -534,15 +727,31 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                 }
             }
             ordered = filtered;
+            if (ordered.size() > MAX_SEARCH_ROWS) {
+                ordered = new ArrayList<>(ordered.subList(0, MAX_SEARCH_ROWS));
+                truncated = true;
+            }
         }
         for (ShinigamiChapter chapter : ordered) {
             chapterList.addView(buildChapterRow(chapter));
         }
+        if (truncated) {
+            TextView note = Ui.label(this,
+                    "Menampilkan " + MAX_SEARCH_ROWS + " hasil pertama. Persempit kata kunci untuk hasil lain.",
+                    12, palette.muted);
+            note.setTag("shinigami_search_truncated");
+            chapterList.addView(note);
+        }
         if (ordered.isEmpty()) {
-            TextView empty = Ui.label(this,
-                    currentSearchQuery.isEmpty() ? "Sumber belum memuat chapter untuk judul ini."
-                            : "Tidak ditemukan chapter yang sesuai.",
-                    14, palette.muted);
+            String emptyMessage;
+            if (!currentSearchQuery.isEmpty()) {
+                emptyMessage = "Tidak ditemukan chapter yang sesuai.";
+            } else if (loading) {
+                emptyMessage = "Memuat chapter dari sumber…";
+            } else {
+                emptyMessage = "Sumber belum memuat chapter untuk judul ini.";
+            }
+            TextView empty = Ui.label(this, emptyMessage, 14, palette.muted);
             empty.setTag("shinigami_no_chapters");
             chapterList.addView(empty);
         }
@@ -585,15 +794,18 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                     ? "Urutkan dari terbaru" : "Urutkan dari terlama");
             sortButton.setImageResource(id.shuyasal.kuromaku.R.drawable.ic_sort);
         }
-        // Reset pagination untuk memuat ulang dari awal
+        // Reset pagination lalu minta ulang dari awal dengan arah baru. Tanpa
+        // `force`, permintaan sebelumnya yang masih berjalan akan menolak
+        // pemuatan ini dan daftar tetap kosong.
         chapterPage = 1;
         chapters.clear();
         knownChapterIds.clear();
+        chapterTotalRecord = 0;
         renderChapters();
         if (detailScroll != null) {
             detailScroll.post(() -> detailScroll.smoothScrollTo(0, chapterHeadingView != null ? chapterHeadingView.getTop() : 0));
         }
-        loadChapters(1);
+        loadChapters(1, true);
     }
 
     private View buildChapterRow(ShinigamiChapter chapter) {
@@ -879,7 +1091,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     }
 
     private void confirmDelete(ShinigamiChapter chapter) {
-        new android.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Hapus unduhan")
                 .setMessage("Hapus file offline " + chapter.label() + "?\n\n"
                         + "Progres membaca tidak ikut terhapus, jadi chapter ini tetap tercatat "
@@ -929,7 +1141,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             action.run();
             return;
         }
-        new android.app.AlertDialog.Builder(this)
+        new AlertDialog.Builder(this)
                 .setTitle("Unduhan offline")
                 .setMessage(ShinigamiDownloadPolicy.notice())
                 .setNegativeButton("Batal", null)
@@ -999,6 +1211,7 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         ShinigamiDownloadStatus.removeListener(downloadStateListener);
+        main.removeCallbacks(deepSearchTask);
         worker.shutdownNow();
         super.onDestroy();
     }

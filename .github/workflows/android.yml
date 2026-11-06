@@ -181,11 +181,26 @@ jobs:
           # comment: Actions interpolates it everywhere, and an invalid one makes
           # the whole workflow invalid -- run 38 failed with zero jobs because of
           # exactly that, one comment line.
-          sed "s|@COMMIT@|${GITHUB_SHA}|g" .github/release-notes.md > release-body.md
-          if grep -q "@COMMIT@" release-body.md; then
-            echo "::error::token @COMMIT@ tidak terisi di release-body.md"
+          #
+          # Versi di badan rilis dulu ditulis tangan (masih "2.22.1" saat APK
+          # sudah 2.29.0), sehingga halaman rilis terbaca seperti versi lama.
+          # Sekarang seluruh angka versi berasal dari build.gradle.kts.
+          VERSION_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          BUILD_DATE=$(date -u '+%-d %B %Y %H:%M UTC')
+          if [ -z "${VERSION}" ] || [ -z "${VERSION_CODE}" ]; then
+            echo "::error::versi tidak terbaca dari build.gradle.kts (VERSION='${VERSION}' CODE='${VERSION_CODE}')"
             exit 1
           fi
+          sed -e "s|@VERSION_CODE@|${VERSION_CODE}|g" \
+              -e "s|@VERSION@|${VERSION}|g" \
+              -e "s|@BUILD_DATE@|${BUILD_DATE}|g" \
+              -e "s|@COMMIT@|${GITHUB_SHA}|g" .github/release-notes.md > release-body.md
+          for token in '@VERSION@' '@VERSION_CODE@' '@BUILD_DATE@' '@COMMIT@'; do
+            if grep -qF "$token" release-body.md; then
+              echo "::error::token $token tidak terisi di release-body.md"
+              exit 1
+            fi
+          done
           if grep -q 'github.sha' release-body.md; then
             echo "::error::placeholder commit masih ada di badan rilis"
             exit 1
@@ -198,7 +213,13 @@ jobs:
             echo "::error::badan rilis tidak menyebut commit ${GITHUB_SHA}"
             exit 1
           fi
-          echo "badan rilis: $(stat -c%s release-body.md) karakter, commit ${GITHUB_SHA}"
+          # Judul rilis memakai VERSION; badan rilis wajib menyebut angka yang
+          # sama, kalau tidak halaman rilis kembali menyesatkan.
+          if ! grep -qF "${VERSION}" release-body.md; then
+            echo "::error::badan rilis tidak menyebut versi ${VERSION}"
+            exit 1
+          fi
+          echo "badan rilis: $(stat -c%s release-body.md) karakter, versi ${VERSION} (${VERSION_CODE}), commit ${GITHUB_SHA}"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

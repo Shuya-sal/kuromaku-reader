@@ -2,7 +2,16 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* Versi: **2.22.1** (versionCode 49) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
+* **@VERSION@ — Indeks chapter lengkap dan tema yang benar-benar diterapkan.**
+  - **Indeks chapter tidak lagi satu halaman.** Sumber membatasi `page_size` ke 500, jadi judul 579 chapter mengembalikan halaman 1 berisi chapter 575…80 pada urutan Terbaru; chapter 1…79 tidak pernah masuk. Klien sekarang mengulang halaman sampai `total_record` terpenuhi (maksimum 20 halaman), menyaring duplikat, lalu mengurutkan numerik dari data penuh: Prolog, Chapter 0, Chapter 1, 1.5, 2, … Epilog.
+  - **Terlama benar-benar mulai dari chapter paling awal.** Sumber mendukung `sort_order=asc` (dibuktikan pada `api.shngm.io`: asc halaman 1 = chapter 1…496, halaman 2 = 497…575), dan pengurutan lokal tetap dijalankan sebagai lapisan kedua sehingga hasil tidak bergantung pada perilaku server.
+  - **Pencarian chapter mencakup seluruh indeks**, bukan hanya halaman yang sudah dirender, dan hasil dibatasi 200 baris agar daftar tetap ringan.
+  - **Dialog tema** kini menampilkan pilihan Terang, Gelap, Sepia, dan Ikuti Sistem dengan indeks yang sama seperti nilai tersimpan; sebelumnya tema Sepia tampil sebagai "Ikuti Sistem".
+  - Tema memakai `AppCompatDelegate` (`MODE_NIGHT_NO`, `MODE_NIGHT_YES`, `MODE_NIGHT_FOLLOW_SYSTEM`) ditambah resource `values-night`. Pergantian tema tidak mengambil ulang katalog dan tidak mereset tab, pencarian, maupun posisi scroll karena state dibawa lewat `onRetainCustomNonConfigurationInstance`.
+  - **Bukti pengujian:** 608 unit test lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Fixture pagination adalah respons asli `api.shngm.io` untuk manga 579 chapter (`shinigami_desc_p1/p2`, `shinigami_asc_p1/p2`), dan tes render membuktikan latar serta warna teks benar-benar berubah untuk Light, Dark, dan System (siang maupun malam) tanpa permintaan katalog tambahan.
+* **2.29.0 — Rilis sebelumnya: tema Light/Dark/System dan pengurutan chapter Shinigami (percobaan pertama).**
 * **2.22.1 — Perbaikan reader Shinigami.**
   - Loading/error/Coba Lagi per gambar; bitmap panjang dibatasi, halaman lain tetap terlihat bila satu gagal.
   - Status lokal hanya Tersimpan offline bila jumlah dan semua file gambar lengkap/valid; metadata saja bukan offline.
