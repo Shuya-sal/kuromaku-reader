@@ -37,6 +37,9 @@ public final class ShinigamiPageCache {
 
     private static final long MAX_BYTES = 96L * 1024 * 1024;
     private static final int MAX_PAGE_BYTES = 32 * 1024 * 1024;
+    /** Cache referensi berkas di memori untuk menghindari parsing dan I/O disk berulang. */
+    private static final android.util.LruCache<String, File> MEM_CACHE =
+            new android.util.LruCache<>(256);
 
     private final Context context;
     private final Transport transport;
@@ -71,6 +74,8 @@ public final class ShinigamiPageCache {
     /** Berkas cache yang sudah ada dan masih berupa gambar utuh. */
     public File file(String url) {
         if (url == null || url.isEmpty()) return null;
+        File cached = MEM_CACHE.get(url);
+        if (cached != null && cached.isFile()) return cached;
         File file = new File(dir(), key(url) + ".img");
         if (!file.isFile() || file.length() < 8) return null;
         byte[] head = new byte[12];
@@ -87,7 +92,9 @@ public final class ShinigamiPageCache {
             return null;
         }
         int[] size = ShinigamiPageTiles.bounds(file);
-        return size == null ? null : file;
+        if (size == null) return null;
+        MEM_CACHE.put(url, file);
+        return file;
     }
 
     /**

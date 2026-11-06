@@ -27,6 +27,8 @@ public final class ShinigamiStore {
     private static final String KEY_MANGA_TITLE = "manga_title:";
     private static final String KEY_MANGA_COVER = "manga_cover:";
     private static final String KEY_CHAPTER_OWNER = "chapter_owner:";
+    /** Rasio tinggi/lebar tiap halaman, dipakai agar placeholder tidak melompat. */
+    private static final String KEY_PAGE_RATIOS = "page_ratios:";
 
     private static final int HISTORY_LIMIT = 60;
 
@@ -125,6 +127,41 @@ public final class ShinigamiStore {
     public int expectedPages(String chapterId) {
         if (chapterId == null) return 0;
         return Math.max(0, prefs.getInt(KEY_EXPECTED_PAGES + chapterId, 0));
+    }
+
+    /**
+     * Rasio halaman yang pernah terukur, atau 0 bila belum diketahui.
+     *
+     * <p>Disimpan per chapter sebagai daftar ringkas supaya daftar reader bisa
+     * memakai tinggi placeholder yang benar sejak layout pertama.
+     */
+    public double pageRatio(String chapterId, int index) {
+        if (chapterId == null || index < 0) return 0d;
+        String raw = prefs.getString(KEY_PAGE_RATIOS + chapterId, "");
+        if (raw == null || raw.isEmpty()) return 0d;
+        String[] parts = raw.split(",");
+        if (index >= parts.length) return 0d;
+        try {
+            return Double.parseDouble(parts[index].trim());
+        } catch (NumberFormatException error) {
+            return 0d;
+        }
+    }
+
+    public void setPageRatio(String chapterId, int index, double ratio) {
+        if (chapterId == null || chapterId.isEmpty() || index < 0
+                || ratio <= 0.2 || ratio > 20) return;
+        String key = KEY_PAGE_RATIOS + chapterId;
+        String raw = prefs.getString(key, "");
+        String[] parts = raw == null || raw.isEmpty() ? new String[0] : raw.split(",");
+        String[] next = java.util.Arrays.copyOf(parts, Math.max(parts.length, index + 1));
+        for (int i = 0; i < next.length; i++) {
+            if (next[i] == null || next[i].trim().isEmpty()) next[i] = "0";
+        }
+        String value = String.format(java.util.Locale.ROOT, "%.3f", ratio);
+        if (value.equals(next[index])) return;
+        next[index] = value;
+        prefs.edit().putString(key, android.text.TextUtils.join(",", next)).apply();
     }
 
     public int progress(String chapterId) {

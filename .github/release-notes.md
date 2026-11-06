@@ -4,6 +4,19 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
+* **@VERSION@ — Performa, tab kategori permanen, auto-hide header, dan scroll reader yang mulus.**
+  - **Tab beranda tidak lagi berganti label.** Kini enam tab tetap: Terpopuler | Manga Terbaru | Chapter Terbaru | Riwayat | Favorit | Unduhan. Menekan tab tidak pernah mengubah teksnya.
+  - **Tiap kategori benar-benar meminta data berbeda** ke sumber, bukan sekadar mengganti label: Terpopuler = `sort=rank` menurun, Chapter Terbaru = `sort=latest` menurun, Manga Terbaru = `sort=rank` menaik lalu diurutkan ulang menurut `created_at` (sumber Shinigami tidak menyediakan urutan "judul baru", jadi kursor terdekat dipakai dan hasilnya diurutkan lokal).
+  - **Data, kursor pagination, dan posisi scroll disimpan terpisah per tab.** Kembali ke tab yang sudah punya data tidak memicu permintaan baru dan tidak mengembalikan pengguna ke atas.
+  - **Auto-hide header:** pencarian, baris tab, dan jumlah manga menyusut ke nol tinggi saat menggulir turun (ambang 24 dp agar tidak berkedip) lalu kembali saat menggulir naik. Toolbar utama (hamburger, judul, Unduhan, Pengaturan) tidak pernah disembunyikan. Tinggi container dianimasikan, bukan hanya digeser, sehingga ruang benar-benar kembali ke katalog tanpa mengganti adapter atau LayoutManager.
+  - **Scroll reader jauh lebih ringan:** potongan gambar tidak lagi didekode di `onDraw`. Decode `BitmapRegionDecoder` dipindah ke pool 2 thread, hasil dipasang hanya bila generasi masih sama, dan potongan berikutnya disiapkan lebih dulu. Ini menghilangkan sumber frame-drop terbesar pada halaman HD panjang.
+  - **Placeholder halaman memakai rasio yang pernah terukur** (disimpan per chapter), jadi daftar tidak melompat saat gambar selesai dimuat. Reader juga mematikan item animator, memakai stable ID, dan menyiapkan satu halaman berikutnya di thread terpisah.
+  - **Cover katalog dimuat pada ukuran kartu** (`override` selebar sel), bukan resolusi penuh; permintaan dibatalkan saat ViewHolder didaur ulang. Grid kini adaptif (2–4 kolom menurut lebar layar).
+  - **Pencarian di-debounce 350 ms**, sehingga mengetik tidak membanjiri sumber dengan permintaan.
+  - **Bukti pengujian:** 640 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati (80 kelas). Tes baru: label tab permanen, feed berbeda per kategori, cache per tab tanpa refetch, auto-hide pada ambang scroll, dan placeholder reader yang tidak menggeser layout.
+  - **Belum diukur pada perangkat fisik:** angka FPS/jank dan pemakaian RAM nyata belum diambil (tidak ada perangkat adb tersambung); klaim performa di atas berasal dari perubahan jalur kode, bukan dari Profiler/Perfetto.
+  - Batas paralelisme WorkManager untuk unduhan belum diubah; tiap chapter tetap satu work yang memproses halamannya berurutan.
+
 * **@VERSION@ — Katalog yang tidak melompat ke atas dan panah chapter di reader.**
   - **Penyebab katalog kembali ke atas:** setiap halaman memanggil `list.setAdapter(new ConcatAdapter(...))` lalu `notifyDataSetChanged()`. RecyclerView membuang posisi gulir setiap kali adapter diganti, jadi begitu pengguna mencapai dasar daftar dan halaman berikutnya tiba, katalog melompat ke item pertama. Sekarang satu adapter hidup seumur Activity: pagination hanya menambah item di bawah lewat `notifyItemRangeInserted`, adapter punya stable ID, dan `LayoutManager` tidak diganti saat data bertambah.
   - Rail "Lanjutkan Membaca" tetap menjadi item pertama di dalam daftar (ikut tergulir, bukan header lengket) dan hanya memberi tahu daftar bila jumlah itemnya benar-benar berubah, sehingga kembali dari reader tidak merender ulang katalog.

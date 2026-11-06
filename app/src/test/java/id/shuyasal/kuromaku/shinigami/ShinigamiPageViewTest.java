@@ -23,6 +23,22 @@ public class ShinigamiPageViewTest {
         assertEquals(6000, cell.getMeasuredHeight());
         assertEquals(View.GONE, cell.findViewWithTag("shinigami_page_loading").getVisibility());
     }
+    /** Placeholder memakai rasio yang diketahui, jadi tidak melompat saat gambar tiba. */
+    @Test public void placeholderUsesKnownRatioInsteadOfScreenHeight() {
+        Context context = ApplicationProvider.getApplicationContext();
+        ShinigamiPageView cell = new ShinigamiPageView(context);
+        cell.setPlaceholderRatio(1.5d);
+        cell.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        assertEquals(320, cell.getMeasuredWidth());
+        assertEquals(480, cell.getMeasuredHeight());
+        // Memuat ulang tidak boleh membuang rasio yang sudah diketahui.
+        cell.showLoading();
+        cell.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        assertEquals(480, cell.getMeasuredHeight());
+    }
+
     @Test public void failureKeepsCellVisibleAndRetryOnlyReloadsThatPage() {
         ShinigamiPageView cell = new ShinigamiPageView(ApplicationProvider.getApplicationContext());
         int[] retries = {0};

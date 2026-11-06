@@ -86,7 +86,7 @@ public class ShinigamiCatalogTest {
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Jakarta"));
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get(); await(host);
-            assertNotNull(tagged(host, "shinigami_chip_Manga terbaru"));
+            assertNotNull(tagged(host, "shinigami_chip_Manga Terbaru"));
             TextView info = bindFirst(host).findViewWithTag("shinigami_subtitle");
             assertTrue(info.getText().toString(), info.getText().toString().contains("Chapter terbaru: 210"));
             // Baris tanggal kini ringkas dan berdiri sendiri agar tidak terpotong
@@ -99,7 +99,7 @@ public class ShinigamiCatalogTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get(); await(host);
             tagged(host, "shinigami_chip_Berjalan").performClick(); await(host);
-            tagged(host, "shinigami_chip_Chapter terbaru").performClick(); await(host);
+            tagged(host, "shinigami_chip_Chapter Terbaru").performClick(); await(host);
             assertTrue(lastList(), lastList().contains("sort=latest"));
             assertTrue(lastList(), lastList().contains("status=ongoing"));
             TextView info = bindFirst(host).findViewWithTag("shinigami_row_subtitle");

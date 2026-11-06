@@ -18,6 +18,8 @@ public final class ShinigamiManga {
     public final String latestChapterTime;
     public final long latestChapterTimeMillis;
     public final long updatedAtMillis;
+    /** Kapan judul ditambahkan ke sumber (0 bila sumber tidak mengirim). */
+    public final long createdAtMillis;
     public final List<String> genres;
     public final List<String> authors;
     public final String format;
@@ -34,6 +36,16 @@ public final class ShinigamiManga {
                           String description, int status, String releaseYear, double rating,
                           long viewCount, double latestChapterNumber, String latestChapterTime,
                           List<String> genres, List<String> authors, String format, String updatedAt) {
+        this(id, title, alternativeTitle, coverUrl, description, status, releaseYear, rating,
+                viewCount, latestChapterNumber, latestChapterTime, genres, authors, format,
+                updatedAt, "");
+    }
+
+    public ShinigamiManga(String id, String title, String alternativeTitle, String coverUrl,
+                          String description, int status, String releaseYear, double rating,
+                          long viewCount, double latestChapterNumber, String latestChapterTime,
+                          List<String> genres, List<String> authors, String format, String updatedAt,
+                          String createdAt) {
         this.id = id == null ? "" : id;
         this.title = title == null ? "" : title;
         this.alternativeTitle = alternativeTitle == null ? "" : alternativeTitle;
@@ -48,6 +60,7 @@ public final class ShinigamiManga {
         this.latestChapterTime = latestChapterTime == null ? "" : latestChapterTime;
         this.latestChapterTimeMillis = ShinigamiDates.parse(latestChapterTime);
         this.updatedAtMillis = ShinigamiDates.parse(updatedAt);
+        this.createdAtMillis = ShinigamiDates.parse(createdAt);
         this.genres = genres == null ? new ArrayList<String>() : genres;
         this.authors = authors == null ? new ArrayList<String>() : authors;
         this.format = format == null ? "" : format;

@@ -28,6 +28,30 @@ public final class ShinigamiSource {
         Sort(String wire, String label) { this.wire = wire; this.label = label; }
     }
 
+    /**
+     * Jenis daftar yang ditampilkan beranda. Sumber hanya menerima
+     * {@code sort=latest|rank|bookmark}; tidak ada urutan "judul baru".
+     * Karena itu:
+     * <ul>
+     *   <li>{@link #POPULAR} memakai {@code rank} menurun (paling banyak dibaca).</li>
+     *   <li>{@link #NEW_CHAPTERS} memakai {@code latest} menurun (chapter baru diperbarui).</li>
+     *   <li>{@link #NEW_TITLES} memakai {@code rank} menaik — judul paling sedikit
+     *       dibaca, yang pada sumber ini adalah judul yang baru ditambahkan — lalu
+     *       diurutkan ulang secara lokal menurut {@code created_at} menurun.</li>
+     * </ul>
+     * Ketiganya benar-benar meminta data berbeda ke sumber, bukan sekadar
+     * mengganti label.
+     */
+    public enum Feed {
+        POPULAR("rank", "desc"),
+        NEW_TITLES("rank", "asc"),
+        NEW_CHAPTERS("latest", "desc");
+
+        public final String sortWire;
+        public final String order;
+        Feed(String sortWire, String order) { this.sortWire = sortWire; this.order = order; }
+    }
+
     public static final class Page {
         public final List<ShinigamiManga> items;
         public final int page;
@@ -131,11 +155,26 @@ public final class ShinigamiSource {
 
     private Page list(int page, Sort sort, String keyword, String genreSlug, String status)
             throws SourceException {
+        return list(page, sort == null ? Sort.LATEST.wire : sort.wire, "desc",
+                keyword, genreSlug, status, false);
+    }
+
+    /** Daftar untuk satu jenis tab beranda; tiap tab memakai kursor berbeda. */
+    public Page feed(Feed feed, int page, String keyword, String genreSlug, String status)
+            throws SourceException {
+        Feed kind = feed == null ? Feed.POPULAR : feed;
+        return list(page, kind.sortWire, kind.order, keyword, genreSlug, status,
+                kind == Feed.NEW_TITLES);
+    }
+
+    private Page list(int page, String sortWire, String sortOrder, String keyword,
+                      String genreSlug, String status, boolean newestFirstByCreated)
+            throws SourceException {
         StringBuilder url = new StringBuilder(config.apiBase())
                 .append("/manga/list?page=").append(Math.max(1, page))
                 .append("&page_size=").append(PAGE_SIZE)
-                .append("&sort=").append(sort == null ? Sort.LATEST.wire : sort.wire)
-                .append("&sort_order=desc");
+                .append("&sort=").append(sortWire)
+                .append("&sort_order=").append(sortOrder);
         if (keyword != null && !keyword.isEmpty()) url.append("&q=").append(encode(keyword));
         if (genreSlug != null && !genreSlug.isEmpty()) url.append("&genre=").append(encode(genreSlug));
         if (status != null && !status.isEmpty()) url.append("&status=").append(encode(status));
@@ -150,9 +189,18 @@ public final class ShinigamiSource {
             manga = parseManga(store.mergeMangaMetadata(manga.id, item));
             items.put(manga.id, manga);
         }
+        List<ShinigamiManga> ordered = new ArrayList<>(items.values());
+        if (newestFirstByCreated) {
+            // Sumber tidak punya urutan "judul baru"; kursor rank menaik dipakai
+            // sebagai perkiraan, lalu halaman ini diurutkan menurut created_at.
+            java.util.Collections.sort(ordered, (left, right) -> {
+                int byCreated = Long.compare(right.createdAtMillis, left.createdAtMillis);
+                return byCreated != 0 ? byCreated : left.title.compareToIgnoreCase(right.title);
+            });
+        }
         JSONObject meta = root.optJSONObject("meta");
         if (meta == null) throw changedShape();
-        return new Page(new ArrayList<>(items.values()), Math.max(1, page),
+        return new Page(ordered, Math.max(1, page),
                 Math.max(1, meta.optInt("total_page", 1)), meta.optLong("total_record", items.size()));
     }
 
@@ -307,7 +355,7 @@ public final class ShinigamiSource {
                 item.optLong("view_count", 0L), item.optDouble("latest_chapter_number", 0d),
                 item.optString("latest_chapter_time", ""), taxonomyNames(taxonomy, "Genre"),
                 taxonomyNames(taxonomy, "Author"), taxonomyFirst(taxonomy, "Format"),
-                item.optString("updated_at", ""));
+                item.optString("updated_at", ""), item.optString("created_at", ""));
     }
 
     private static String safeImage(String url) {

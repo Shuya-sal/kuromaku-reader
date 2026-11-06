@@ -20,8 +20,12 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import java.io.File;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Satu halaman chapter Shinigami.
@@ -164,8 +168,26 @@ public final class ShinigamiPageView extends FrameLayout {
         }
     }
 
+    /**
+     * Rasio tinggi/lebar yang sudah diketahui untuk halaman ini.
+     *
+     * <p>Dipakai agar placeholder sudah setinggi gambar akhirnya, sehingga
+     * posisi baca tidak bergeser ketika gambar selesai dimuat.
+     */
+    public void setPlaceholderRatio(double value) {
+        if (value <= 0.2 || value > 20) return;
+        if (Math.abs(ratio - value) < 0.005) return;
+        ratio = value;
+        requestLayout();
+    }
+
+    public double ratio() {
+        return ratio;
+    }
+
     public void showLoading() {
-        ratio = 0;
+        // ratio TIDAK direset: placeholder mempertahankan tinggi yang sudah
+        // diketahui supaya daftar tidak melompat saat halaman dimuat ulang.
         image.setImageDrawable(null);
         image.setVisibility(INVISIBLE);
         surface.setVisibility(GONE);
@@ -240,8 +262,11 @@ public final class ShinigamiPageView extends FrameLayout {
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         int width = MeasureSpec.getSize(widthSpec);
         if (width <= 0) width = getResources().getDisplayMetrics().widthPixels;
-        int height = ratio > 0 ? Math.max(1, (int) Math.ceil(width * ratio))
-                : Math.max(320, getResources().getDisplayMetrics().heightPixels);
+        // Tanpa rasio yang diketahui, tinggi placeholder memakai rasio halaman
+        // manga pada umumnya (bukan setinggi layar). Pergeseran saat gambar
+        // akhirnya tampil menjadi jauh lebih kecil.
+        double known = ratio > 0 ? ratio : 1.45;
+        int height = Math.max(1, (int) Math.ceil(width * known));
         super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
     }
@@ -256,6 +281,15 @@ public final class ShinigamiPageView extends FrameLayout {
     /** Permukaan gambar yang hanya menggambar potongan yang terlihat. */
     private static final class TiledSurface extends View {
         interface Listener { void onError(String reason); }
+
+        /**
+         * Decoder dijalankan di thread latar. Dua thread saja: cukup untuk
+         * menyiapkan potongan berikutnya tanpa merebut CPU dari rendering, dan
+         * mencegah lonjakan memori saat pengguna melakukan fling cepat.
+         */
+        private final java.util.Set<Integer> pending = new HashSet<>();
+        private final Object decoderLock = new Object();
+        private int generation;
 
         private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
         private final Map<Integer, Bitmap> tiles =
@@ -278,11 +312,19 @@ public final class ShinigamiPageView extends FrameLayout {
 
         TiledSurface(Context context) {
             super(context);
-            setBackgroundColor(Color.BLACK);
+            setBackgroundColor(0xFF141414);
         }
+
+        /** Satu pool bersama untuk semua halaman; jumlah thread dibatasi. */
+        private static final ExecutorService DECODE_POOL = Executors.newFixedThreadPool(2, task -> {
+            Thread thread = new Thread(task, "shinigami-tile");
+            thread.setPriority(Thread.NORM_PRIORITY - 1);
+            return thread;
+        });
 
         void show(File source, int width, int height, ShinigamiQuality quality) {
             clear();
+            generation++;
             file = source;
             sourceWidth = width;
             sourceHeight = height;
@@ -297,10 +339,14 @@ public final class ShinigamiPageView extends FrameLayout {
         }
 
         void clear() {
-            for (Bitmap bitmap : tiles.values()) bitmap.recycle();
-            tiles.clear();
-            if (decoder != null && !decoder.isRecycled()) decoder.recycle();
-            decoder = null;
+            generation++;
+            pending.clear();
+            synchronized (decoderLock) {
+                for (Bitmap bitmap : tiles.values()) bitmap.recycle();
+                tiles.clear();
+                if (decoder != null && !decoder.isRecycled()) decoder.recycle();
+                decoder = null;
+            }
             file = null;
             sourceWidth = 0;
             sourceHeight = 0;
@@ -318,9 +364,12 @@ public final class ShinigamiPageView extends FrameLayout {
             for (int index = from; index <= to; index++) {
                 Bitmap tile = tiles.get(index);
                 if (tile == null) {
-                    tile = decode(index);
-                    if (tile == null) continue;
-                    tiles.put(index, tile);
+                    // Decode TIDAK dilakukan di sini: BitmapRegionDecoder bisa
+                    // memakan puluhan milidetik dan itu yang membuat scroll
+                    // tersendat. Potongan disiapkan di thread latar, lalu
+                    // invalidate() menggambar ulang.
+                    requestDecode(index);
+                    continue;
                 }
                 int top = index * tileHeight;
                 int bottom = Math.min(sourceHeight, top + tileHeight);
@@ -329,16 +378,66 @@ public final class ShinigamiPageView extends FrameLayout {
             }
         }
 
-        private Bitmap decode(int index) {
-            int top = index * tileHeight;
-            int bottom = Math.min(sourceHeight, top + tileHeight);
-            if (bottom <= top) return null;
-            Bitmap tile = ShinigamiPageTiles.region(decoder, new Rect(0, top, sourceWidth, bottom), rgb565);
-            if (tile == null && !failed && listener != null) {
-                failed = true;
-                listener.onError("Halaman gagal didekode pada bagian " + (index + 1) + ".");
+        /**
+         * Minta satu potongan didekode di thread latar.
+         *
+         * <p>Hasil hanya dipasang bila generasi masih sama, jadi potongan milik
+         * halaman lama tidak pernah muncul di halaman baru. Setelah potongan
+         * tampil, potongan berikutnya ikut disiapkan (prefetch satu langkah)
+         * supaya menggulir tidak menunggu.
+         */
+        private void requestDecode(final int index) {
+            if (index < 0 || pending.contains(index)) return;
+            final BitmapRegionDecoder decoder;
+            final int gen;
+            final int width;
+            final int height;
+            final int tile;
+            final boolean use565;
+            synchronized (decoderLock) {
+                decoder = this.decoder;
+                if (decoder == null || decoder.isRecycled()) return;
+                gen = generation;
+                width = sourceWidth;
+                height = sourceHeight;
+                tile = tileHeight;
+                use565 = rgb565;
             }
-            return tile;
+            final int top = index * tile;
+            final int bottom = Math.min(height, top + tile);
+            if (bottom <= top) return;
+            pending.add(index);
+            DECODE_POOL.execute(() -> {
+                Bitmap bitmap;
+                synchronized (decoderLock) {
+                    if (gen != generation || decoder.isRecycled()) {
+                        bitmap = null;
+                    } else {
+                        bitmap = ShinigamiPageTiles.region(decoder,
+                                new Rect(0, top, width, bottom), use565);
+                    }
+                }
+                final Bitmap decoded = bitmap;
+                post(() -> {
+                    pending.remove(index);
+                    if (gen != generation) {
+                        if (decoded != null) decoded.recycle();
+                        return;
+                    }
+                    if (decoded == null) {
+                        if (!failed && listener != null) {
+                            failed = true;
+                            listener.onError("Halaman gagal didekode pada bagian " + (index + 1) + ".");
+                        }
+                        return;
+                    }
+                    Bitmap previous = tiles.put(index, decoded);
+                    if (previous != null) previous.recycle();
+                    invalidate();
+                    // Prefetch satu potongan ke arah bawah.
+                    requestDecode(index + 1);
+                });
+            });
         }
     }
 }

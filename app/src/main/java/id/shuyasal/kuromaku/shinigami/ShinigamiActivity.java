@@ -52,6 +52,10 @@ public class ShinigamiActivity extends AppCompatActivity {
     /** Jumlah kartu "Lanjutkan Membaca" yang tampil di beranda. */
     private static final int CONTINUE_LIMIT = 8;
     private static final int CONTINUE_TEXT_DP = 104;
+    /** Jeda pencarian sebelum memanggil sumber. */
+    private static final long SEARCH_DEBOUNCE_MS = 350L;
+    /** Durasi animasi sembunyikan/tampilkan header beranda. */
+    private static final long CHROME_ANIM_MS = 180L;
 
     enum Mode {
         CATALOGUE,
@@ -59,6 +63,43 @@ public class ShinigamiActivity extends AppCompatActivity {
         HISTORY,
         FAVORITES,
         DOWNLOADS
+    }
+
+    /**
+     * Tab beranda. Labelnya permanen: menekan tab tidak pernah mengubah teks
+     * tombol, dan tiap tab meminta jenis data yang berbeda ke sumber.
+     */
+    enum Tab {
+        POPULAR("Terpopuler"),
+        NEW_TITLES("Manga Terbaru"),
+        NEW_CHAPTERS("Chapter Terbaru"),
+        HISTORY("Riwayat"),
+        FAVORITES("Favorit"),
+        DOWNLOADS("Unduhan");
+
+        final String label;
+        Tab(String label) { this.label = label; }
+
+        boolean isCatalogue() {
+            return this == POPULAR || this == NEW_TITLES || this == NEW_CHAPTERS;
+        }
+    }
+
+    /**
+     * Data satu tab: daftar, kursor pagination, dan posisi scroll disimpan
+     * terpisah supaya berpindah tab tidak mencampur halaman atau mengembalikan
+     * pengguna ke atas.
+     */
+    static final class TabState {
+        final List<ShinigamiManga> items = new ArrayList<>();
+        final List<Row> rows = new ArrayList<>();
+        int page = 1;
+        int totalPages = 1;
+        long totalRecords;
+        boolean loaded;
+        int scrollPosition;
+        int scrollOffset;
+        String statusText = "";
     }
 
     static final class Row {
@@ -82,8 +123,12 @@ public class ShinigamiActivity extends AppCompatActivity {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final List<ShinigamiManga> items = new ArrayList<>();
-    private final List<Row> rows = new ArrayList<>();
+    /** Menunjuk ke daftar milik tab aktif; diganti saat berpindah tab. */
+    private List<ShinigamiManga> items = new ArrayList<>();
+    private List<Row> rows = new ArrayList<>();
+    private final java.util.EnumMap<Tab, TabState> tabStates =
+            new java.util.EnumMap<>(Tab.class);
+    private Tab tab = Tab.POPULAR;
     private final List<ShinigamiDownloads.Manga> downloads = new ArrayList<>();
 
     private Palette palette;
@@ -101,6 +146,13 @@ public class ShinigamiActivity extends AppCompatActivity {
     private ProgressBar spinner;
     private EditText searchField;
     private LinearLayout filterRow;
+    /** Pencarian + tab + jumlah manga: disembunyikan saat pengguna scroll turun. */
+    private LinearLayout chrome;
+    private boolean chromeHidden;
+    private int chromeHeight;
+    private int scrollDown;
+    private int scrollUp;
+    private final Runnable searchRunnable = this::runSearch;
     private View continueRail;
     private RecyclerView continueList;
     private ContinueAdapter continueAdapter;
@@ -140,12 +192,24 @@ public class ShinigamiActivity extends AppCompatActivity {
         final Mode mode;
         final int scrollPosition;
         final int scrollOffset;
+        final Tab tab;
+        final java.util.EnumMap<Tab, TabState> states;
 
         RetainedState(List<ShinigamiManga> items, List<Row> rows,
                       List<ShinigamiDownloads.Manga> downloads,
                       int page, int totalPages,
                       String query, ShinigamiSource.Sort sort, String genre,
                       String status, Mode mode, int scrollPosition, int scrollOffset) {
+            this(items, rows, downloads, page, totalPages, query, sort, genre, status, mode,
+                    scrollPosition, scrollOffset, null, null);
+        }
+
+        RetainedState(List<ShinigamiManga> items, List<Row> rows,
+                      List<ShinigamiDownloads.Manga> downloads,
+                      int page, int totalPages,
+                      String query, ShinigamiSource.Sort sort, String genre,
+                      String status, Mode mode, int scrollPosition, int scrollOffset,
+                      Tab tab, java.util.EnumMap<Tab, TabState> states) {
             this.items = items;
             this.rows = rows;
             this.downloads = downloads;
@@ -158,6 +222,8 @@ public class ShinigamiActivity extends AppCompatActivity {
             this.mode = mode;
             this.scrollPosition = scrollPosition;
             this.scrollOffset = scrollOffset;
+            this.tab = tab;
+            this.states = states;
         }
     }
 
@@ -180,7 +246,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         return new RetainedState(
                 new ArrayList<>(items), new ArrayList<>(rows),
                 new ArrayList<>(downloads), page, totalPages,
-                query, sort, genre, status, mode, pos, offset);
+                query, sort, genre, status, mode, pos, offset,
+                tab, new java.util.EnumMap<>(tabStates));
     }
 
     /**
@@ -215,11 +282,8 @@ public class ShinigamiActivity extends AppCompatActivity {
         }
         sCachedState = null;
 
-        if (retained != null && (!retained.items.isEmpty() || !retained.rows.isEmpty() || retained.mode == Mode.DOWNLOADS)) {
-            items.clear();
-            items.addAll(retained.items);
-            rows.clear();
-            rows.addAll(retained.rows);
+        if (retained != null && (!retained.items.isEmpty() || !retained.rows.isEmpty()
+                || retained.mode == Mode.DOWNLOADS || retained.tab != null)) {
             downloads.clear();
             downloads.addAll(retained.downloads);
             page = retained.page;
@@ -229,6 +293,18 @@ public class ShinigamiActivity extends AppCompatActivity {
             genre = retained.genre;
             status = retained.status;
             mode = retained.mode;
+            if (retained.states != null) tabStates.putAll(retained.states);
+            if (retained.tab != null) tab = retained.tab;
+            TabState restored = state(tab);
+            restored.items.clear();
+            restored.items.addAll(retained.items);
+            restored.rows.clear();
+            restored.rows.addAll(retained.rows);
+            restored.page = retained.page;
+            restored.totalPages = retained.totalPages;
+            restored.loaded = !retained.items.isEmpty() || !retained.rows.isEmpty();
+            items = restored.items;
+            rows = restored.rows;
 
             buildUi();
             searchField.setText(query);
@@ -252,6 +328,7 @@ public class ShinigamiActivity extends AppCompatActivity {
                 useGridAdapter();
                 if (adapter != null) adapter.notifyDataSetChanged();
             }
+            restoreChromeState();
 
             final int targetPos = retained.scrollPosition;
             final int targetOffset = retained.scrollOffset;
@@ -274,6 +351,10 @@ public class ShinigamiActivity extends AppCompatActivity {
             buildUi();
             searchField.setText(query);
             refreshContinueRail();
+            // Adapter membaca field items/rows; arahkan ke daftar milik tab aktif
+            // sebelum halaman pertama dimuat.
+            items = state(tab).items;
+            rows = state(tab).rows;
             loadPage(1, false);
         }
     }
@@ -311,6 +392,12 @@ public class ShinigamiActivity extends AppCompatActivity {
             runSearch();
             return true;
         });
+        // chrome = pencarian + tab + jumlah manga. Ketiganya menyusut menjadi
+        // nol tinggi saat pengguna menggulir turun, lalu kembali saat naik.
+        chrome = new LinearLayout(this);
+        chrome.setOrientation(LinearLayout.VERTICAL);
+        chrome.setTag("shinigami_chrome");
+
         LinearLayout searchRow = new LinearLayout(this);
         searchRow.setOrientation(LinearLayout.HORIZONTAL);
         searchRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -321,8 +408,18 @@ public class ShinigamiActivity extends AppCompatActivity {
         search.setTag("shinigami_search_button");
         search.setOnClickListener(v -> runSearch());
         searchRow.addView(search);
-        root.addView(searchRow, new LinearLayout.LayoutParams(
+        chrome.addView(searchRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Pencarian diketik -> tunggu 350 ms supaya tidak membanjiri sumber.
+        searchField.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable text) {
+                main.removeCallbacks(searchRunnable);
+                main.postDelayed(searchRunnable, SEARCH_DEBOUNCE_MS);
+            }
+        });
 
         // Rail tidak ditempel di atas daftar: ia menjadi item pertama di dalam
         // RecyclerView supaya ikut tergulir bersama katalog.
@@ -335,13 +432,16 @@ public class ShinigamiActivity extends AppCompatActivity {
         filterScroll.setHorizontalScrollBarEnabled(false);
         filterScroll.addView(filterRow, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(filterScroll, new LinearLayout.LayoutParams(
+        chrome.addView(filterScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         statusLine = Ui.label(this, "", 13, palette.muted);
         statusLine.setTag("shinigami_status");
         statusLine.setPadding(Ui.dp(this, 14), Ui.dp(this, 2), Ui.dp(this, 14), Ui.dp(this, 6));
-        root.addView(statusLine);
+        chrome.addView(statusLine);
+
+        root.addView(chrome, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         FrameLayout body = new FrameLayout(this);
         list = new RecyclerView(this);
@@ -350,16 +450,18 @@ public class ShinigamiActivity extends AppCompatActivity {
         adapter = new MangaAdapter();
         rowAdapter = new RowAdapter();
         downloadsAdapter = new DownloadsAdapter();
-        list.setLayoutManager(new GridLayoutManager(this, 2));
+        list.setLayoutManager(new GridLayoutManager(this, gridSpan()));
         useGridAdapter();
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
+                updateChrome(dy);
                 if (dy <= 0) return;
-                if (mode != Mode.CATALOGUE) return;
-                GridLayoutManager manager = (GridLayoutManager) view.getLayoutManager();
+                if (!tab.isCatalogue()) return;
+                RecyclerView.LayoutManager manager = view.getLayoutManager();
                 if (manager == null) return;
-                int last = manager.findLastVisibleItemPosition();
+                int last = manager instanceof LinearLayoutManager
+                        ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
                 int total = list.getAdapter() == null ? 0 : list.getAdapter().getItemCount();
                 if (total > 0 && last >= total - 6) loadMore();
             }
@@ -627,7 +729,10 @@ public class ShinigamiActivity extends AppCompatActivity {
             holder.meta.setText(getString(id.shuyasal.kuromaku.R.string.shinigami_continue_progress,
                     ShinigamiManga.formatNumber(entry.chapterNumber), percent));
             holder.progress.setProgress(percent);
-            Glide.with(ShinigamiActivity.this).load(entry.coverUrl).centerCrop()
+            Glide.with(ShinigamiActivity.this)
+                    .load(entry.coverUrl)
+                    .centerCrop()
+                    .override(Ui.dp(ShinigamiActivity.this, 64), Ui.dp(ShinigamiActivity.this, 90))
                     .into(holder.cover);
             holder.itemView.setOnClickListener(v -> openHistoryEntry(entry));
         }
@@ -691,16 +796,14 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void buildFilterChips() {
         filterGeneration++;
         filterRow.removeAllViews();
-        addChip(sort == ShinigamiSource.Sort.RANK ? "Terpopuler" : "Manga terbaru", mode == Mode.CATALOGUE, () -> {
-            sort = sort == ShinigamiSource.Sort.LATEST
-                    ? ShinigamiSource.Sort.RANK : ShinigamiSource.Sort.LATEST;
-            buildFilterChips();
-            loadPage(1, false);
-        });
-        addChip("Chapter terbaru", mode == Mode.NEWEST_CHAPTERS, () -> showNewestChapters());
-        addChip("Riwayat", mode == Mode.HISTORY, () -> showHistory());
-        addChip("Favorit", mode == Mode.FAVORITES, () -> showFavorites());
-        addChip("Unduhan", mode == Mode.DOWNLOADS, () -> showDownloads());
+        // Label tab tidak pernah berubah: tidak ada lagi tombol yang berganti
+        // teks dari "Terpopuler" menjadi "Manga terbaru" saat ditekan.
+        addChip(Tab.POPULAR.label, tab == Tab.POPULAR, () -> selectTab(Tab.POPULAR));
+        addChip(Tab.NEW_TITLES.label, tab == Tab.NEW_TITLES, () -> selectTab(Tab.NEW_TITLES));
+        addChip(Tab.NEW_CHAPTERS.label, tab == Tab.NEW_CHAPTERS, () -> selectTab(Tab.NEW_CHAPTERS));
+        addChip(Tab.HISTORY.label, tab == Tab.HISTORY, () -> selectTab(Tab.HISTORY));
+        addChip(Tab.FAVORITES.label, tab == Tab.FAVORITES, () -> selectTab(Tab.FAVORITES));
+        addChip(Tab.DOWNLOADS.label, tab == Tab.DOWNLOADS, () -> selectTab(Tab.DOWNLOADS));
         addChip("Berjalan", status.equals("ongoing"), () -> {
             status = status.equals("ongoing") ? "" : "ongoing";
             buildFilterChips();
@@ -717,6 +820,210 @@ public class ShinigamiActivity extends AppCompatActivity {
             loadPage(1, false);
         });
         loadGenres();
+    }
+
+    private TabState state(Tab which) {
+        TabState found = tabStates.get(which);
+        if (found == null) {
+            found = new TabState();
+            tabStates.put(which, found);
+        }
+        return found;
+    }
+
+    private static Mode modeOf(Tab which) {
+        switch (which) {
+            case HISTORY: return Mode.HISTORY;
+            case FAVORITES: return Mode.FAVORITES;
+            case DOWNLOADS: return Mode.DOWNLOADS;
+            case NEW_CHAPTERS: return Mode.NEWEST_CHAPTERS;
+            default: return Mode.CATALOGUE;
+        }
+    }
+
+    /**
+     * Pindah tab tanpa memuat ulang data yang masih valid.
+     *
+     * <p>Posisi scroll tab lama disimpan lebih dulu, lalu daftar tab tujuan
+     * dipasang kembali apa adanya (cache di memori). Hanya tab yang belum pernah
+     * dimuat yang meminta data ke sumber.
+     */
+    private void selectTab(Tab target) {
+        if (tab == target) return;
+        rememberScroll();
+        tab = target;
+        mode = modeOf(target);
+        buildFilterChips();
+
+        TabState next = state(target);
+        items = next.items;
+        rows = next.rows;
+        hideError();
+
+        if (target == Tab.DOWNLOADS) {
+            showDownloads();
+            return;
+        }
+        if (target == Tab.HISTORY) {
+            cancelRemoteView();
+            fillHistoryRows();
+            useRowAdapter();
+            rowAdapter.notifyDataSetChanged();
+            next.statusText = rows.size() + " manga dalam riwayat";
+            statusLine.setText(next.statusText);
+            restoreScroll(next);
+            return;
+        }
+        if (target == Tab.FAVORITES) {
+            cancelRemoteView();
+            fillFavoriteItems();
+            useGridAdapter();
+            adapter.notifyDataSetChanged();
+            next.statusText = items.size() + " manga favorit";
+            statusLine.setText(next.statusText);
+            restoreScroll(next);
+            return;
+        }
+        if (target == Tab.NEW_CHAPTERS) {
+            useRowAdapter();
+        } else {
+            useGridAdapter();
+        }
+        if (next.loaded) {
+            statusLine.setText(next.statusText);
+            if (target == Tab.NEW_CHAPTERS) rowAdapter.notifyDataSetChanged();
+            else adapter.notifyDataSetChanged();
+            restoreScroll(next);
+        } else {
+            loadFeed(target, 1, false);
+        }
+    }
+
+    private void rememberScroll() {
+        if (list == null || !(list.getLayoutManager() instanceof LinearLayoutManager)) return;
+        LinearLayoutManager manager = (LinearLayoutManager) list.getLayoutManager();
+        int position = manager.findFirstVisibleItemPosition();
+        if (position < 0) return;
+        View first = manager.findViewByPosition(position);
+        TabState current = state(tab);
+        current.scrollPosition = position;
+        current.scrollOffset = first == null ? 0 : first.getTop() - list.getPaddingTop();
+    }
+
+    private void restoreScroll(TabState wanted) {
+        final int position = wanted.scrollPosition;
+        final int offset = wanted.scrollOffset;
+        if (position <= 0 && offset == 0) return;
+        list.post(() -> {
+            if (list.getLayoutManager() instanceof LinearLayoutManager) {
+                ((LinearLayoutManager) list.getLayoutManager())
+                        .scrollToPositionWithOffset(position, offset);
+            }
+        });
+    }
+
+    private void fillHistoryRows() {
+        rows.clear();
+        for (ShinigamiStore.HistoryEntry entry : store.history()) {
+            rows.add(new Row(entry.mangaId, entry.title, entry.coverUrl, entry.chapterId,
+                    entry.chapterNumber, ShinigamiDates.format(entry.timestamp)));
+        }
+    }
+
+    private void fillFavoriteItems() {
+        items.clear();
+        for (String id : store.favorites()) {
+            items.add(new ShinigamiManga(id, store.mangaTitle(id), "", store.mangaCover(id),
+                    "", -1, "", 0d, 0L, 0d, "", new ArrayList<String>(),
+                    new ArrayList<String>(), ""));
+        }
+    }
+
+    /**
+     * Auto-hide header beranda.
+     *
+     * <p>Ambang 24 dp mencegah header berkedip saat jari hanya bergerak sedikit.
+     * Tinggi container dianimasikan (bukan hanya digeser) supaya ruang yang
+     * dipakai benar-benar kembali ke katalog, dan RecyclerView tumbuh/menyusut
+     * tanpa mengubah item pertama yang terlihat.
+     */
+    private void updateChrome(int dy) {
+        if (chrome == null) return;
+        if (dy > 0) {
+            scrollDown += dy;
+            scrollUp = 0;
+        } else if (dy < 0) {
+            scrollUp -= dy;
+            scrollDown = 0;
+        } else {
+            return;
+        }
+        int threshold = Ui.dp(this, 24);
+        if (!chromeHidden && scrollDown > threshold) {
+            setChromeHidden(true);
+        } else if (chromeHidden && scrollUp > Math.max(1, threshold / 2)) {
+            setChromeHidden(false);
+        }
+    }
+
+    private void setChromeHidden(boolean hide) {
+        if (chrome == null || chromeHidden == hide) return;
+        chromeHidden = hide;
+        if (chromeHeight <= 0) chromeHeight = chrome.getHeight();
+        if (chromeHeight <= 0) {
+            chrome.setVisibility(hide ? View.GONE : View.VISIBLE);
+            return;
+        }
+        chrome.animate().cancel();
+        if (hide) {
+            android.animation.ValueAnimator animator =
+                    android.animation.ValueAnimator.ofInt(chromeHeight, 0);
+            animator.setDuration(CHROME_ANIM_MS);
+            animator.addUpdateListener(animation -> {
+                ViewGroup.LayoutParams params = chrome.getLayoutParams();
+                params.height = (int) animation.getAnimatedValue();
+                chrome.setLayoutParams(params);
+            });
+            animator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (chromeHidden) chrome.setVisibility(View.GONE);
+                }
+            });
+            animator.start();
+        } else {
+            chrome.setVisibility(View.VISIBLE);
+            android.animation.ValueAnimator animator =
+                    android.animation.ValueAnimator.ofInt(0, chromeHeight);
+            animator.setDuration(CHROME_ANIM_MS);
+            animator.addUpdateListener(animation -> {
+                ViewGroup.LayoutParams params = chrome.getLayoutParams();
+                params.height = (int) animation.getAnimatedValue();
+                chrome.setLayoutParams(params);
+            });
+            animator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator animation) {
+                    if (chromeHidden) return;
+                    ViewGroup.LayoutParams params = chrome.getLayoutParams();
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                    chrome.setLayoutParams(params);
+                }
+            });
+            animator.start();
+        }
+        scrollDown = 0;
+        scrollUp = 0;
+    }
+
+    /** Setelah Activity dibuat ulang (tema), chrome selalu tampil penuh. */
+    private void restoreChromeState() {
+        if (chrome == null) return;
+        chromeHidden = false;
+        ViewGroup.LayoutParams params = chrome.getLayoutParams();
+        if (params != null) {
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            chrome.setLayoutParams(params);
+        }
+        chrome.setVisibility(View.VISIBLE);
     }
 
     private void addChip(String text, boolean active, Runnable action) {
@@ -758,16 +1065,31 @@ public class ShinigamiActivity extends AppCompatActivity {
         });
     }
 
+    /** Dipanggil setelah jeda ketik, atau langsung dari tombol Cari. */
     private void runSearch() {
-        query = searchField.getText().toString().trim();
-        loadPage(1, false);
+        main.removeCallbacks(searchRunnable);
+        if (searchField == null) return;
+        String wanted = searchField.getText().toString().trim();
+        if (wanted.equals(query) && state(tab).loaded) return;
+        query = wanted;
+        if (!tab.isCatalogue()) {
+            tab = Tab.POPULAR;
+            mode = Mode.CATALOGUE;
+            buildFilterChips();
+            items = state(tab).items;
+            rows = state(tab).rows;
+        }
+        TabState current = state(tab);
+        current.loaded = false;
+        loadFeed(tab, 1, false);
     }
 
     private void loadMore() {
         if (loading) return;
-        if (page >= totalPages) return;
-        if (mode == Mode.CATALOGUE || mode == Mode.NEWEST_CHAPTERS)
-            loadRemote(page + 1, true, mode == Mode.NEWEST_CHAPTERS);
+        TabState current = state(tab);
+        if (current.page >= current.totalPages) return;
+        if (!tab.isCatalogue()) return;
+        loadFeed(tab, current.page + 1, true);
     }
 
     private void reload() {
@@ -778,20 +1100,17 @@ public class ShinigamiActivity extends AppCompatActivity {
             case FAVORITES:
                 showFavorites();
                 break;
-            case NEWEST_CHAPTERS:
-                showNewestChapters();
-                break;
             case DOWNLOADS:
                 showDownloads();
                 break;
             default:
-                loadPage(1, false);
+                loadFeed(tab, 1, false);
                 break;
         }
     }
 
     private void showNewestChapters() {
-        loadRemote(1, false, true);
+        selectTab(Tab.NEW_CHAPTERS);
     }
 
     private void cancelRemoteView() {
@@ -801,15 +1120,16 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void showHistory() {
+        if (tab != Tab.HISTORY) {
+            if (list != null) rememberScroll();
+            tab = Tab.HISTORY;
+        }
         cancelRemoteView();
         mode = Mode.HISTORY;
         buildFilterChips();
-        rows.clear();
+        rows = state(tab).rows;
+        fillHistoryRows();
         useRowAdapter();
-        for (ShinigamiStore.HistoryEntry entry : store.history()) {
-            rows.add(new Row(entry.mangaId, entry.title, entry.coverUrl, entry.chapterId,
-                    entry.chapterNumber, ShinigamiDates.format(entry.timestamp)));
-        }
         rowAdapter.notifyDataSetChanged();
         statusLine.setText(rows.size() + " manga dalam riwayat");
         hideError();
@@ -820,6 +1140,10 @@ public class ShinigamiActivity extends AppCompatActivity {
      * Pemindaian dilakukan di luar main thread karena memvalidasi setiap halaman.
      */
     private void showDownloads() {
+        if (tab != Tab.DOWNLOADS) {
+            if (list != null) rememberScroll();
+            tab = Tab.DOWNLOADS;
+        }
         cancelRemoteView();
         mode = Mode.DOWNLOADS;
         buildFilterChips();
@@ -854,15 +1178,16 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void showFavorites() {
+        if (tab != Tab.FAVORITES) {
+            if (list != null) rememberScroll();
+            tab = Tab.FAVORITES;
+        }
         cancelRemoteView();
         mode = Mode.FAVORITES;
-        items.clear();
+        buildFilterChips();
+        items = state(tab).items;
         useGridAdapter();
-        for (String id : store.favorites()) {
-            items.add(new ShinigamiManga(id, store.mangaTitle(id), "", store.mangaCover(id),
-                    "", -1, "", 0d, 0L, 0, "", new ArrayList<String>(),
-                    new ArrayList<String>(), ""));
-        }
+        fillFavoriteItems();
         adapter.notifyDataSetChanged();
         statusLine.setText(items.size() + " manga favorit");
         hideError();
@@ -886,7 +1211,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     /** Grid dua kolom dengan rail riwayat sebagai satu baris penuh. */
     private void applyGridManager() {
         if (!(list.getLayoutManager() instanceof GridLayoutManager)) {
-            list.setLayoutManager(new GridLayoutManager(this, 2));
+            list.setLayoutManager(new GridLayoutManager(this, gridSpan()));
         }
         GridLayoutManager manager = (GridLayoutManager) list.getLayoutManager();
         final int span = manager.getSpanCount();
@@ -930,19 +1255,27 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     private void loadPage(int targetPage, boolean append) {
-        loadRemote(targetPage, append, false);
+        loadFeed(tab, targetPage, append);
     }
 
-    private void loadRemote(int targetPage, boolean append, boolean newest) {
+    /**
+     * Muat satu halaman untuk tab tertentu.
+     *
+     * <p>Hasil selalu disimpan ke {@link TabState} milik tab asal, jadi respons
+     * yang datang terlambat tidak pernah menimpa daftar tab lain. Adapter hanya
+     * disentuh bila tab itu masih aktif, dan halaman berikutnya ditambahkan
+     * dengan {@code notifyItemRangeInserted} — bukan dengan mengganti adapter
+     * atau mengosongkan daftar, yang membuat posisi scroll melompat ke atas.
+     */
+    private void loadFeed(Tab target, int targetPage, boolean append) {
         if (loading && append) return;
-        mode = newest ? Mode.NEWEST_CHAPTERS : Mode.CATALOGUE;
+        final Tab wantedTab = target;
         final int generation = ++requestGeneration;
         loading = true;
         spinner.setVisibility(View.VISIBLE);
-        statusLine.setText("Memuat...");
+        if (!append) statusLine.setText("Memuat...");
 
         final String wantedQuery = query;
-        final ShinigamiSource.Sort wantedSort = sort;
         final String wantedGenre = genre;
         final String wantedStatus = status;
 
@@ -950,18 +1283,16 @@ public class ShinigamiActivity extends AppCompatActivity {
             ShinigamiSource.Page result = null;
             String failure = null;
             try {
-                if (newest) {
-                    result = source.search(wantedQuery, targetPage, ShinigamiSource.Sort.LATEST,
-                            wantedGenre, wantedStatus);
-                } else if (!wantedQuery.isEmpty()) {
-                    result = source.search(wantedQuery, targetPage, wantedSort, wantedGenre, wantedStatus);
-                } else {
-                    result = source.catalog(targetPage, wantedSort, wantedGenre, wantedStatus);
-                }
+                ShinigamiSource.Feed feed = wantedTab == Tab.NEW_TITLES
+                        ? ShinigamiSource.Feed.NEW_TITLES
+                        : wantedTab == Tab.NEW_CHAPTERS
+                        ? ShinigamiSource.Feed.NEW_CHAPTERS
+                        : ShinigamiSource.Feed.POPULAR;
+                result = source.feed(feed, targetPage, wantedQuery, wantedGenre, wantedStatus);
             } catch (ShinigamiSource.SourceException error) {
                 failure = error.getMessage();
             }
-            final ShinigamiSource.Page page_result = result;
+            final ShinigamiSource.Page pageResult = result;
             final String message = failure;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
@@ -972,66 +1303,66 @@ public class ShinigamiActivity extends AppCompatActivity {
                     showError(message);
                     return;
                 }
-                hideError();
-                if (page_result == null) {
+                if (pageResult == null) {
                     showError("Sumber tidak mengembalikan data.");
                     return;
                 }
-                if (newest) {
-                    useRowAdapter();
-                    if (!append) rows.clear();
+                hideError();
+                TabState state = state(wantedTab);
+                final boolean active = tab == wantedTab;
+                int added;
+                if (wantedTab == Tab.NEW_CHAPTERS) {
+                    if (!append) state.rows.clear();
                     java.util.Set<String> known = new java.util.HashSet<>();
-                    for (Row row : rows) known.add(row.mangaId);
-                    final int rowStart = rows.size();
-                    for (ShinigamiManga manga : page_result.items) {
+                    for (Row row : state.rows) known.add(row.mangaId);
+                    final int rowStart = state.rows.size();
+                    for (ShinigamiManga manga : pageResult.items) {
                         if (manga.latestChapterNumber <= 0 || !known.add(manga.id)) continue;
                         String date = manga.latestChapterTimeMillis > 0
                                 ? "Rilis: " + ShinigamiDates.format(manga.latestChapterTimeMillis)
-                                : manga.updatedAtMillis > 0 ? "Diperbarui: " + ShinigamiDates.format(manga.updatedAtMillis)
+                                : manga.updatedAtMillis > 0
+                                ? "Diperbarui: " + ShinigamiDates.format(manga.updatedAtMillis)
                                 : "Tanggal belum tersedia";
-                        rows.add(new Row(manga.id, manga.title, manga.coverUrl, "",
+                        state.rows.add(new Row(manga.id, manga.title, manga.coverUrl, "",
                                 manga.latestChapterNumber, date));
                     }
-                    // Sama seperti grid: halaman berikutnya hanya ditambahkan.
-                    final int rowAdded = rows.size() - rowStart;
-                    if (append && rowAdded > 0) {
-                        rowAdapter.notifyItemRangeInserted(rowStart, rowAdded);
-                    } else {
-                        rowAdapter.notifyDataSetChanged();
+                    added = state.rows.size() - rowStart;
+                    if (active) {
+                        useRowAdapter();
+                        if (append && added > 0) rowAdapter.notifyItemRangeInserted(rowStart, added);
+                        else rowAdapter.notifyDataSetChanged();
                     }
                 } else {
-                    useGridAdapter();
-                    // Halaman berikutnya hanya DITAMBAHKAN: item lama tidak
-                    // dikosongkan dan adapter tidak diganti, jadi posisi scroll
-                    // pengguna tidak berubah. Sebelumnya daftar di-clear lalu
-                    // notifyDataSetChanged() setelah adapter baru dipasang,
-                    // sehingga katalog melompat ke atas.
-                    final int start = items.size();
+                    if (!append) state.items.clear();
+                    final int start = state.items.size();
                     java.util.LinkedHashMap<String, ShinigamiManga> merged =
                             new java.util.LinkedHashMap<>();
-                    if (append) for (ShinigamiManga manga : items) merged.put(manga.id, manga);
-                    int added = 0;
-                    for (ShinigamiManga manga : page_result.items) {
-                        if (!merged.containsKey(manga.id)) added++;
-                        merged.put(manga.id, manga);
-                    }
-                    items.clear();
-                    items.addAll(merged.values());
-                    if (append && added > 0) {
-                        adapter.notifyItemRangeInserted(start, added);
-                    } else {
-                        adapter.notifyDataSetChanged();
+                    if (append) for (ShinigamiManga manga : state.items) merged.put(manga.id, manga);
+                    for (ShinigamiManga manga : pageResult.items) merged.put(manga.id, manga);
+                    state.items.clear();
+                    state.items.addAll(merged.values());
+                    added = state.items.size() - start;
+                    if (active) {
+                        useGridAdapter();
+                        if (append && added > 0) adapter.notifyItemRangeInserted(start, added);
+                        else adapter.notifyDataSetChanged();
                     }
                 }
-                page = targetPage;
-                totalPages = Math.max(1, page_result.totalPages);
+                state.page = targetPage;
+                state.totalPages = Math.max(1, pageResult.totalPages);
+                state.totalRecords = pageResult.totalRecords;
+                state.loaded = true;
+                long total = pageResult.totalRecords;
+                state.statusText = (wantedTab == Tab.NEW_CHAPTERS
+                        ? state.rows.size() + " chapter terbaru"
+                        : state.items.size() + " manga")
+                        + (total > 0 ? " dari " + total : "")
+                        + (wantedQuery.isEmpty() ? "" : " untuk \"" + wantedQuery + "\"");
+                if (!active) return;
+                statusLine.setText(state.statusText);
                 // Hanya penggantian daftar (cari/filter/muat ulang manual) yang
                 // kembali ke atas. Pagination tidak pernah menggeser posisi.
-                if (!append && list != null) list.scrollToPosition(0);
-                long total = page_result.totalRecords;
-                statusLine.setText((newest ? rows.size() + " chapter terbaru" : items.size() + " manga")
-                        + (total > 0 ? " dari " + total : "")
-                        + (wantedQuery.isEmpty() ? "" : " untuk \"" + wantedQuery + "\""));
+                if (!append) list.scrollToPosition(0);
             });
         });
     }
@@ -1250,10 +1581,13 @@ public class ShinigamiActivity extends AppCompatActivity {
                     : "Tanggal belum tersedia");
             holder.subtitle.setText(info.toString());
             holder.coverBox.setOnClickListener(v -> openDetail(manga.id, manga.title, manga.coverUrl));
-            Glide.with(ShinigamiActivity.this)
-                    .load(manga.coverUrl)
-                    .centerCrop()
-                    .into(holder.cover);
+            loadCover(holder.cover, manga.coverUrl);
+        }
+
+        @Override public void onViewRecycled(Holder holder) {
+            // Permintaan gambar milik item yang sudah keluar layar dibatalkan.
+            Glide.with(ShinigamiActivity.this).clear(holder.cover);
+            super.onViewRecycled(holder);
         }
 
         @Override
@@ -1317,11 +1651,7 @@ public class ShinigamiActivity extends AppCompatActivity {
             holder.title.setText(manga.title.isEmpty() ? "Tanpa judul" : manga.title);
             holder.subtitle.setText(manga.chapters.size() + " chapter offline - "
                     + ShinigamiDownloads.formatBytes(manga.bytes()));
-            if (manga.coverUrl.isEmpty()) {
-                holder.cover.setImageDrawable(null);
-            } else {
-                Glide.with(ShinigamiActivity.this).load(manga.coverUrl).centerCrop().into(holder.cover);
-            }
+            loadCover(holder.cover, manga.coverUrl);
             holder.itemView.setOnClickListener(v -> openDetail(manga.mangaId, manga.title, manga.coverUrl));
         }
 
@@ -1415,13 +1745,63 @@ public class ShinigamiActivity extends AppCompatActivity {
                     openDetail(row.mangaId, row.title, row.coverUrl);
                 }
             });
-            Glide.with(ShinigamiActivity.this).load(row.coverUrl).centerCrop().into(holder.cover);
+            loadCover(holder.cover, row.coverUrl);
+        }
+
+        @Override public void onViewRecycled(Holder holder) {
+            Glide.with(ShinigamiActivity.this).clear(holder.cover);
+            super.onViewRecycled(holder);
         }
 
         @Override
         public int getItemCount() {
             return rows.size();
         }
+    }
+
+    /**
+     * Jumlah kolom adaptif: kartu tidak lebih sempit dari 150 dp supaya judul
+     * dua baris tetap terbaca, dan tidak lebih lebar dari 220 dp supaya tablet
+     * tidak menampilkan dua kartu raksasa.
+     */
+    private int gridSpan() {
+        int widthDp = getResources().getConfiguration().screenWidthDp;
+        if (widthDp <= 0) {
+            widthDp = getResources().getDisplayMetrics().widthPixels
+                    / Math.max(1, getResources().getDisplayMetrics().densityDpi / 160);
+        }
+        return Math.max(2, Math.min(4, widthDp / 150));
+    }
+
+    /** Lebar satu kartu dalam piksel, dipakai agar cover tidak didekode penuh. */
+    private int coverWidthPx() {
+        int usable = getResources().getDisplayMetrics().widthPixels
+                - Ui.dp(this, 8) * Math.max(1, gridSpan());
+        return Math.max(Ui.dp(this, 120), usable / Math.max(1, gridSpan()));
+    }
+
+    /**
+     * Cover dimuat pada ukuran kartu, bukan resolusi penuh: Glide menyimpan
+     * bitmap sebesar yang dipakai (memori turun drastis untuk daftar panjang),
+     * permintaan sebelumnya dibatalkan saat view didaur ulang, dan hasilnya
+     * memakai cache disk Glide yang sudah dibatasi.
+     */
+    private void loadCover(ImageView target, String url) {
+        if (target == null) return;
+        if (url == null || url.isEmpty()) {
+            Glide.with(this).clear(target);
+            target.setImageDrawable(null);
+            return;
+        }
+        int width = coverWidthPx();
+        int height = Math.round(width * 1.45f);
+        Glide.with(this)
+                .load(url)
+                .centerCrop()
+                .override(width, height)
+                .placeholder(palette.surface)
+                .error(palette.surface)
+                .into(target);
     }
 
     private void openDetail(String mangaId, String title, String coverUrl) {

@@ -49,6 +49,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private int activeResolvedTheme = -1;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    /** Satu thread khusus menyiapkan gambar berikutnya; tidak menahan halaman aktif. */
+    private final ExecutorService prefetchPool = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<String> pages = new ArrayList<>();
 
@@ -149,6 +151,11 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         list.setAdapter(adapter);
         LinearLayoutManager manager = new LinearLayoutManager(this);
         list.setLayoutManager(manager);
+        // Tanpa animator item: halaman tidak pernah "muncul" dengan animasi yang
+        // menggeser posisi, dan tidak ada invalidate tambahan saat scroll.
+        list.setItemAnimator(null);
+        list.setHasFixedSize(true);
+        list.setItemViewCacheSize(3);
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
@@ -764,10 +771,19 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     protected void onDestroy() {
         cancelNotice();
         worker.shutdownNow();
+        prefetchPool.shutdownNow();
         super.onDestroy();
     }
 
     private final class PageAdapter extends RecyclerView.Adapter<PageAdapter.Holder> {
+
+        PageAdapter() {
+            setHasStableIds(true);
+        }
+
+        @Override public long getItemId(int position) {
+            return ((long) chapterId.hashCode() << 32) ^ position;
+        }
         class Holder extends RecyclerView.ViewHolder {
             final ShinigamiPageView cell;
             int bound = -1;
@@ -799,6 +815,10 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     }
                 }
             });
+            // Tinggi placeholder memakai rasio yang pernah terukur untuk halaman
+            // ini, jadi daftar tidak melompat saat gambar selesai dimuat.
+            double known = store.pageRatio(chapterId, position);
+            if (known > 0) holder.cell.setPlaceholderRatio(known);
             load(holder);
         }
 
@@ -816,6 +836,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             File local = downloader.pageFile(chapterId, position);
             if (local != null) {
                 holder.cell.showFile(local, quality);
+                rememberRatio(position, local);
+                prefetch(position + 1);
                 return;
             }
             if (offlineChapter) {
@@ -833,6 +855,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             File cached = cache.file(url);
             if (cached != null) {
                 holder.cell.showFile(cached, quality);
+                rememberRatio(position, cached);
+                prefetch(position + 1);
                 return;
             }
             final String referer = source.config().siteBase() + "/";
@@ -851,6 +875,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     if (holder.bound != position || holder.generation != generation) return;
                     if (ready != null) {
                         holder.cell.showFile(ready, quality);
+                        rememberRatio(position, ready);
+                        prefetch(position + 1);
                         int[] size = ShinigamiPageTiles.bounds(ready);
                         android.util.Log.i("ShinigamiReader", "page " + (position + 1) + "/" + pages.size()
                                 + " source=" + (size == null ? "?" : size[0] + "x" + size[1])
@@ -859,6 +885,40 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                         holder.cell.showFailure("Halaman " + (position + 1) + ": " + reason);
                     }
                 });
+            });
+        }
+
+        /**
+         * Simpan rasio halaman supaya kunjungan berikutnya memakai placeholder
+         * setinggi gambar aslinya (tanpa pergeseran layout).
+         */
+        private void rememberRatio(int position, File file) {
+            int[] size = ShinigamiPageTiles.bounds(file);
+            if (size == null || size[0] <= 0) return;
+            double ratio = (double) size[1] / size[0];
+            if (store.pageRatio(chapterId, position) <= 0) {
+                store.setPageRatio(chapterId, position, ratio);
+            }
+        }
+
+        /**
+         * Siapkan gambar berikutnya di thread terpisah.
+         *
+         * <p>Hanya satu halaman ke depan: cukup untuk membuat scroll terasa
+         * mulus, tanpa menumpuk unduhan atau memakan RAM berlebihan.
+         */
+        private void prefetch(int position) {
+            if (offlineChapter || position < 0 || position >= pages.size()) return;
+            final String url = pages.get(position);
+            if (url == null || url.isEmpty()) return;
+            if (cache.file(url) != null) return;
+            final String referer = source.config().siteBase() + "/";
+            prefetchPool.execute(() -> {
+                try {
+                    cache.fetch(url, referer);
+                } catch (java.io.IOException | RuntimeException ignored) {
+                    // Prefetch bersifat peluang; kegagalan tidak mengubah tampilan.
+                }
             });
         }
 

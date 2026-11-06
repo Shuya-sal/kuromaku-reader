@@ -23,7 +23,10 @@ import java.util.List;
 public final class ShinigamiPageTiles {
 
     /** Jumlah potongan yang disimpan di memori pada satu waktu. */
-    public static final int CACHE_TILES = 3;
+    public static final int CACHE_TILES = 6;
+    /** Cache dimensi gambar di memori untuk menghindari disk I/O berulang pada main thread. */
+    private static final android.util.LruCache<String, int[]> BOUNDS_CACHE =
+            new android.util.LruCache<>(256);
 
     private ShinigamiPageTiles() {
     }
@@ -31,6 +34,9 @@ public final class ShinigamiPageTiles {
     /** Dimensi sumber, atau {@code null} bila berkas bukan gambar terbaca. */
     public static int[] bounds(File file) {
         if (file == null || !file.isFile() || file.length() < 8) return null;
+        String path = file.getAbsolutePath();
+        int[] cached = BOUNDS_CACHE.get(path);
+        if (cached != null) return cached;
         // BitmapFactory pada sebagian implementasi mengembalikan ukuran palsu untuk
         // berkas non-gambar, jadi header diperiksa lebih dulu.
         try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
@@ -54,7 +60,9 @@ public final class ShinigamiPageTiles {
             return null;
         }
         if (options.outWidth <= 0 || options.outHeight <= 0) return null;
-        return new int[]{options.outWidth, options.outHeight};
+        int[] result = new int[]{options.outWidth, options.outHeight};
+        BOUNDS_CACHE.put(path, result);
+        return result;
     }
 
     /** Potongan vertikal {@code {top, height}} yang menutupi seluruh halaman. */
