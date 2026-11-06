@@ -37,6 +37,14 @@ public final class ShinigamiPageCache {
 
     private static final long MAX_BYTES = 96L * 1024 * 1024;
     private static final int MAX_PAGE_BYTES = 32 * 1024 * 1024;
+    /**
+     * Kunci per URL: prefetch dan pemuatan halaman yang sedang terlihat bisa
+     * meminta alamat yang sama. Tanpa kunci, keduanya menulis berkas sementara
+     * yang sama dan salah satunya gagal validasi — halaman sempat kosong.
+     */
+    private static final java.util.concurrent.ConcurrentHashMap<String, Object> LOCKS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     /** Cache referensi berkas di memori untuk menghindari parsing dan I/O disk berulang. */
     private static final android.util.LruCache<String, File> MEM_CACHE =
             new android.util.LruCache<>(256);
@@ -102,6 +110,19 @@ public final class ShinigamiPageCache {
      * 401/403/429, atau berkas terpotong tidak pernah menjadi berkas cache.
      */
     public File fetch(String url, String referer) throws IOException {
+        if (url == null || url.isEmpty()) throw new IOException("Alamat gambar kosong.");
+        Object lock = LOCKS.get(url);
+        if (lock == null) {
+            Object created = new Object();
+            Object existing = LOCKS.putIfAbsent(url, created);
+            lock = existing == null ? created : existing;
+        }
+        synchronized (lock) {
+            return fetchLocked(url, referer);
+        }
+    }
+
+    private File fetchLocked(String url, String referer) throws IOException {
         File cached = file(url);
         if (cached != null) return cached;
         File target = new File(dir(), key(url) + ".img");

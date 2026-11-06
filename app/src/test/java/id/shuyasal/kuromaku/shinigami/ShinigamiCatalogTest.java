@@ -72,6 +72,8 @@ public class ShinigamiCatalogTest {
         state.putString("shinigami_genre", "action"); state.putString("shinigami_status", "ongoing");
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).create(state).start().resume().visible()) {
             Catalog host = controller.get(); await(host);
+            // Beranda default Chapter Terbaru; tab Terpopuler memakai sort=rank.
+            tagged(host, "shinigami_chip_Terpopuler").performClick(); await(host);
             String request = lastList();
             assertTrue(request, request.contains("sort=rank"));
             assertTrue(request, request.contains("q=solo%20leveling"));
@@ -87,6 +89,8 @@ public class ShinigamiCatalogTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get(); await(host);
             assertNotNull(tagged(host, "shinigami_chip_Manga Terbaru"));
+            // Kartu grid diuji pada tab Terpopuler.
+            tagged(host, "shinigami_chip_Terpopuler").performClick(); await(host);
             TextView info = bindFirst(host).findViewWithTag("shinigami_subtitle");
             assertTrue(info.getText().toString(), info.getText().toString().contains("Chapter terbaru: 210"));
             // Baris tanggal kini ringkas dan berdiri sendiri agar tidak terpotong

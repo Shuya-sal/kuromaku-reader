@@ -4,6 +4,16 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
+* **@VERSION@ — Default Chapter Terbaru, top bar anti-kedip, dan gambar reader tanpa flicker.**
+  - **Beranda dibuka di Chapter Terbaru.** Urutan tab kini Chapter Terbaru | Terpopuler | Manga Terbaru | Riwayat | Favorit | Unduhan. Label tidak pernah bertukar, dan tiap tab tetap memakai kursor pagination + cache sendiri.
+  - **Migrasi preferensi lama:** state yang masih menyimpan `sort=rank` dari tombol lama dibuka pada tab Terpopuler; preferensi lain (pencarian, genre, status, tema, progres) tidak disentuh. Tanpa state lama, default selalu Chapter Terbaru.
+  - **Penyebab top bar berkedip:** tinggi container header dianimasikan, sehingga tinggi RecyclerView ikut berubah setiap frame. Perubahan itu memancarkan `onScrolled` lagi, listener mengira pengguna bergerak, lalu animasi dibalik arah — berulang. Diperparah `GONE` di akhir animasi yang menggeser layout sekali lagi.
+  - **Perbaikannya:** satu state machine (`chromeHidden` + `chromeBusy`), akumulasi arah scroll dengan hysteresis 48 dp untuk menyembunyikan dan 24 dp untuk memunculkan, animasi lama dibatalkan sebelum transisi baru, seluruh event scroll diabaikan selama transisi, tinggi dianimasikan ke 0 tanpa pernah memakai GONE, dan pagination tidak lagi menyentuh state header.
+  - **Penyebab gambar reader berkedip:** setiap rebind memanggil `showLoading()` yang mengosongkan ImageView dan menutup permukaan tile, lalu `showFile()` membuka decoder dan mendekode ulang walaupun halamannya sama. Ditambah `requestLayout()` setiap kali dan dua permintaan (prefetch + halaman terlihat) menulis berkas sementara yang sama.
+  - **Perbaikannya:** rebind pada berkas yang sama tidak melakukan apa pun (`shownKey`), `TiledSurface` memakai ulang decoder dan tile bila berkas + kualitas sama, placeholder hanya dipasang bila belum ada gambar valid, `requestLayout()` hanya saat rasio benar-benar berubah, dan `ShinigamiPageCache` memakai kunci per URL sehingga prefetch tidak membatalkan halaman yang sedang tampil. Decode tetap di thread latar dan kualitas HD tidak diturunkan.
+  - **Bukti pengujian:** 645 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Tes baru: default + urutan tab, rebind halaman yang sama tidak menutup permukaan gambar, dan dua `fetch` bersamaan untuk URL yang sama hanya mengunduh sekali.
+  - **Belum diukur pada perangkat fisik:** FPS/jank dan RAM tidak diambil dengan Profiler/Perfetto (tidak ada perangkat adb). Klaim di atas berasal dari perubahan jalur kode + tes otomatis.
+
 * **@VERSION@ — Performa, tab kategori permanen, auto-hide header, dan scroll reader yang mulus.**
   - **Tab beranda tidak lagi berganti label.** Kini enam tab tetap: Terpopuler | Manga Terbaru | Chapter Terbaru | Riwayat | Favorit | Unduhan. Menekan tab tidak pernah mengubah teksnya.
   - **Tiap kategori benar-benar meminta data berbeda** ke sumber, bukan sekadar mengganti label: Terpopuler = `sort=rank` menurun, Chapter Terbaru = `sort=latest` menurun, Manga Terbaru = `sort=rank` menaik lalu diurutkan ulang menurut `created_at` (sumber Shinigami tidak menyediakan urutan "judul baru", jadi kursor terdekat dipakai dan hasilnya diurutkan lokal).

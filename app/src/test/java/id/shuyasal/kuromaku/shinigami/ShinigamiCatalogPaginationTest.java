@@ -128,6 +128,15 @@ public class ShinigamiCatalogPaginationTest {
         return (RecyclerView) host.getWindow().getDecorView().findViewWithTag("shinigami_grid");
     }
 
+    /** Beranda kini default Chapter Terbaru (baris); tes grid memakai Terpopuler. */
+    void switchToPopular(Catalog host) throws Exception {
+        View chip = host.getWindow().getDecorView()
+                .findViewWithTag("shinigami_chip_Terpopuler");
+        assertNotNull("tab Terpopuler harus ada", chip);
+        chip.performClick();
+        await(host);
+    }
+
     int itemCount(Catalog host) {
         RecyclerView.Adapter<?> adapter = list(host).getAdapter();
         return adapter == null ? 0 : adapter.getItemCount();
@@ -148,6 +157,7 @@ public class ShinigamiCatalogPaginationTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get();
             await(host);
+            switchToPopular(host);
 
             RecyclerView.Adapter<?> first = list(host).getAdapter();
             assertNotNull(first);
@@ -164,6 +174,7 @@ public class ShinigamiCatalogPaginationTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get();
             await(host);
+            switchToPopular(host);
 
             Recorder recorder = new Recorder();
             list(host).getAdapter().registerAdapterDataObserver(recorder);
@@ -180,6 +191,7 @@ public class ShinigamiCatalogPaginationTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get();
             await(host);
+            switchToPopular(host);
             layout(list(host));
 
             LinearLayoutManager manager = (LinearLayoutManager) list(host).getLayoutManager();
@@ -200,6 +212,7 @@ public class ShinigamiCatalogPaginationTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get();
             await(host);
+            switchToPopular(host);
 
             // Empat pemicu beruntun seperti onScrolled yang mengenai dasar daftar.
             Method loadMore = ShinigamiActivity.class.getDeclaredMethod("loadMore");
@@ -217,6 +230,7 @@ public class ShinigamiCatalogPaginationTest {
         try (ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get();
             await(host);
+            switchToPopular(host);
 
             append(host, 2);
             append(host, 3);

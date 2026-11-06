@@ -70,9 +70,10 @@ public class ShinigamiActivity extends AppCompatActivity {
      * tombol, dan tiap tab meminta jenis data yang berbeda ke sumber.
      */
     enum Tab {
+        /** Default beranda: manga yang chapter-nya paling baru diperbarui. */
+        NEW_CHAPTERS("Chapter Terbaru"),
         POPULAR("Terpopuler"),
         NEW_TITLES("Manga Terbaru"),
-        NEW_CHAPTERS("Chapter Terbaru"),
         HISTORY("Riwayat"),
         FAVORITES("Favorit"),
         DOWNLOADS("Unduhan");
@@ -128,7 +129,8 @@ public class ShinigamiActivity extends AppCompatActivity {
     private List<Row> rows = new ArrayList<>();
     private final java.util.EnumMap<Tab, TabState> tabStates =
             new java.util.EnumMap<>(Tab.class);
-    private Tab tab = Tab.POPULAR;
+    /** Beranda dibuka pada Chapter Terbaru. */
+    private Tab tab = Tab.NEW_CHAPTERS;
     private final List<ShinigamiDownloads.Manga> downloads = new ArrayList<>();
 
     private Palette palette;
@@ -149,6 +151,8 @@ public class ShinigamiActivity extends AppCompatActivity {
     /** Pencarian + tab + jumlah manga: disembunyikan saat pengguna scroll turun. */
     private LinearLayout chrome;
     private boolean chromeHidden;
+    /** True selama animasi + satu putaran layout; onScrolled diabaikan. */
+    private boolean chromeBusy;
     private int chromeHeight;
     private int scrollDown;
     private int scrollUp;
@@ -176,7 +180,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     private ShinigamiSource.Sort sort = ShinigamiSource.Sort.LATEST;
     private String genre = "";
     private String status = "";
-    private Mode mode = Mode.CATALOGUE;
+    private Mode mode = Mode.NEWEST_CHAPTERS;
     private int activeResolvedTheme = -1;
 
     static final class RetainedState {
@@ -348,6 +352,14 @@ public class ShinigamiActivity extends AppCompatActivity {
                 status = savedInstanceState.getString(STATE_STATUS, "");
             }
 
+            // Migrasi preferensi lama: dulu tombol "Terpopuler" menyimpan
+            // sort=rank. Bila state lama memintanya, buka tab Terpopuler alih-alih
+            // mengabaikan pilihan pengguna. Selain itu default tetap Chapter Terbaru.
+            if (savedInstanceState != null
+                    && "rank".equals(savedInstanceState.getString(STATE_SORT))) {
+                tab = Tab.POPULAR;
+            }
+            mode = modeOf(tab);
             buildUi();
             searchField.setText(query);
             refreshContinueRail();
@@ -798,9 +810,10 @@ public class ShinigamiActivity extends AppCompatActivity {
         filterRow.removeAllViews();
         // Label tab tidak pernah berubah: tidak ada lagi tombol yang berganti
         // teks dari "Terpopuler" menjadi "Manga terbaru" saat ditekan.
+        // Urutan tetap: Chapter Terbaru selalu pertama dan menjadi default.
+        addChip(Tab.NEW_CHAPTERS.label, tab == Tab.NEW_CHAPTERS, () -> selectTab(Tab.NEW_CHAPTERS));
         addChip(Tab.POPULAR.label, tab == Tab.POPULAR, () -> selectTab(Tab.POPULAR));
         addChip(Tab.NEW_TITLES.label, tab == Tab.NEW_TITLES, () -> selectTab(Tab.NEW_TITLES));
-        addChip(Tab.NEW_CHAPTERS.label, tab == Tab.NEW_CHAPTERS, () -> selectTab(Tab.NEW_CHAPTERS));
         addChip(Tab.HISTORY.label, tab == Tab.HISTORY, () -> selectTab(Tab.HISTORY));
         addChip(Tab.FAVORITES.label, tab == Tab.FAVORITES, () -> selectTab(Tab.FAVORITES));
         addChip(Tab.DOWNLOADS.label, tab == Tab.DOWNLOADS, () -> selectTab(Tab.DOWNLOADS));
@@ -940,15 +953,24 @@ public class ShinigamiActivity extends AppCompatActivity {
     }
 
     /**
-     * Auto-hide header beranda.
+     * Auto-hide header beranda sebagai satu state machine.
      *
-     * <p>Ambang 24 dp mencegah header berkedip saat jari hanya bergerak sedikit.
-     * Tinggi container dianimasikan (bukan hanya digeser) supaya ruang yang
-     * dipakai benar-benar kembali ke katalog, dan RecyclerView tumbuh/menyusut
-     * tanpa mengubah item pertama yang terlihat.
+     * <p>Penyebab top bar berkedip sebelumnya: tinggi container dianimasikan,
+     * setiap frame mengubah tinggi RecyclerView, dan RecyclerView memancarkan
+     * {@code onScrolled} lagi karena offset-nya bergeser. Listener mengira
+     * pengguna bergerak, lalu membalik arah animasi — berulang sampai animasi
+     * saling membatalkan. Sekarang:
+     * <ul>
+     *   <li>selama transisi, {@code onScrolled} diabaikan ({@code chromeBusy});</li>
+     *   <li>arah harus terakumulasi melewati ambang, dengan hysteresis 2×;</li>
+     *   <li>visibilitas tidak pernah diubah ke GONE, hanya tinggi 0 → tidak ada
+     *       lompatan layout yang memicu scroll tambahan;</li>
+     *   <li>animasi lama dibatalkan sebelum transisi baru dijalankan;</li>
+     *   <li>pagination/refresh tidak pernah menyentuh state header.</li>
+     * </ul>
      */
     private void updateChrome(int dy) {
-        if (chrome == null) return;
+        if (chrome == null || chromeBusy) return;
         if (dy > 0) {
             scrollDown += dy;
             scrollUp = 0;
@@ -958,10 +980,11 @@ public class ShinigamiActivity extends AppCompatActivity {
         } else {
             return;
         }
-        int threshold = Ui.dp(this, 24);
-        if (!chromeHidden && scrollDown > threshold) {
+        int hideThreshold = Ui.dp(this, 48);
+        int showThreshold = Ui.dp(this, 24);
+        if (!chromeHidden && scrollDown >= hideThreshold) {
             setChromeHidden(true);
-        } else if (chromeHidden && scrollUp > Math.max(1, threshold / 2)) {
+        } else if (chromeHidden && scrollUp >= showThreshold) {
             setChromeHidden(false);
         }
     }
@@ -969,55 +992,80 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void setChromeHidden(boolean hide) {
         if (chrome == null || chromeHidden == hide) return;
         chromeHidden = hide;
-        if (chromeHeight <= 0) chromeHeight = chrome.getHeight();
-        if (chromeHeight <= 0) {
-            chrome.setVisibility(hide ? View.GONE : View.VISIBLE);
-            return;
-        }
-        chrome.animate().cancel();
-        if (hide) {
-            android.animation.ValueAnimator animator =
-                    android.animation.ValueAnimator.ofInt(chromeHeight, 0);
-            animator.setDuration(CHROME_ANIM_MS);
-            animator.addUpdateListener(animation -> {
-                ViewGroup.LayoutParams params = chrome.getLayoutParams();
-                params.height = (int) animation.getAnimatedValue();
-                chrome.setLayoutParams(params);
-            });
-            animator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    if (chromeHidden) chrome.setVisibility(View.GONE);
-                }
-            });
-            animator.start();
-        } else {
-            chrome.setVisibility(View.VISIBLE);
-            android.animation.ValueAnimator animator =
-                    android.animation.ValueAnimator.ofInt(0, chromeHeight);
-            animator.setDuration(CHROME_ANIM_MS);
-            animator.addUpdateListener(animation -> {
-                ViewGroup.LayoutParams params = chrome.getLayoutParams();
-                params.height = (int) animation.getAnimatedValue();
-                chrome.setLayoutParams(params);
-            });
-            animator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    if (chromeHidden) return;
-                    ViewGroup.LayoutParams params = chrome.getLayoutParams();
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-                    chrome.setLayoutParams(params);
-                }
-            });
-            animator.start();
-        }
         scrollDown = 0;
         scrollUp = 0;
+        if (chromeHeight <= 0) chromeHeight = chrome.getHeight();
+        if (chromeHeight <= 0) {
+            // Belum pernah diukur (misalnya sesudah recreate): ukur sekali.
+            chrome.measure(
+                    View.MeasureSpec.makeMeasureSpec(getResources().getDisplayMetrics().widthPixels,
+                            View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            chromeHeight = chrome.getMeasuredHeight();
+        }
+        if (chromeHeight <= 0) chromeHeight = Ui.dp(this, 96);
+
+        final ViewGroup.LayoutParams params = chrome.getLayoutParams();
+        int from = params.height > 0 ? params.height : (hide ? chromeHeight : 0);
+        if (!hide) {
+            // Kembali tampil: kunci tinggi dulu supaya animasi tidak melompat.
+            chrome.setVisibility(View.VISIBLE);
+            params.height = chromeHeight;
+            chrome.setLayoutParams(params);
+            from = 0;
+        }
+        chromeBusy = true;
+        main.removeCallbacks(chromeRelease);
+        // Animasi lama diselesaikan lebih dulu: dua animator yang berjalan
+        // bersamaan pada properti layout yang sama adalah sumber kedipan.
+        if (chromeAnimator != null) {
+            chromeAnimator.removeAllListeners();
+            chromeAnimator.cancel();
+            chromeAnimator = null;
+        }
+
+        android.animation.ValueAnimator animator =
+                android.animation.ValueAnimator.ofInt(from, hide ? 0 : chromeHeight);
+        animator.setDuration(CHROME_ANIM_MS);
+        animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        animator.addUpdateListener(animation -> {
+            ViewGroup.LayoutParams current = chrome.getLayoutParams();
+            current.height = (int) animation.getAnimatedValue();
+            chrome.setLayoutParams(current);
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (chrome == null) return;
+                ViewGroup.LayoutParams done = chrome.getLayoutParams();
+                // Tetap VISIBLE dengan tinggi 0: tidak ada GONE/VISIBLE berulang.
+                done.height = hide ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
+                chrome.setLayoutParams(done);
+                // Beri satu putaran layout untuk meredam onScrolled programatis
+                // sebelum gestur pengguna berikutnya dihitung.
+                main.postDelayed(chromeRelease, 220L);
+            }
+        });
+        chromeAnimator = animator;
+        animator.start();
     }
+
+    private android.animation.ValueAnimator chromeAnimator;
+
+    private final Runnable chromeRelease = () -> chromeBusy = false;
 
     /** Setelah Activity dibuat ulang (tema), chrome selalu tampil penuh. */
     private void restoreChromeState() {
         if (chrome == null) return;
+        if (chromeAnimator != null) {
+            chromeAnimator.removeAllListeners();
+            chromeAnimator.cancel();
+            chromeAnimator = null;
+        }
         chromeHidden = false;
+        chromeBusy = false;
+        scrollDown = 0;
+        scrollUp = 0;
+        chrome.animate().cancel();
         ViewGroup.LayoutParams params = chrome.getLayoutParams();
         if (params != null) {
             params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -1041,7 +1089,7 @@ public class ShinigamiActivity extends AppCompatActivity {
     private void loadGenres() {
         // Genre hanya relevan untuk katalog; tab Unduhan/Riwayat/Favorit harus
         // tetap bisa dibuka tanpa jaringan.
-        if (mode != Mode.CATALOGUE) return;
+        if (!tab.isCatalogue()) return;
         final int generation = filterGeneration;
         worker.execute(() -> {
             List<ShinigamiSource.Genre> loaded;

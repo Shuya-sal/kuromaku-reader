@@ -88,7 +88,7 @@ public class ShinigamiTabsTest {
             Catalog host = controller.get();
             await(host);
 
-            String[] wanted = {"Terpopuler", "Manga Terbaru", "Chapter Terbaru", "Riwayat", "Favorit"};
+            String[] wanted = {"Chapter Terbaru", "Terpopuler", "Manga Terbaru", "Riwayat", "Favorit"};
             for (String label : wanted) {
                 View chip = tagged(host, "shinigami_chip_" + label);
                 assertEquals(label, ((TextView) chip).getText().toString());
@@ -108,28 +108,47 @@ public class ShinigamiTabsTest {
         }
     }
 
+    @Test public void defaultTabIsNewestChapters() throws Exception {
+        try (ActivityController<Catalog> controller =
+                     Robolectric.buildActivity(Catalog.class).setup()) {
+            Catalog host = controller.get();
+            await(host);
+
+            String first = lastListRequest();
+            assertTrue("default harus Chapter Terbaru: " + first, first.contains("sort=latest"));
+            assertTrue(first, first.contains("sort_order=desc"));
+
+            // Urutan tombol: Chapter Terbaru paling kiri.
+            View popular = tagged(host, "shinigami_chip_Terpopuler");
+            View newest = tagged(host, "shinigami_chip_Chapter Terbaru");
+            android.view.ViewGroup row = (android.view.ViewGroup) popular.getParent();
+            assertEquals("Chapter Terbaru harus di kiri Terpopuler",
+                    row.indexOfChild(popular) - 1, row.indexOfChild(newest));
+        }
+    }
+
     @Test public void eachCategoryAsksTheSourceForItsOwnMix() throws Exception {
         try (ActivityController<Catalog> controller =
                      Robolectric.buildActivity(Catalog.class).setup()) {
             Catalog host = controller.get();
             await(host);
 
+            String newestChapters = lastListRequest();
+            assertTrue(newestChapters, newestChapters.contains("sort=latest"));
+            assertTrue(newestChapters, newestChapters.contains("sort_order=desc"));
+
+            tagged(host, "shinigami_chip_Terpopuler").performClick();
+            await(host);
             String popular = lastListRequest();
+            assertNotSame(newestChapters, popular);
             assertTrue(popular, popular.contains("sort=rank"));
             assertTrue(popular, popular.contains("sort_order=desc"));
 
             tagged(host, "shinigami_chip_Manga Terbaru").performClick();
             await(host);
             String newestTitles = lastListRequest();
-            assertNotSame(popular, newestTitles);
             assertTrue(newestTitles, newestTitles.contains("sort=rank"));
             assertTrue(newestTitles, newestTitles.contains("sort_order=asc"));
-
-            tagged(host, "shinigami_chip_Chapter Terbaru").performClick();
-            await(host);
-            String newestChapters = lastListRequest();
-            assertTrue(newestChapters, newestChapters.contains("sort=latest"));
-            assertTrue(newestChapters, newestChapters.contains("sort_order=desc"));
         }
     }
 
@@ -140,21 +159,23 @@ public class ShinigamiTabsTest {
             await(host);
 
             RecyclerView list = (RecyclerView) tagged(host, "shinigami_grid");
-            int popularCount = list.getAdapter().getItemCount();
-            assertTrue(popularCount > 0);
-            int requestsAfterPopular = listRequestCount();
+            int newestCount = list.getAdapter().getItemCount();
+            assertTrue(newestCount > 0);
+            int requestsAfterFirst = listRequestCount();
 
-            tagged(host, "shinigami_chip_Manga Terbaru").performClick();
+            tagged(host, "shinigami_chip_Terpopuler").performClick();
             await(host);
             assertTrue("tab kedua harus meminta data sendiri",
-                    listRequestCount() > requestsAfterPopular);
+                    listRequestCount() > requestsAfterFirst);
+            int popularCount = list.getAdapter().getItemCount();
+            assertTrue(popularCount > 0);
 
             int requestsBeforeReturn = listRequestCount();
-            tagged(host, "shinigami_chip_Terpopuler").performClick();
+            tagged(host, "shinigami_chip_Chapter Terbaru").performClick();
             await(host);
             // Kembali ke tab yang sudah punya data tidak boleh memicu fetch baru.
             assertEquals(requestsBeforeReturn, listRequestCount());
-            assertEquals(popularCount, list.getAdapter().getItemCount());
+            assertEquals(newestCount, list.getAdapter().getItemCount());
         }
     }
 
@@ -169,12 +190,14 @@ public class ShinigamiTabsTest {
 
             Method update = ShinigamiActivity.class.getDeclaredMethod("updateChrome", int.class);
             update.setAccessible(true);
-            update.invoke(host, 40);
+            update.invoke(host, 60);
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400));
-            assertEquals("header harus tersembunyi saat scroll turun",
-                    View.GONE, chrome.getVisibility());
+            assertEquals("header harus menyusut ke nol saat scroll turun",
+                    0, chrome.getHeight());
+            assertEquals("chrome tetap VISIBLE, tidak memakai GONE",
+                    View.VISIBLE, chrome.getVisibility());
 
-            update.invoke(host, -40);
+            update.invoke(host, -30);
             Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400));
             assertEquals("header harus kembali saat scroll naik",
                     View.VISIBLE, chrome.getVisibility());

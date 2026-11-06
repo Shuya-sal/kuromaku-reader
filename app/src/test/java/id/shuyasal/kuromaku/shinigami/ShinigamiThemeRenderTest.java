@@ -107,7 +107,10 @@ public class ShinigamiThemeRenderTest {
 
     static TextView titleView(Screen host) {
         ViewGroup content = host.getWindow().getDecorView().findViewById(android.R.id.content);
-        return content.findViewWithTag("shinigami_title");
+        // Beranda default Chapter Terbaru memakai kartu baris; grid memakai
+        // tag lain. Keduanya diuji supaya warna teks tetap terbaca.
+        TextView grid = content.findViewWithTag("shinigami_title");
+        return grid != null ? grid : content.findViewWithTag("shinigami_row_title");
     }
 
     @Test public void memilihGelapMengubahWarnaYangDigambarTanpaMemuatUlangKatalog() throws Exception {

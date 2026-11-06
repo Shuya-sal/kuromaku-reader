@@ -102,6 +102,14 @@ public class ShinigamiContinueRailTest {
     private ActivityController<Catalog> launch() throws Exception {
         ActivityController<Catalog> controller = Robolectric.buildActivity(Catalog.class).setup();
         await(controller.get());
+        // Beranda default Chapter Terbaru (daftar baris). Tes di kelas ini
+        // menguji grid katalog, jadi pindah ke Terpopuler lebih dulu.
+        View popular = controller.get().getWindow().getDecorView()
+                .findViewWithTag("shinigami_chip_Terpopuler");
+        if (popular != null) {
+            popular.performClick();
+            await(controller.get());
+        }
         return controller;
     }
 

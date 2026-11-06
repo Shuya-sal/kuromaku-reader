@@ -185,6 +185,20 @@ public final class ShinigamiPageView extends FrameLayout {
         return ratio;
     }
 
+    /**
+     * Pasang rasio halaman; kembalikan {@code true} bila tinggi ikut berubah.
+     *
+     * <p>Rebind pada halaman yang sama tidak boleh memicu {@code requestLayout()}
+     * lagi — setiap layout ulang memaksa RecyclerView mengukur anak dan bisa
+     * membuat gambar terlihat berkedip.
+     */
+    private boolean applyRatio(double value) {
+        if (value <= 0.2 || value > 20) return false;
+        if (Math.abs(ratio - value) < 0.005) return false;
+        ratio = value;
+        return true;
+    }
+
     public void showLoading() {
         // ratio TIDAK direset: placeholder mempertahankan tinggi yang sudah
         // diketahui supaya daftar tidak melompat saat halaman dimuat ulang.
@@ -218,14 +232,14 @@ public final class ShinigamiPageView extends FrameLayout {
             showFailure("Gambar halaman tidak dapat dibaca.");
             return;
         }
-        ratio = (double) size[1] / size[0];
+        boolean resized = applyRatio((double) size[1] / size[0]);
         image.setImageDrawable(null);
         image.setVisibility(GONE);
         loading.setVisibility(GONE);
         errorBox.setVisibility(GONE);
         surface.show(file, size[0], size[1], quality == null ? ShinigamiQuality.AUTO : quality);
         surface.setVisibility(VISIBLE);
-        requestLayout();
+        if (resized) requestLayout();
     }
 
     /**
@@ -240,7 +254,7 @@ public final class ShinigamiPageView extends FrameLayout {
             showFailure("Gambar halaman tidak dapat dibaca.");
             return;
         }
-        ratio = (double) size[1] / size[0];
+        boolean resized = applyRatio((double) size[1] / size[0]);
         image.setImageDrawable(null);
         image.setVisibility(GONE);
         loading.setVisibility(GONE);
@@ -308,6 +322,7 @@ public final class ShinigamiPageView extends FrameLayout {
         private int sourceHeight;
         private int tileHeight = 1280;
         private boolean rgb565;
+        private ShinigamiQuality shownQuality;
         private boolean failed;
 
         TiledSurface(Context context) {
@@ -323,8 +338,16 @@ public final class ShinigamiPageView extends FrameLayout {
         });
 
         void show(File source, int width, int height, ShinigamiQuality quality) {
+            // Halaman yang sama tidak dibongkar ulang. Sebelumnya setiap rebind
+            // memanggil clear() + decode ulang, dan itu yang membuat gambar
+            // berkedip saat menggulir bolak-balik.
+            if (source != null && source.equals(file) && quality == shownQuality
+                    && decoder != null && !decoder.isRecycled()) {
+                return;
+            }
             clear();
             generation++;
+            shownQuality = quality;
             file = source;
             sourceWidth = width;
             sourceHeight = height;
@@ -351,6 +374,7 @@ public final class ShinigamiPageView extends FrameLayout {
             sourceWidth = 0;
             sourceHeight = 0;
             failed = false;
+            shownQuality = null;
         }
 
         @Override protected void onDraw(Canvas canvas) {

@@ -788,6 +788,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             final ShinigamiPageView cell;
             int bound = -1;
             int generation;
+            /** Berkas/alamat yang benar-benar sedang tampil di holder ini. */
+            String shownKey;
             Holder(ShinigamiPageView item) { super(item); cell = item; }
         }
 
@@ -828,25 +830,24 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
          * decode seluruh halaman, jadi lebar asli sumber tidak dikorbankan.
          */
         private void load(Holder holder) {
-            holder.cell.showLoading();
             final int position = holder.bound;
             if (position < 0 || position >= pages.size()) return;
             final int generation = ++holder.generation;
 
             File local = downloader.pageFile(chapterId, position);
             if (local != null) {
-                holder.cell.showFile(local, quality);
-                rememberRatio(position, local);
-                prefetch(position + 1);
+                display(holder, position, local);
                 return;
             }
             if (offlineChapter) {
+                holder.shownKey = null;
                 holder.cell.showFailure("Halaman " + (position + 1)
                         + " tidak tersedia lagi di penyimpanan. Unduh ulang chapter ini.");
                 return;
             }
             String url = pages.get(position);
             if (url == null || url.isEmpty()) {
+                holder.shownKey = null;
                 holder.cell.showFailure("Alamat gambar halaman " + (position + 1) + " tidak dikenal.");
                 return;
             }
@@ -854,11 +855,13 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             // jadi menggulir balik tidak pernah memicu unduhan ulang.
             File cached = cache.file(url);
             if (cached != null) {
-                holder.cell.showFile(cached, quality);
-                rememberRatio(position, cached);
-                prefetch(position + 1);
+                display(holder, position, cached);
                 return;
             }
+            // Belum ada berkas untuk halaman ini. Placeholder hanya dipasang bila
+            // holder memang belum menampilkan gambar valid — gambar yang masih
+            // terlihat tidak pernah dikosongkan lebih dulu.
+            if (holder.shownKey == null) holder.cell.showLoading();
             final String referer = source.config().siteBase() + "/";
             worker.execute(() -> {
                 File file = null;
@@ -874,6 +877,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     if (isFinishing() || isDestroyed()) return;
                     if (holder.bound != position || holder.generation != generation) return;
                     if (ready != null) {
+                        holder.shownKey = ready.getAbsolutePath();
                         holder.cell.showFile(ready, quality);
                         rememberRatio(position, ready);
                         prefetch(position + 1);
@@ -882,10 +886,26 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                                 + " source=" + (size == null ? "?" : size[0] + "x" + size[1])
                                 + " quality=" + quality.name());
                     } else {
+                        holder.shownKey = null;
                         holder.cell.showFailure("Halaman " + (position + 1) + ": " + reason);
                     }
                 });
             });
+        }
+
+        /**
+         * Tampilkan berkas tanpa membongkar gambar yang sudah benar.
+         *
+         * <p>Holder yang di-rebind pada halaman yang sama tidak memuat ulang apa
+         * pun: tile yang masih terlihat tetap dipakai, jadi tidak ada kedipan.
+         */
+        private void display(Holder holder, int position, File file) {
+            String key = file.getAbsolutePath();
+            if (key.equals(holder.shownKey)) return;
+            holder.shownKey = key;
+            holder.cell.showFile(file, quality);
+            rememberRatio(position, file);
+            prefetch(position + 1);
         }
 
         /**
@@ -928,6 +948,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             // ulang dari berkas (offline/cache), bukan mewarisi tampilan holder lama.
             holder.generation++;
             holder.bound = -1;
+            holder.shownKey = null;
             // Bitmap dan decoder di TiledSurface sengaja TIDAK dibersihkan di sini;
             // showLoading() menutup permukaan, dan load() berikutnya membuka ulang
             // decoder dari berkas yang sama (murah, file-based).
