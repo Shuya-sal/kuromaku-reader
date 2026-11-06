@@ -63,6 +63,25 @@ public class SectionDrawerTest {
         return host;
     }
 
+    /**
+     * Menunggu pemuatan katalog latar selesai sebelum aksi yang diperiksa.
+     *
+     * <p>Pemuatan katalog berjalan di thread terpisah dan melaporkan catatannya
+     * lewat toast. Bila toast itu datang setelah aksi backup/restore, pesan yang
+     * diperiksa tes tertimpa dan hasilnya bergantung pada kecepatan mesin —
+     * persis yang membuat tes ini gagal di CI sementara lulus di laptop.
+     */
+    private void settleCatalog(MainActivity host) throws Exception {
+        java.lang.reflect.Field field = MainActivity.class.getDeclaredField("loading");
+        field.setAccessible(true);
+        long deadline = System.currentTimeMillis() + 15_000L;
+        while (Boolean.TRUE.equals(field.get(host)) && System.currentTimeMillis() < deadline) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            Thread.sleep(5L);
+        }
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
     private MainActivity open() {
         return open(new Intent(context, MainActivity.class));
     }
@@ -197,6 +216,7 @@ public class SectionDrawerTest {
                 .commit();
 
         MainActivity host = open();
+        settleCatalog(host);
         LinearLayout panel = openDrawer(host);
         item(panel, "drawer_backup").performClick();
         Shadows.shadowOf(Looper.getMainLooper()).idle();
@@ -234,6 +254,7 @@ public class SectionDrawerTest {
                 .commit();
 
         MainActivity host = open();
+        settleCatalog(host);
         String document = ReadingBackup.export(store);
 
         // Wipe the progress as if the app had been reinstalled.
@@ -277,12 +298,13 @@ public class SectionDrawerTest {
      * would look like a successful restore.
      */
     @Test
-    public void aFileThatCannotBeOpenedIsReported() {
+    public void aFileThatCannotBeOpenedIsReported() throws Exception {
         SharedPreferences store = context.getSharedPreferences(Prefs.FILE_NAME, Context.MODE_PRIVATE);
         store.edit().clear().commit();
         store.edit().putInt("monogatari:progress:c1", 41).commit();
 
         MainActivity host = open();
+        settleCatalog(host);
         // No stream registered for this Uri: openInputStream returns null.
         Uri source = Uri.parse("content://test/missing.json");
         host.onActivityResult(MainActivity.REQUEST_RESTORE, Activity.RESULT_OK,
