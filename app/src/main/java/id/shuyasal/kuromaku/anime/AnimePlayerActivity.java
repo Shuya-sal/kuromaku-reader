@@ -1366,6 +1366,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
      */
     private void scheduleHideControls() {
         uiHandler.removeCallbacks(hideControlsTask);
+        uiHandler.removeCallbacks(applyHiddenTask);
         if (!fullscreen) return;
         if (panelOpen || scrubbing || controlsPinned()) return;
         uiHandler.postDelayed(hideControlsTask, CONTROLS_TIMEOUT_MS);
@@ -1373,6 +1374,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private void cancelHideControls() {
         uiHandler.removeCallbacks(hideControlsTask);
+        uiHandler.removeCallbacks(applyHiddenTask);
     }
 
     /**
@@ -1417,6 +1419,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private void hideControlsNow() {
         uiHandler.removeCallbacks(hideControlsTask);
+        uiHandler.removeCallbacks(applyHiddenTask);
         setControlsVisible(false);
     }
 
@@ -1428,14 +1431,31 @@ public class AnimePlayerActivity extends AppCompatActivity {
      * tata letak. Video tidak pernah diredupkan atau diubah warnanya.
      */
     private void setControlsVisible(boolean visible) {
-        if (controlsVisible == visible
-                && (topBar == null || topBar.getVisibility() == (visible ? View.VISIBLE : View.INVISIBLE))) {
-            return;
-        }
         controlsVisible = visible;
         fadeBar(topBar, visible);
         fadeBar(bottomBar, visible);
+        uiHandler.removeCallbacks(applyHiddenTask);
+        if (visible) {
+            // Pastikan kedua bilah benar-benar tampil walau animasi tidak jalan.
+            if (topBar != null) topBar.setVisibility(View.VISIBLE);
+            if (bottomBar != null) bottomBar.setVisibility(View.VISIBLE);
+        } else {
+            // Sembunyikan lewat penjadwal sendiri, bukan lewat akhir animasi.
+            // Dengan begitu keadaan akhir tidak bergantung pada animator yang
+            // berjalan (animasi bisa dimatikan sistem atau tidak mendapat frame),
+            // dan pengujian pun tidak bergantung pada frame animasi.
+            uiHandler.postDelayed(applyHiddenTask, CONTROLS_FADE_MS);
+        }
     }
+
+    /** Menyembunyikan bilah setelah pudarnya selesai, bila kontrol masih disembunyikan. */
+    private final Runnable applyHiddenTask = new Runnable() {
+        @Override public void run() {
+            if (controlsVisible) return;
+            if (topBar != null) topBar.setVisibility(View.INVISIBLE);
+            if (bottomBar != null) bottomBar.setVisibility(View.INVISIBLE);
+        }
+    };
 
     /**
      * Pudarkan satu bilah kontrol.
@@ -1451,13 +1471,10 @@ public class AnimePlayerActivity extends AppCompatActivity {
         bar.animate().cancel();
         if (visible) {
             bar.setVisibility(View.VISIBLE);
+            bar.setAlpha(1f);
             bar.animate().alpha(1f).setDuration(CONTROLS_FADE_MS).start();
         } else {
-            bar.animate().alpha(0f).setDuration(CONTROLS_FADE_MS)
-                    .withEndAction(() -> {
-                        if (!controlsVisible) bar.setVisibility(View.INVISIBLE);
-                    })
-                    .start();
+            bar.animate().alpha(0f).setDuration(CONTROLS_FADE_MS).start();
         }
     }
 
@@ -1602,6 +1619,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         main.removeCallbacks(clockTick);
         main.removeCallbacks(refreshServerPanelTask);
         uiHandler.removeCallbacks(hideControlsTask);
+        uiHandler.removeCallbacks(applyHiddenTask);
         worker.shutdownNow();
         // Satu-satunya tempat player dilepas: tidak ada player yang tertinggal.
         if (player != null) {
