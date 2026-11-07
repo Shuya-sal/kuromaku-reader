@@ -38,7 +38,14 @@ import java.util.concurrent.Executors;
  */
 public final class ShinigamiPageView extends FrameLayout {
 
-    /** Permintaan zoom dari gestur ketukan di halaman. */
+    /**
+     * Gestur ketukan di halaman.
+     *
+     * <p>Pembagiannya disengaja: <b>satu ketukan</b> untuk masuk/keluar layar
+     * penuh, <b>dua ketukan</b> untuk zoom 2×, <b>tiga ketukan</b> untuk zoom 3×.
+     * Ketukan tunggal tidak lagi membuka zoom, karena sekarang itu tombol layar
+     * penuh.
+     */
     public interface ZoomRequest {
         /**
          * @param factor 2 atau 3
@@ -46,7 +53,11 @@ public final class ShinigamiPageView extends FrameLayout {
          */
         void onZoom(int factor, float focusY);
 
-        /** Ketukan tunggal (dipakai reader untuk membuka zoom penuh). */
+        /**
+         * Satu ketukan pada gambar.
+         *
+         * @param focusY posisi jari secara vertikal, 0..1 dari tinggi halaman
+         */
         default void onSingleTap(float focusY) {
         }
     }
@@ -127,9 +138,23 @@ public final class ShinigamiPageView extends FrameLayout {
 
     public void setRetryAction(Runnable action) { retryAction = action; }
 
-    /** Daftarkan gestur dua/tiga ketukan untuk membuka zoom. */
+    /** Daftarkan gestur ketukan: satu untuk layar penuh, dua/tiga untuk zoom. */
     public void setZoomRequest(ZoomRequest request) {
         zoomRequest = request;
+    }
+
+    /**
+     * Satu ketukan pada gambar, tanpa menunggu jendela ketukan berakhir.
+     *
+     * <p>Dipanggil oleh tes dan oleh gestur sungguhan lewat {@link #trackTaps}.
+     * Jalur ini sengaja tidak menunggu: satu ketukan tidak lagi perlu
+     * dibedakan dari dua ketukan untuk urusan layar penuh, karena menunggu
+     * membuat layar penuh terasa lambat.
+     */
+    public void tapOnce(float focusY) {
+        taps.reset();
+        if (zoomRequest == null) return;
+        zoomRequest.onSingleTap(Math.max(0f, Math.min(1f, focusY)));
     }
 
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
@@ -155,7 +180,12 @@ public final class ShinigamiPageView extends FrameLayout {
                 }
                 tapX = event.getX();
                 tapY = event.getY();
-                taps.register(android.os.SystemClock.uptimeMillis());
+                if (taps.register(android.os.SystemClock.uptimeMillis()) == 1) {
+                    // Ketukan pertama diteruskan langsung: layar penuh harus
+                    // terasa seketika, bukan menunggu 280 ms untuk memastikan
+                    // pengguna tidak sedang mengetuk dua kali.
+                    tapOnce(tapY / Math.max(1, getHeight()));
+                }
                 tapsHandler.removeCallbacks(resolveTaps);
                 tapsHandler.postDelayed(resolveTaps, ShinigamiTaps.WINDOW_MS);
                 break;

@@ -124,7 +124,7 @@ public final class OtakudesuMediaResolver {
         collectFromDocument(doc, sources, null);
         collectPortfolioLinks(doc, episodeUrl, sources, fetcher);
 
-        List<OtakudesuPlayback.Mirror> mirrors = parseMirrors(doc);
+        List<OtakudesuPlayback.Mirror> mirrors = OtakudesuServerPicker.parseMirrors(doc);
         return new OtakudesuPlayback(new ArrayList<>(sources.values()), mirrors,
                 fallbacksFrom(mirrors));
     }
@@ -385,44 +385,4 @@ public final class OtakudesuMediaResolver {
         return lower.contains("vidhide") || lower.contains("mega");
     }
 
-    /** Mirror penyedia: kualitas + nama provider + id server (tanpa alamat media). */
-    static List<OtakudesuPlayback.Mirror> parseMirrors(Document doc) {
-        List<OtakudesuPlayback.Mirror> mirrors = new ArrayList<>();
-        for (Element group : doc.select("div.mirrorstream ul")) {
-            String quality = "";
-            for (String cssClass : group.classNames()) {
-                if (cssClass.matches("m\\d{3,4}p")) {
-                    quality = cssClass.substring(1);
-                    break;
-                }
-            }
-            for (Element item : group.select("li a")) {
-                String provider = item.text().trim();
-                String payload = item.attr("data-content").trim();
-                String serverId = serverId(payload);
-                if (provider.isEmpty() && serverId.isEmpty()) continue;
-                mirrors.add(new OtakudesuPlayback.Mirror(quality, provider, serverId));
-            }
-        }
-        return mirrors;
-    }
-
-    /**
-     * {@code data-content} adalah base64 dari JSON kecil seperti
-     * {@code {"id":207282,"i":0,"q":"360p"}}. Hanya id yang diambil; tidak ada
-     * alamat media yang diturunkan dari situ.
-     */
-    static String serverId(String payload) {
-        if (payload == null || payload.isEmpty()) return "";
-        if (!MIRROR_BASE64.matcher(payload).matches()) return "";
-        try {
-            byte[] decoded = java.util.Base64.getMimeDecoder().decode(payload);
-            String json = new String(decoded, java.nio.charset.StandardCharsets.UTF_8).trim();
-            if (!json.startsWith("{")) return "";
-            JSONObject object = new JSONObject(json);
-            return object.optString("id", "");
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
 }

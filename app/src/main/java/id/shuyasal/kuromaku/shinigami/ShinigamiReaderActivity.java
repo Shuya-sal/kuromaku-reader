@@ -79,7 +79,6 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private android.widget.ImageButton prevChapterButton;
     private android.widget.ImageButton nextChapterButton;
     private TextView navLabel;
-    private View fullscreenTapStrip;
     private final List<ShinigamiChapter> storyOrder = new ArrayList<>();
     private ShinigamiChapter currentChapter;
     private ShinigamiChapter previousChapter;
@@ -203,15 +202,6 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         noticeParams.setMargins(Ui.dp(this, 16), 0, Ui.dp(this, 16), Ui.dp(this, 28));
         body.addView(offlineNotice, noticeParams);
-
-        // Strip tipis di dasar layar: hanya aktif saat layar penuh, supaya
-        // ketukan pada gambar tetap membuka zoom seperti sebelumnya.
-        fullscreenTapStrip = new View(this);
-        fullscreenTapStrip.setTag("shinigami_reader_tap_strip");
-        fullscreenTapStrip.setVisibility(View.GONE);
-        fullscreenTapStrip.setOnClickListener(v -> toggleFullscreen());
-        body.addView(fullscreenTapStrip, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 56), Gravity.BOTTOM));
 
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -405,11 +395,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         fullscreen = !fullscreen;
         bar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         if (chapterNav != null) chapterNav.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
-        if (fullscreenTapStrip != null) {
-            fullscreenTapStrip.setVisibility(fullscreen ? View.VISIBLE : View.GONE);
-        }
         if (fullscreen) {
-            Toast.makeText(this, "Layar penuh. Ketuk bagian bawah layar untuk menampilkan kontrol.",
+            Toast.makeText(this, "Layar penuh. Ketuk sekali pada gambar untuk keluar.",
                     Toast.LENGTH_SHORT).show();
         }
         if (fullscreen) {
@@ -813,10 +800,17 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     }
                 }
 
+                /**
+                 * Satu ketukan: masuk atau keluar layar penuh.
+                 *
+                 * <p>Dilakukan tanpa memindahkan halaman sedikit pun — hanya
+                 * bilah atas, bilah bawah, dan bilah sistem yang disembunyikan,
+                 * jadi posisi baca tetap persis seperti sebelumnya. Di layar
+                 * penuh, satu ketukan mengembalikan semuanya. Zoom tetap di dua
+                 * dan tiga ketukan.
+                 */
                 @Override public void onSingleTap(float focusY) {
-                    if (holder.bound >= 0 && holder.bound < pages.size()) {
-                        openZoomed(holder.bound, 1f, focusY);
-                    }
+                    toggleFullscreen();
                 }
             });
             // Tinggi placeholder memakai rasio yang pernah terukur untuk halaman

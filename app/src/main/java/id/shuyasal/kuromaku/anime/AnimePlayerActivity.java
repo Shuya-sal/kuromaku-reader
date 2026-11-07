@@ -13,6 +13,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,6 +38,9 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.PlayerView;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -115,6 +119,16 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private boolean firstSource = true;
     private long pendingResumeMs;
     private String activeQuality = "Otomatis";
+    private Button serverButton;
+    /** Mirror terakhir yang dibaca dari halaman episode; sumber pemilih server. */
+    private final List<OtakudesuPlayback.Mirror> mirrors = new ArrayList<>();
+    /** Indeks mirror → sumber media hasil pemeriksaan. */
+    private final java.util.LinkedHashMap<Integer, OtakudesuPlayback.Source> probedServers =
+            new java.util.LinkedHashMap<>();
+    private final List<Integer> probingServers = new ArrayList<>();
+    private PopupWindow serverPanel;
+    private Document episodeDoc;
+    private String activeServerLabel = "";
     private String activeSubtitle = "Nonaktif";
 
     private final Runnable saveTick = new Runnable() {
@@ -230,6 +244,10 @@ public class AnimePlayerActivity extends AppCompatActivity {
         bar.addView(title, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
+        serverButton = chip("Server", "anime_player_server");
+        serverButton.setOnClickListener(v -> showServerPanel());
+        bar.addView(serverButton);
+
         qualityButton = chip("Kualitas", "anime_player_quality");
         qualityButton.setOnClickListener(v -> showQualityMenu());
         bar.addView(qualityButton);
@@ -339,6 +357,14 @@ public class AnimePlayerActivity extends AppCompatActivity {
         errorText.setGravity(Gravity.CENTER);
         box.addView(errorText);
 
+        Button pickServer = Ui.chip(this, "Pilih Server", palette);
+        pickServer.setTag("anime_player_pick_server");
+        pickServer.setOnClickListener(v -> showServerPanel());
+        LinearLayout.LayoutParams pickParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pickParams.topMargin = Ui.dp(this, 12);
+        box.addView(pickServer, pickParams);
+
         Button retry = Ui.chip(this, "Coba Lagi", palette);
         retry.setTag("anime_player_retry");
         retry.setOnClickListener(v -> {
@@ -348,7 +374,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         });
         LinearLayout.LayoutParams retryParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        retryParams.topMargin = Ui.dp(this, 12);
+        retryParams.topMargin = Ui.dp(this, 8);
         box.addView(retry, retryParams);
 
         Button website = Ui.chip(this, "Tonton di Sumber", palette);
@@ -430,14 +456,17 @@ public class AnimePlayerActivity extends AppCompatActivity {
         worker.execute(() -> {
             OtakudesuPlayback playback = null;
             String failure = null;
+            String html = null;
             try {
                 OtakudesuSource source = new OtakudesuSource();
-                playback = OtakudesuMediaResolver.resolve(source::html, url);
+                html = source.html(url);
+                playback = OtakudesuMediaResolver.resolveHtml(html, null, url);
             } catch (OtakudesuSource.SourceException error) {
                 failure = error.getMessage();
             }
             final OtakudesuPlayback result = playback;
             final String message = failure;
+            final String pageHtml = html;
             main.post(() -> {
                 if (isFinishing() || request != generation) return;
                 showBuffering(false);
@@ -445,18 +474,176 @@ public class AnimePlayerActivity extends AppCompatActivity {
                     showUnavailable(message);
                     return;
                 }
-                if (result == null || !result.playable()) {
-                    showUnavailable("Tidak ada berkas video yang bisa diputar aplikasi"
-                            + " untuk episode ini."
-                            + (result != null && !result.mirrors.isEmpty()
-                            ? " Mirror yang tersedia: " + mirrorSummary(result) + "." : "")
-                            + " Buka halaman sumber untuk menonton lewat pemutar resminya.");
+                if (result == null || result.mirrors.isEmpty()) {
+                    showUnavailable("Halaman episode ini tidak menyebut satu pun mirror"
+                            + " yang bisa dipilih.");
                     return;
                 }
+                episodeDoc = pageHtml == null ? null : Jsoup.parse(pageHtml);
+                mirrors.clear();
+                mirrors.addAll(result.mirrors);
+                probedServers.clear();
                 activePlayback = result;
-                play(result.sources.get(0), result.qualities());
+
+                // Sumber media yang sudah dipublikasikan halaman episode dipakai
+                // lebih dulu; kalau tidak ada, pemilih server yang menentukan.
+                if (result.playable()) {
+                    activeServerLabel = "Halaman episode";
+                    updateServerButton();
+                    play(result.sources.get(0), result.qualities());
+                    return;
+                }
+                updateServerButton();
+                showServerPanel();
             });
         });
+    }
+
+    private void updateServerButton() {
+        if (serverButton == null) return;
+        if (!activeServerLabel.isEmpty()) {
+            serverButton.setText(activeServerLabel);
+        } else if (!mirrors.isEmpty()) {
+            serverButton.setText("Server (" + mirrors.size() + ")");
+        } else {
+            serverButton.setText("Server");
+        }
+    }
+
+    /**
+     * Panel "Pilih Server Streaming". Server yang berkasnya terbuka diperiksa
+     * lebih dulu di latar belakang; pengguna juga bisa memilih langsung tanpa
+     * menunggu, dan hasilnya dilaporkan apa adanya.
+     */
+    private void showServerPanel() {
+        if (mirrors.isEmpty()) {
+            Toast.makeText(this, "Halaman episode ini tidak menyebut mirror.",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (episodeDoc == null) {
+            Toast.makeText(this, "Halaman episode belum selesai dibaca.",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
+                palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
+        OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
+
+        popupPanel(panel.build(mirrors, probedServers, probingServers,
+                new OtakudesuServerPanel.Listener() {
+                    @Override public void onPick(OtakudesuPlayback.Mirror mirror) {
+                        int index = mirrors.indexOf(mirror);
+                        OtakudesuPlayback.Source ready = probedServers.get(index);
+                        if (ready != null) {
+                            dismissServerPanel();
+                            activeServerLabel = OtakudesuServerPanel.summary(mirror);
+                            updateServerButton();
+                            play(ready, OtakudesuPlayback.singletonQuality(ready));
+                            return;
+                        }
+                        probeServer(mirror, index, true);
+                    }
+
+                    @Override public void onCheckAll() {
+                        for (int i = 0; i < mirrors.size(); i++) {
+                            if (probedServers.containsKey(i) || probingServers.contains(i)) continue;
+                            probeServer(mirrors.get(i), i, false);
+                        }
+                    }
+                }));
+
+        // Pemeriksaan latar belakang untuk server yang berkasnya paling mungkin terbuka.
+        for (OtakudesuPlayback.Mirror mirror : OtakudesuServerPicker.probeOrder(mirrors)) {
+            int index = mirrors.indexOf(mirror);
+            if (probedServers.containsKey(index) || probingServers.contains(index)) continue;
+            probeServer(mirror, index, false);
+            if (probingServers.size() >= 2) break;
+        }
+    }
+
+    private void dismissServerPanel() {
+        if (serverPanel != null && serverPanel.isShowing()) serverPanel.dismiss();
+        serverPanel = null;
+    }
+
+    /** Panel ditampilkan sebagai popup agar tidak memindahkan layar video. */
+    private void popupPanel(View content) {
+        dismissServerPanel();
+        int width = Math.min(getResources().getDisplayMetrics().widthPixels - Ui.dp(this, 24),
+                Ui.dp(this, 420));
+        serverPanel = new PopupWindow(content, width,
+                (int) (getResources().getDisplayMetrics().heightPixels * 0.6f), true);
+        serverPanel.setBackgroundDrawable(Ui.rounded(0xF0111318, 0x33FFFFFF, 18, this));
+        serverPanel.setOutsideTouchable(true);
+        serverPanel.showAtLocation(playerView, Gravity.CENTER, 0, 0);
+    }
+
+    /** Membuka satu server lalu memeriksa berkasnya; hasilnya ditulis ke layar. */
+    private void probeServer(OtakudesuPlayback.Mirror mirror, int index, boolean pickWhenReady) {
+        if (probingServers.contains(index)) return;
+        probingServers.add(index);
+        refreshServerPanel();
+        main.postDelayed(this::refreshServerPanel, 150);
+
+        worker.execute(() -> {
+            OtakudesuServerPicker.Probed result;
+            try {
+                result = OtakudesuServerPicker.probe(mirror, OtakudesuServerPicker.networkHttp(),
+                        episodeDoc);
+            } catch (Throwable error) {
+                result = new OtakudesuServerPicker.Probed(
+                        OtakudesuServerPicker.Status.UNAVAILABLE, null,
+                        error.getMessage() == null ? "Server tidak dapat diperiksa." : error.getMessage());
+            }
+            final OtakudesuServerPicker.Probed outcome = result;
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                probingServers.remove(Integer.valueOf(index));
+                if (outcome.playable()) probedServers.put(index, outcome.source);
+                refreshServerPanel();
+                if (outcome.playable() && pickWhenReady) {
+                    dismissServerPanel();
+                    activeServerLabel = OtakudesuServerPanel.summary(mirror);
+                    updateServerButton();
+                    play(outcome.source, OtakudesuPlayback.singletonQuality(outcome.source));
+                } else if (!outcome.playable() && pickWhenReady) {
+                    Toast.makeText(this, outcome.note.isEmpty()
+                            ? "Server ini tidak bisa diputar aplikasi." : outcome.note,
+                            Toast.LENGTH_LONG).show();
+                    showServerPanel();
+                }
+            });
+        });
+    }
+
+    private void refreshServerPanel() {
+        if (serverPanel == null || !serverPanel.isShowing()) return;
+        OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
+                palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
+        OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
+        serverPanel.setContentView(panel.build(mirrors, probedServers, probingServers,
+                new OtakudesuServerPanel.Listener() {
+                    @Override public void onPick(OtakudesuPlayback.Mirror mirror) {
+                        int index = mirrors.indexOf(mirror);
+                        OtakudesuPlayback.Source ready = probedServers.get(index);
+                        if (ready != null) {
+                            dismissServerPanel();
+                            activeServerLabel = OtakudesuServerPanel.summary(mirror);
+                            updateServerButton();
+                            play(ready, OtakudesuPlayback.singletonQuality(ready));
+                            return;
+                        }
+                        probeServer(mirror, index, true);
+                    }
+
+                    @Override public void onCheckAll() {
+                        for (int i = 0; i < mirrors.size(); i++) {
+                            if (probedServers.containsKey(i) || probingServers.contains(i)) continue;
+                            probeServer(mirrors.get(i), i, false);
+                        }
+                    }
+                }));
     }
 
     private static String mirrorSummary(OtakudesuPlayback playback) {

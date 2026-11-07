@@ -47,11 +47,43 @@ public final class OtakudesuPlayback {
         public final String quality;
         public final String provider;
         public final String serverId;
+        /** Urutan tombol di halaman episode; dikirim balik apa adanya saat memilih. */
+        public final int index;
 
         public Mirror(String quality, String provider, String serverId) {
+            this(quality, provider, serverId, 0);
+        }
+
+        public Mirror(String quality, String provider, String serverId, int index) {
             this.quality = quality == null ? "" : quality;
             this.provider = provider == null ? "" : provider;
             this.serverId = serverId == null ? "" : serverId;
+            this.index = index;
+        }
+    }
+
+    /**
+     * Satu kumpulan pilihan yang ditawarkan ke pengguna di pemilih server:
+     * kualitas, nama tampilan, dan sumber media bila sudah diperiksa.
+     */
+    public static final class Choice {
+        public final String quality;
+        public final String label;
+        public final Source source;
+        public final int mirrorIndex;
+        public final OtakudesuServerPicker.Status status;
+
+        public Choice(String quality, String label, Source source, int mirrorIndex,
+                      OtakudesuServerPicker.Status status) {
+            this.quality = quality == null ? "" : quality;
+            this.label = label == null ? "" : label;
+            this.source = source;
+            this.mirrorIndex = mirrorIndex;
+            this.status = status == null ? OtakudesuServerPicker.Status.UNTESTED : status;
+        }
+
+        public boolean playable() {
+            return source != null;
         }
     }
 
@@ -102,6 +134,15 @@ public final class OtakudesuPlayback {
     /** True bila ada media yang benar-benar bisa dibuka Media3. */
     public boolean playable() {
         return !sources.isEmpty();
+    }
+
+    /** Daftar kualitas berisi satu label; dipakai saat satu server sudah dipilih. */
+    public static List<String> singletonQuality(Source source) {
+        List<String> qualities = new ArrayList<>();
+        if (source != null && source.quality != null && !source.quality.isEmpty()) {
+            qualities.add(source.quality);
+        }
+        return qualities;
     }
 
     /** Kualitas yang benar-benar tersedia dari sumber langsung. */

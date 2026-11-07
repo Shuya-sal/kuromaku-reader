@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Looper;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -135,6 +136,28 @@ public class ShinigamiReaderNavTest {
         View view = reader.getWindow().getDecorView().findViewWithTag(tag);
         assertNotNull(tag, view);
         return view;
+    }
+
+    /** Sama seperti {@link #tagged} tetapi mengembalikan {@code null} bila tidak ada. */
+    static View viewOrNull(ShinigamiReaderActivity reader, String tag) {
+        return reader.getWindow().getDecorView().findViewWithTag(tag);
+    }
+
+    /** ShinigamiPageView pertama di pohon view reader, apa pun posisinya. */
+    static ShinigamiPageView firstPageView(ShinigamiReaderActivity reader) {
+        return firstPageView((ViewGroup) reader.getWindow().getDecorView());
+    }
+
+    private static ShinigamiPageView firstPageView(ViewGroup parent) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child instanceof ShinigamiPageView) return (ShinigamiPageView) child;
+            if (child instanceof ViewGroup) {
+                ShinigamiPageView found = firstPageView((ViewGroup) child);
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     @Test public void panahMenunjukChapterSebelumDanSesudahnya() throws Exception {
@@ -275,23 +298,83 @@ public class ShinigamiReaderNavTest {
         }
     }
 
-    @Test public void layarPenuhMenyembunyikanPanahDanKetukanBawahMemunculkannya() throws Exception {
+    /**
+     * Ketukan tunggal pada gambar harus menyalakan/mematikan layar penuh, dan
+     * tidak menggeser halaman.
+     *
+     * <p>Pemeriksaannya langsung pada jalur yang dipakai pembaca: satu
+     * {@link ShinigamiPageView} diberi pengendali yang sama dengan yang dipasang
+     * adapter, lalu diperiksa bahwa bilah dan panah chapter benar-benar
+     * disembunyikan lalu dimunculkan kembali.
+     */
+    @Test public void satuKetukanPadaGambarMasukDanKeluarLayarPenuh() throws Exception {
         try (ActivityController<Reader> controller =
                      Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
             Reader reader = controller.get();
             await(reader);
 
             View nav = tagged(reader, "shinigami_reader_nav");
-            View strip = tagged(reader, "shinigami_reader_tap_strip");
-            assertEquals("strip layar penuh tidak aktif di mode normal", View.GONE, strip.getVisibility());
+            View bar = (View) tagged(reader, "shinigami_reader_fullscreen").getParent();
+            assertEquals("mulai dari keadaan normal", View.VISIBLE, bar.getVisibility());
 
-            tagged(reader, "shinigami_reader_fullscreen").performClick();
-            assertEquals("panah ikut tersembunyi saat layar penuh", View.GONE, nav.getVisibility());
-            assertEquals(View.VISIBLE, strip.getVisibility());
+            ShinigamiPageView page = new ShinigamiPageView(reader);
+            page.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
+                @Override public void onZoom(int factor, float focusY) {
+                    throw new AssertionError("zoom tidak boleh jalan dari satu ketukan");
+                }
 
-            strip.performClick();
-            assertEquals("ketukan bawah memunculkan kontrol lagi", View.VISIBLE, nav.getVisibility());
-            assertEquals(View.GONE, strip.getVisibility());
+                @Override public void onSingleTap(float focusY) {
+                    tagged(reader, "shinigami_reader_fullscreen").performClick();
+                }
+            });
+
+            page.tapOnce(0.5f);
+            assertEquals("satu ketukan menyembunyikan bilah", View.GONE, bar.getVisibility());
+            assertEquals("satu ketukan menyembunyikan panah chapter", View.GONE, nav.getVisibility());
+
+            page.tapOnce(0.5f);
+            assertEquals("ketukan berikutnya memunculkan bilah lagi",
+                    View.VISIBLE, bar.getVisibility());
+            assertEquals(View.VISIBLE, nav.getVisibility());
+        }
+    }
+
+    /**
+     * Pembagian gestur: satu ketukan layar penuh, dua dan tiga ketukan zoom.
+     * Ketukan tunggal tidak boleh ikut membuka zoom.
+     */
+    @Test public void satuKetukanTidakMembukaZoom() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            ShinigamiPageView page = new ShinigamiPageView(reader);
+            final int[] zoomed = {0};
+            final int[] toggled = {0};
+            page.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
+                @Override public void onZoom(int factor, float focusY) {
+                    zoomed[0]++;
+                }
+
+                @Override public void onSingleTap(float focusY) {
+                    toggled[0]++;
+                }
+            });
+
+            page.tapOnce(0.35f);
+            assertEquals("satu ketukan hanya menyalakan layar penuh", 1, toggled[0]);
+            assertEquals("satu ketukan tidak boleh membuka zoom", 0, zoomed[0]);
+        }
+    }
+
+    @Test public void areaKetukLayarPenuhTidakLagiAdaKarenaGambarSendiriYangJadiTombol() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+            assertEquals("tidak ada lagi area 56dp yang merebut ketukan",
+                    null, viewOrNull(reader, "shinigami_reader_tap_strip"));
         }
     }
 }
