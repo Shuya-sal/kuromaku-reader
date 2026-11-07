@@ -129,6 +129,10 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private PopupWindow serverPanel;
     private Document episodeDoc;
     private String activeServerLabel = "";
+    /** Alamat pemutar server yang sedang dipilih; dipakai "Buka Player Sumber". */
+    private String activePlayerUrl = "";
+    /** Nama server yang sedang dipakai, untuk pesan kegagalan. */
+    private String activeServerName = "";
     private String activeSubtitle = "Nonaktif";
 
     private final Runnable saveTick = new Runnable() {
@@ -357,13 +361,18 @@ public class AnimePlayerActivity extends AppCompatActivity {
         errorText.setGravity(Gravity.CENTER);
         box.addView(errorText);
 
-        Button pickServer = Ui.chip(this, "Pilih Server", palette);
+        Button pickServer = Ui.chip(this, "Coba Server Lain", palette);
         pickServer.setTag("anime_player_pick_server");
         pickServer.setOnClickListener(v -> showServerPanel());
+
+        Button openPlayer = Ui.chip(this, "Buka Player Sumber", palette);
+        openPlayer.setTag("anime_player_open_server");
+        openPlayer.setOnClickListener(v -> openServerPlayer());
         LinearLayout.LayoutParams pickParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         pickParams.topMargin = Ui.dp(this, 12);
         box.addView(pickServer, pickParams);
+        box.addView(openPlayer, pickParams);
 
         Button retry = Ui.chip(this, "Coba Lagi", palette);
         retry.setTag("anime_player_retry");
@@ -432,7 +441,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
             }
 
             @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
-                showError("Video gagal dimuat. Periksa koneksi lalu coba lagi.");
+                showError(kegagalanServer(activeServerName,
+                        "Berkas video gagal dimuat.")
+                        + " Kode: " + error.errorCode + ".");
             }
         });
     }
@@ -538,6 +549,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         if (ready != null) {
                             dismissServerPanel();
                             activeServerLabel = OtakudesuServerPanel.summary(mirror);
+                            activeServerName = activeServerLabel;
+                            activePlayerUrl = knownPlayerUrl(mirror);
                             updateServerButton();
                             play(ready, OtakudesuPlayback.singletonQuality(ready));
                             return;
@@ -553,12 +566,18 @@ public class AnimePlayerActivity extends AppCompatActivity {
                     }
                 }));
 
-        // Pemeriksaan latar belakang untuk server yang berkasnya paling mungkin terbuka.
+        // Pemeriksaan latar belakang dibatasi: hanya dua server yang paling
+        // mungkin terbuka, dan tidak menumpuk bila ada yang sedang berjalan.
+        // Sisanya menunggu permintaan pengguna (ketuk server, atau Periksa
+        // semua server). Untuk sembilan mirror, memeriksa semuanya otomatis
+        // berarti sembilan permintaan ke penyedia.
         for (OtakudesuPlayback.Mirror mirror : OtakudesuServerPicker.probeOrder(mirrors)) {
-            int index = mirrors.indexOf(mirror);
-            if (probedServers.containsKey(index) || probingServers.contains(index)) continue;
-            probeServer(mirror, index, false);
             if (probingServers.size() >= 2) break;
+            int index = mirrors.indexOf(mirror);
+            if (index < 0 || probedServers.containsKey(index) || probingServers.contains(index)) {
+                continue;
+            }
+            probeServer(mirror, index, false);
         }
     }
 
@@ -577,6 +596,41 @@ public class AnimePlayerActivity extends AppCompatActivity {
         serverPanel.setBackgroundDrawable(Ui.rounded(0xF0111318, 0x33FFFFFF, 18, this));
         serverPanel.setOutsideTouchable(true);
         serverPanel.showAtLocation(playerView, Gravity.CENTER, 0, 0);
+    }
+
+    /**
+     * Membuka pemutar server yang sedang dipilih di peramban.
+     *
+     * <p>Ini jalan keluar untuk server yang berkasnya tidak bisa dibaca Media3
+     * (mis. pemutar beriklan atau pemutar terenkripsi). Halaman penyedia tampil
+     * apa adanya — termasuk iklannya — karena aplikasi tidak mengubah apa pun
+     * di sana.
+     */
+    private void openServerPlayer() {
+        // Tujuan pertama: pemutar server itu sendiri. Kalau server mengirim
+        // berkas langsung (tidak lewat halaman pemutar), halaman episode yang
+        // jadi tujuan — di sana penyedia menampilkan pemutarnya sendiri.
+        String url = activePlayerUrl;
+        if (url == null || url.isEmpty()) url = episodeUrl;
+        if (url == null || url.isEmpty()) {
+            Toast.makeText(this, "Tidak ada halaman pemutar yang bisa dibuka.",
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Toast.makeText(this, "Tampilan mengikuti penyedia dan tidak selalu bebas iklan.",
+                Toast.LENGTH_LONG).show();
+        try {
+            new CustomTabsIntent.Builder().setShowTitle(true).build()
+                    .launchUrl(this, Uri.parse(url));
+        } catch (Exception error) {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {
+                Toast.makeText(this, "Tidak ada browser untuk membuka pemutar sumber",
+                        Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     /** Membuka satu server lalu memeriksa berkasnya; hasilnya ditulis ke layar. */
@@ -601,16 +655,25 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 if (isFinishing() || isDestroyed()) return;
                 probingServers.remove(Integer.valueOf(index));
                 if (outcome.playable()) probedServers.put(index, outcome.source);
+                if (!outcome.playerUrl.isEmpty() && index < mirrors.size()) {
+                    // Alamat pemutar disimpan di daftar server, supaya tombol
+                    // "Buka Player Sumber" tetap tahu tujuannya nanti.
+                    mirrors.set(index, mirrors.get(index).withPlayer(outcome.playerUrl));
+                }
                 refreshServerPanel();
+                if (pickWhenReady) {
+                    activePlayerUrl = outcome.playerUrl;
+                    activeServerName = OtakudesuServerPanel.summary(mirror);
+                }
                 if (outcome.playable() && pickWhenReady) {
                     dismissServerPanel();
-                    activeServerLabel = OtakudesuServerPanel.summary(mirror);
+                    activeServerLabel = activeServerName;
                     updateServerButton();
                     play(outcome.source, OtakudesuPlayback.singletonQuality(outcome.source));
                 } else if (!outcome.playable() && pickWhenReady) {
-                    Toast.makeText(this, outcome.note.isEmpty()
-                            ? "Server ini tidak bisa diputar aplikasi." : outcome.note,
-                            Toast.LENGTH_LONG).show();
+                    // Jangan layar hitam tanpa penjelasan: sebut server, sebabnya,
+                    // dan beri dua jalan keluar (server lain / pemutar sumber).
+                    showUnavailable(kegagalanServer(activeServerName, outcome.note));
                     showServerPanel();
                 }
             });
@@ -630,6 +693,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         if (ready != null) {
                             dismissServerPanel();
                             activeServerLabel = OtakudesuServerPanel.summary(mirror);
+                            activeServerName = activeServerLabel;
+                            activePlayerUrl = knownPlayerUrl(mirror);
                             updateServerButton();
                             play(ready, OtakudesuPlayback.singletonQuality(ready));
                             return;
@@ -644,6 +709,38 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         }
                     }
                 }));
+    }
+
+    /** Alamat pemutar server ini, bila sudah pernah dibuka saat diperiksa. */
+    private String knownPlayerUrl(OtakudesuPlayback.Mirror mirror) {
+        int index = mirrors.indexOf(mirror);
+        if (index >= 0 && !mirrors.get(index).playerUrl.isEmpty()) {
+            return mirrors.get(index).playerUrl;
+        }
+        for (OtakudesuPlayback.Mirror known : mirrors) {
+            if (known.provider.equalsIgnoreCase(mirror.provider)
+                    && known.quality.equals(mirror.quality)
+                    && !known.playerUrl.isEmpty()) {
+                return known.playerUrl;
+            }
+        }
+        return activePlayerUrl;
+    }
+
+    /** Pesan kegagalan: server mana, sebabnya apa, dan jalan keluarnya. */
+    static String kegagalanServer(String server, String note) {
+        StringBuilder message = new StringBuilder();
+        if (server == null || server.isEmpty()) {
+            message.append("Video tidak dapat diputar aplikasi.");
+        } else {
+            message.append("Server ").append(server).append(" tidak dapat diputar aplikasi.");
+        }
+        if (note != null && !note.trim().isEmpty()) {
+            message.append(' ').append(note.trim());
+        }
+        message.append(" Pilih server lain, atau buka pemutar sumber lewat tombol")
+                .append(" Buka Player Sumber.");
+        return message.toString();
     }
 
     private static String mirrorSummary(OtakudesuPlayback playback) {

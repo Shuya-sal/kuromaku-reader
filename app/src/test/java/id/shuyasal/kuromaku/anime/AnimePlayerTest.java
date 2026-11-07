@@ -74,12 +74,51 @@ public class AnimePlayerTest {
         Button pickServer = activity.getWindow().getDecorView()
                 .findViewWithTag("anime_player_pick_server");
         assertNotNull("Tombol Pilih Server harus tersedia", pickServer);
-        assertEquals("Pilih Server", pickServer.getText().toString());
+        assertEquals("Coba Server Lain", pickServer.getText().toString());
 
         Button source = activity.getWindow().getDecorView()
                 .findViewWithTag("anime_player_source");
         assertNotNull("Tombol Tonton di Sumber harus tersedia", source);
         assertEquals("Tonton di Sumber", source.getText().toString());
+    }
+
+    /**
+     * Pesan kegagalan harus menyebut server yang gagal, sebabnya, dan dua jalan
+     * keluar. "Layar hitam tanpa penjelasan" tidak boleh terjadi.
+     */
+    @Test public void pesanKegagalanMenyebutServerSebabDanJalanKeluar() {
+        String message = AnimePlayerActivity.kegagalanServer("vidhide 720p",
+                "Berkas ditutup pemutar penyedia (terenkripsi).");
+        assertTrue("nama server harus disebut", message.contains("vidhide 720p"));
+        assertTrue("sebabnya harus disebut", message.contains("terenkripsi"));
+        assertTrue("jalan keluar server lain", message.contains("server lain"));
+        assertTrue("jalan keluar pemutar sumber", message.contains("Buka Player Sumber"));
+    }
+
+    @Test public void pesanKegagalanTetapJelasTanpaNamaServer() {
+        String message = AnimePlayerActivity.kegagalanServer("", "");
+        assertTrue(message.startsWith("Video tidak dapat diputar aplikasi."));
+        assertFalse("tidak boleh kosong", message.trim().isEmpty());
+    }
+
+    /** Tombol jalan keluar di kotak galat: server lain dan pemutar sumber. */
+    @Test public void kotakGalatMenyediakanDuaJalanKeluar() {
+        Intent intent = new Intent(ApplicationProvider.getApplicationContext(),
+                AnimePlayerActivity.class)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_ID, "fxskc")
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_URL,
+                        "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/");
+        AnimePlayerActivity activity = Robolectric.buildActivity(
+                AnimePlayerActivity.class, intent).setup().get();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+
+        android.view.View decor = activity.getWindow().getDecorView();
+        assertNotNull("tombol coba server lain",
+                decor.findViewWithTag("anime_player_pick_server"));
+        assertNotNull("tombol buka player sumber",
+                decor.findViewWithTag("anime_player_open_server"));
+        assertNotNull("tombol tonton di sumber",
+                decor.findViewWithTag("anime_player_source"));
     }
 
     private static boolean isVisible(android.view.View view) {

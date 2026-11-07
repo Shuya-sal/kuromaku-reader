@@ -243,6 +243,60 @@ public class OtakudesuServerPickerTest {
         assertFalse(probed.playable());
     }
 
+    /**
+     * Alamat pemutar ikut dilaporkan bersama hasil pemeriksaan.
+     *
+     * <p>Ini yang membuat tombol "Buka Player Sumber" punya tujuan ketika
+     * berkasnya tidak bisa dibaca Media3: pengguna tetap bisa membuka pemutar
+     * penyedia, dengan catatan tampilannya mengikuti penyedia.
+     */
+    @Test public void hasilPemeriksaanMembawaAlamatPemutar() {
+        Document doc = episode();
+        OtakudesuPlayback.Mirror mirror = mirrorNamed(doc, "vidhide");
+        java.util.Map<String, String> answers = new java.util.HashMap<>();
+        answers.put("POST action=aa1208d27f29ca340c92c66d1926f13f&", "{\"data\":\"abc123\"}");
+        answers.put("POST id=" + mirror.serverId + "&i=" + mirror.index + "&q=" + mirror.quality
+                        + "&nonce=abc123&action=2a3505c93b0035d3f455df82bf976b84&",
+                "{\"data\":\"" + base64("<iframe src=\"https://odvidhide.com/embed/xyz\"></iframe>") + "\"}");
+        answers.put("https://odvidhide.com/embed/xyz",
+                "<html><script>var a=\"pkcs7\";</script></html>");
+
+        OtakudesuServerPicker.Probed probed =
+                OtakudesuServerPicker.probe(mirror, http(answers, new ArrayList<>()), doc);
+
+        assertEquals(OtakudesuServerPicker.Status.PROTECTED_SERVER, probed.status);
+        assertEquals("https://odvidhide.com/embed/xyz", probed.playerUrl);
+    }
+
+    @Test public void berkasLangsungTetapMembawaAlamatPemutarnya() {
+        Document doc = episode();
+        OtakudesuPlayback.Mirror mirror = mirrorNamed(doc, "odcdn");
+        java.util.Map<String, String> answers = new java.util.HashMap<>();
+        answers.put("POST action=aa1208d27f29ca340c92c66d1926f13f&", "{\"data\":\"abc123\"}");
+        String player = "https://desustream.net/dstream/odcdn/?id=abc";
+        answers.put("POST id=" + mirror.serverId + "&i=" + mirror.index + "&q=" + mirror.quality
+                        + "&nonce=abc123&action=2a3505c93b0035d3f455df82bf976b84&",
+                "{\"data\":\"" + base64("<iframe src=\"" + player + "\"></iframe>") + "\"}");
+        answers.put(player, "<html><script>const videoURL = "
+                + "\"https://cdn.odcloud.net/anime/contoh_480p.mp4\";</script></html>");
+
+        OtakudesuServerPicker.Probed probed =
+                OtakudesuServerPicker.probe(mirror, http(answers, new ArrayList<>()), doc);
+
+        assertEquals(OtakudesuServerPicker.Status.READY, probed.status);
+        assertEquals(player, probed.playerUrl);
+    }
+
+    /** Mirror bisa menyimpan alamat pemutar untuk tombol "Buka Player Sumber". */
+    @Test public void mirrorMenyimpanAlamatPemutar() {
+        OtakudesuPlayback.Mirror mirror = new OtakudesuPlayback.Mirror("480p", "odcdn", "207282", 0);
+        assertEquals("", mirror.playerUrl);
+        OtakudesuPlayback.Mirror withPlayer = mirror.withPlayer("https://desustream.net/x");
+        assertEquals("https://desustream.net/x", withPlayer.playerUrl);
+        assertEquals("odcdn", withPlayer.provider);
+        assertEquals(0, withPlayer.index);
+    }
+
     // ------------------------------------------------------------- alamat
 
     @Test public void alamatTersusunGandaDitolak() {

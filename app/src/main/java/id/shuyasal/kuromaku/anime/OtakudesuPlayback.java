@@ -42,23 +42,40 @@ public final class OtakudesuPlayback {
         }
     }
 
-    /** Satu mirror penyedia pihak ketiga; tidak pernah dibuka aplikasi. */
+    /** Satu mirror penyedia pihak ketiga; pemutarnya dibuka hanya bila dipilih. */
     public static final class Mirror {
         public final String quality;
         public final String provider;
         public final String serverId;
+        /**
+         * Alamat pemutar server ini, bila sudah dibuka. Diisi setelah pengguna
+         * memilih server, dan dipakai untuk tombol "Buka Player Sumber" ketika
+         * pemutar native tidak bisa memakainya.
+         */
+        public final String playerUrl;
         /** Urutan tombol di halaman episode; dikirim balik apa adanya saat memilih. */
         public final int index;
 
         public Mirror(String quality, String provider, String serverId) {
-            this(quality, provider, serverId, 0);
+            this(quality, provider, serverId, 0, "");
         }
 
         public Mirror(String quality, String provider, String serverId, int index) {
+            this(quality, provider, serverId, index, "");
+        }
+
+        public Mirror(String quality, String provider, String serverId, int index,
+                      String playerUrl) {
             this.quality = quality == null ? "" : quality;
             this.provider = provider == null ? "" : provider;
             this.serverId = serverId == null ? "" : serverId;
             this.index = index;
+            this.playerUrl = playerUrl == null ? "" : playerUrl;
+        }
+
+        /** Salinan dengan alamat pemutar yang sudah dibuka. */
+        public Mirror withPlayer(String url) {
+            return new Mirror(quality, provider, serverId, index, url);
         }
     }
 

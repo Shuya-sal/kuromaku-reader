@@ -65,11 +65,22 @@ public final class OtakudesuServerPicker {
         public final Status status;
         public final OtakudesuPlayback.Source source;
         public final String note;
+        /**
+         * Alamat pemutar server ini, bila sudah dibuka. Dipakai pemutar untuk
+         * tombol "Buka Player Sumber" saat berkasnya tidak bisa dibaca Media3.
+         */
+        public final String playerUrl;
 
         public Probed(Status status, OtakudesuPlayback.Source source, String note) {
+            this(status, source, note, "");
+        }
+
+        public Probed(Status status, OtakudesuPlayback.Source source, String note,
+                      String playerUrl) {
             this.status = status == null ? Status.UNTESTED : status;
             this.source = source;
             this.note = note == null ? "" : note;
+            this.playerUrl = playerUrl == null ? "" : playerUrl;
         }
 
         public boolean playable() {
@@ -318,8 +329,9 @@ public final class OtakudesuServerPicker {
      */
     static Probed probePlayer(OtakudesuPlayback.Mirror mirror, String player, Http http) {
         OtakudesuPlayback.Source direct = firstSource(player);
-        if (direct != null) return new Probed(Status.READY, direct, "Berkas terbuka di pemutar.");
-
+        if (direct != null) {
+            return new Probed(Status.READY, direct, "Berkas terbuka di pemutar.", player);
+        }
 
         if (OtakudesuMediaResolver.looksLikeProviderPage(player)) {
             String html;
@@ -327,36 +339,37 @@ public final class OtakudesuServerPicker {
                 html = http.get(player);
             } catch (Exception error) {
                 return new Probed(Status.UNAVAILABLE, null,
-                        "Halaman pemutar tidak dapat dibuka.");
+                        "Halaman pemutar tidak dapat dibuka.", player);
             }
             OtakudesuPlayback.Source found = firstSource(html);
             if (found != null) {
                 return new Probed(Status.READY, withQuality(found, mirror.quality),
-                        "Berkas terbaca dari halaman pemutar.");
+                        "Berkas terbaca dari halaman pemutar.", player);
             }
             // Halaman pemutar mengirim isi videonya lewat permintaan susulan
             // (mis. googlevideo dengan ip= dan expire= di dalam alamatnya),
             // bukan lewat alamat yang tertulis di HTML-nya.
             if (looksLateBound(html)) {
                 return new Probed(Status.PROTECTED_SERVER, null,
-                        "Alamat berkas hanya muncul setelah pemutar dijalankan.");
+                        "Alamat berkas hanya muncul setelah pemutar dijalankan.", player);
             }
             if (looksEncrypted(html)) {
                 return new Probed(Status.PROTECTED_SERVER, null,
-                        "Berkas ditutup pemutar penyedia (terenkripsi).");
+                        "Berkas ditutup pemutar penyedia (terenkripsi).", player);
             }
             return new Probed(Status.PROTECTED_SERVER, null,
-                    "Pemutar penyedia tidak memuat alamat berkas yang bisa dibaca.");
+                    "Pemutar penyedia tidak memuat alamat berkas yang bisa dibaca.", player);
         }
         if (looksLateBound(player)) {
             return new Probed(Status.PROTECTED_SERVER, null,
-                    "Alamat berkas hanya muncul setelah pemutar dijalankan.");
+                    "Alamat berkas hanya muncul setelah pemutar dijalankan.", player);
         }
         if (looksEncrypted(player)) {
             return new Probed(Status.PROTECTED_SERVER, null,
-                    "Berkas ditutup pemutar penyedia (terenkripsi).");
+                    "Berkas ditutup pemutar penyedia (terenkripsi).", player);
         }
-        return new Probed(Status.UNAVAILABLE, null, "Tidak ada berkas media di pemutar ini.");
+        return new Probed(Status.UNAVAILABLE, null,
+                "Tidak ada berkas media di pemutar ini.", player);
     }
 
     /**
