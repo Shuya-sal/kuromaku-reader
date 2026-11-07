@@ -2,6 +2,17 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Crash pilih server, landscape yang menetap, dan kontrol auto-hide.**
+  - **Crash saat memilih server diperbaiki dari akarnya.** Pilihan pengguna dulu dicari dengan `mirrors.indexOf(mirror)`. Panel yang masih terbuka bisa memegang mirror dari daftar episode sebelumnya, sehingga hasilnya `-1`; indeks itu dipakai membaca dan menulis daftar, dan penjaganya (`index < mirrors.size()`) justru **lolos** untuk `-1`. Hasilnya `IndexOutOfBoundsException: Index -1 out of bounds for length 2` — aplikasi tertutup. Sekarang setiap mirror punya **identitas kanonis** (`quality|provider|serverId|posisi`) dan tidak ada indeks mentah yang dipakai untuk menulis.
+  - **Dua server pada resolusi sama tidak lagi saling menimpa.** Dulu hasil pemeriksaan disimpan per posisi di daftar, jadi 480p ODCDN dan 480p Vidhide berbagi satu kunci. Sekarang per identitas, sehingga setiap server dapat dipilih sendiri dan statusnya benar.
+  - **Perpindahan server diserialisasi.** Ketukan kedua saat perpindahan berjalan diabaikan dengan pemberitahuan, bukan dijalankan bersamaan. Hasil pemeriksaan dari generasi lama dibuang (`serverGeneration`), jadi callback lama tidak menulis ke pemutar yang sudah memuat server lain.
+  - **Landscape tidak lagi memantul kembali.** `setFullscreen()` dulu **selalu** menulis `SCREEN_ORIENTATION_UNSPECIFIED` di akhir, dan "Putar Layar" memanggilnya tepat setelah meminta landscape — jadi permintaan landscape dibatalkan sendiri sepersekian detik kemudian. Sekarang hanya satu metode (`applyOrientation()`) yang menulis orientasi, dan layar penuh tidak menyentuhnya sama sekali.
+  - **State dipisah menjadi tiga:** `fullscreen` (immersive), `orientationMode` (`FOLLOW_DEVICE` / `FORCED_LANDSCAPE`), dan `controlsVisible`. Callback lifecycle tidak lagi menimpa pilihan pengguna; saat Activity dibuat ulang, orientasi dan layar penuh dipulihkan sebelum tata letak disusun, dan pemutar tidak di-restart.
+  - **Kontrol hilang otomatis setelah 5 detik.** Satu `Handler` dan satu `Runnable` (`hideControlsTask`) — bukan beberapa timer yang berlomba. Ketukan pada permukaan video memunculkan kontrol, mengetuk lagi menyembunyikannya, dan setiap interaksi mengulang hitungan 5 detik.
+  - **Timer ditahan saat penting:** selama menyeret timeline, saat panel server/dialog kualitas/subtitle/kecepatan terbuka, dan saat video dijeda atau buffering — kontrol tetap terlihat agar pengguna tidak kehilangan jalan memulihkan pemutaran. Callback dibatalkan di `onDestroy`.
+  - **Galat pemutaran tidak menutup aplikasi.** Kegagalan membuat pemutar, sumber kosong, dan `onPlayerError` berakhir sebagai pesan spesifik dengan tombol **Coba Lagi**, **Pilih Server Lain**, dan **Tonton di Sumber** — bukan crash, dan Activity tidak pernah `finish()` sendiri.
+  - **Timer pemutar tidak lagi menumpuk.** `startTicker()` dulu hanya membatalkan `saveTick`; setiap perpindahan server menambah satu rantai `clockTick` yang memposting dirinya sendiri. Sekarang keduanya dibatalkan lebih dulu.
+
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
 * **@VERSION@ — Pemutar video native Media3 menggantikan WebView.**

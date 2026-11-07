@@ -77,6 +77,19 @@ public final class OtakudesuPlayback {
         public Mirror withPlayer(String url) {
             return new Mirror(quality, provider, serverId, index, url);
         }
+
+        /**
+         * Identitas kanonis satu mirror.
+         *
+         * <p>Dipakai sebagai kunci peta hasil pemeriksaan supaya dua server pada
+         * resolusi yang sama (480p ODCDN dan 480p Vidhide) tidak saling
+         * menimpa, dan supaya hasil lama tidak dipakai untuk server lain ketika
+         * daftar mirror episode diganti. Posisi di daftar sengaja <b>tidak</b>
+         * dipakai sebagai identitas: posisi berubah, identitas tidak.
+         */
+        public String key() {
+            return quality + "\u001f" + provider + "\u001f" + serverId + "\u001f" + index;
+        }
     }
 
     /**

@@ -81,6 +81,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
     public static final String EXTRA_EPISODES = "episodes";
 
     private static final long SAVE_EVERY_MS = 5_000L;
+    /** Kontrol hilang setelah 5 detik tanpa interaksi (mode layar penuh). */
+    private static final long CONTROLS_TIMEOUT_MS = 5_000L;
+    private static final long CONTROLS_FADE_MS = 160L;
     private static final long SEEK_STEP_MS = 10_000L;
     private static final float[] SPEEDS = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
 
@@ -88,6 +91,10 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private OtakudesuStore store;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** Penjadwal tunggal untuk auto-hide kontrol. */
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private boolean controlsVisible = true;
+    private boolean panelOpen;
 
     private ExoPlayer player;
     private DefaultTrackSelector trackSelector;
@@ -119,26 +126,41 @@ public class AnimePlayerActivity extends AppCompatActivity {
     /** Layar penuh immersive saja: bilah disembunyikan, orientasi mengikuti perangkat. */
     private boolean fullscreen;
     /**
-     * Layar penuh landscape yang diminta lewat "Putar layar".
+     * Cara orientasi ditentukan. Hanya ada satu tempat yang memanggil
+     * {@code setRequestedOrientation}, yaitu {@link #applyOrientation()}.
      *
-     * <p>Terpisah dari {@link #fullscreen}: pengguna bisa memakai tombol Layar
-     * penuh (tanpa memaksa orientasi) atau Putar layar (landscape sekaligus
-     * layar penuh). Menggabungkan keduanya membuat salah satu tombol
-     * mengembalikan keadaan yang tidak diharapkan saat dipakai bergantian.
+     * <p>Sebelumnya orientasi ditulis di dua tempat yang saling menimpa:
+     * "Putar layar" meminta landscape, lalu {@code setFullscreen()} langsung
+     * menimpanya kembali ke "ikuti perangkat". Hasilnya persis yang dilaporkan:
+     * layar sempat miring, lalu balik lagi sepersekian detik kemudian.
      */
-    private boolean rotatedFullscreen;
-    /** Orientasi sebelum "Putar layar" ditekan, untuk dikembalikan saat keluar. */
-    private int orientationBeforeRotate = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    private static final int ORIENTATION_FOLLOW_DEVICE = 0;
+    private static final int ORIENTATION_FORCED_LANDSCAPE = 1;
+    private int orientationMode = ORIENTATION_FOLLOW_DEVICE;
+    /** Orientasi eksplisit sebelum dipaksa, dikembalikan saat mode dilepas. */
+    private int orientationBeforeForced = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+    /** Perpindahan server sedang berjalan: pilihan berikutnya ditahan. */
+    private boolean switchingServer;
+    /** Nomor generasi pemilihan server; hasil async yang basi diabaikan. */
+    private int serverGeneration;
     private boolean firstSource = true;
     private long pendingResumeMs;
     private String activeQuality = "Otomatis";
     private Button serverButton;
     /** Mirror terakhir yang dibaca dari halaman episode; sumber pemilih server. */
     private final List<OtakudesuPlayback.Mirror> mirrors = new ArrayList<>();
-    /** Indeks mirror → sumber media hasil pemeriksaan. */
-    private final java.util.LinkedHashMap<Integer, OtakudesuPlayback.Source> probedServers =
+    /**
+     * Kunci kanonis mirror → sumber media hasil pemeriksaan.
+     *
+     * <p>Dulu dipetakan dengan <b>posisi di daftar</b>. Posisi itu bukan
+     * identitas: begitu daftar mirror diganti — episode lain, atau halaman
+     * episode dibaca ulang — indeks yang sama menunjuk server yang berbeda,
+     * sehingga pemeriksaan lama bisa dipakai untuk server yang salah, dan
+     * panel yang masih terbuka bisa meminta indeks yang sudah tidak ada.
+     */
+    private final java.util.LinkedHashMap<String, OtakudesuPlayback.Source> probedServers =
             new java.util.LinkedHashMap<>();
-    private final List<Integer> probingServers = new ArrayList<>();
+    private final List<String> probingServers = new ArrayList<>();
     private PopupWindow serverPanel;
     private Document episodeDoc;
     private String activeServerLabel = "";
@@ -147,6 +169,14 @@ public class AnimePlayerActivity extends AppCompatActivity {
     /** Nama server yang sedang dipakai, untuk pesan kegagalan. */
     private String activeServerName = "";
     private String activeSubtitle = "Nonaktif";
+
+    /** Tugas auto-hide; selalu dibatalkan sebelum dijadwalkan ulang. */
+    private final Runnable hideControlsTask = new Runnable() {
+        @Override public void run() {
+            if (panelOpen || scrubbing || controlsPinned()) return;
+            setControlsVisible(false);
+        }
+    };
 
     private final Runnable saveTick = new Runnable() {
         @Override public void run() {
@@ -171,14 +201,29 @@ public class AnimePlayerActivity extends AppCompatActivity {
         episodeTotal = intent.getIntExtra(EXTRA_EPISODE_TOTAL, 0);
         episodes.addAll(OtakudesuEpisodes.fromJson(intent.getStringExtra(EXTRA_EPISODES)));
 
-        buildUi();
+        // Keadaan layar penuh dan orientasi dipulihkan SEBELUM UI ditata, jadi
+        // tata letak pertama sudah benar dan tidak ada kedipan mode.
         if (state != null) {
             pendingResumeMs = state.getLong("resume_ms", 0L);
-            rotatedFullscreen = state.getBoolean("rotated_fullscreen", false);
-            orientationBeforeRotate = state.getInt("orientation_before_rotate",
+            orientationMode = state.getInt("orientation_mode", ORIENTATION_FOLLOW_DEVICE);
+            orientationBeforeForced = state.getInt("orientation_before_forced",
                     ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             fullscreen = state.getBoolean("immersive_fullscreen", false);
             firstSource = false;
+        }
+        buildUi();
+        if (state != null) {
+            // Terapkan tanpa mengubah state yang sudah dipulihkan.
+            applyOrientation();
+            if (fullscreen) {
+                WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(
+                        getWindow(), getWindow().getDecorView());
+                controller.setSystemBarsBehavior(
+                        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                controller.hide(WindowInsetsCompat.Type.systemBars());
+                setControlsVisible(true);
+                scheduleHideControls();
+            }
         }
         if (episodeUrl.isEmpty()) {
             showUnavailable("Episode tidak memiliki alamat halaman.");
@@ -203,6 +248,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
         playerView.setUseController(false);
         playerView.setTag("anime_player_surface");
         playerView.setShutterBackgroundColor(0xFF000000);
+        // Satu ketukan pada permukaan video: munculkan kontrol (dan jadwalkan
+        // sembunyi lagi 5 detik), atau sembunyikan bila sedang terlihat.
+        playerView.setOnClickListener(v -> toggleControls());
         root.addView(playerView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -248,8 +296,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 "Kembali", palette);
         back.setTag("anime_player_back");
         back.setOnClickListener(v -> {
-            if (rotatedFullscreen) {
-                exitRotatedFullscreen();
+            if (orientationMode == ORIENTATION_FORCED_LANDSCAPE) {
+                setOrientationMode(ORIENTATION_FOLLOW_DEVICE);
                 return;
             }
             if (fullscreen) {
@@ -275,12 +323,18 @@ public class AnimePlayerActivity extends AppCompatActivity {
         // Kualitas, Subtitle, dan Kecepatan semuanya tersedia di menu itu juga,
         // jadi tidak ada kontrol yang hilang pada layar kecil.
         serverButton = chip(serverChipLabel(), "anime_player_server");
-        serverButton.setOnClickListener(v -> showServerPanel());
+        serverButton.setOnClickListener(v -> {
+            showControls();
+            showServerPanel();
+        });
         bar.addView(serverButton);
 
         Button more = chip("\u22ef", "anime_player_more");
         more.setContentDescription("Menu lainnya");
-        more.setOnClickListener(v -> showMoreMenu(bar));
+        more.setOnClickListener(v -> {
+            showControls();
+            showMoreMenu(bar);
+        });
         bar.addView(more);
         return bar;
     }
@@ -308,11 +362,15 @@ public class AnimePlayerActivity extends AppCompatActivity {
         if (hasQuality) items.add("Kualitas");
         items.add("Subtitle");
         items.add("Kecepatan");
-        items.add(rotatedFullscreen ? "Kembali ke orientasi semula" : "Putar layar");
+        items.add(orientationMode == ORIENTATION_FORCED_LANDSCAPE
+                ? "Kembali ke orientasi semula" : "Putar layar");
         String[] labels = items.toArray(new String[0]);
 
+        cancelHideControls();
+        setPanelOpen(true);
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Menu pemutar")
+                .setOnDismissListener(dialog -> setPanelOpen(false))
                 .setItems(labels, (dialog, which) -> {
                     String chosen = labels[which];
                     if (chosen.startsWith("Server")) {
@@ -346,6 +404,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private LinearLayout buildBottomBar() {
         LinearLayout column = new LinearLayout(this);
+        bottomBar = column;
         column.setOrientation(LinearLayout.VERTICAL);
         column.setBackgroundColor(0xB3000000);
 
@@ -355,6 +414,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
         timeBar.addListener(new androidx.media3.ui.TimeBar.OnScrubListener() {
             @Override public void onScrubStart(androidx.media3.ui.TimeBar timeBar, long position) {
                 scrubbing = true;
+                // Selama menyeret timeline, kontrol tidak boleh hilang.
+                cancelHideControls();
+                setControlsVisible(true);
             }
 
             @Override public void onScrubMove(androidx.media3.ui.TimeBar timeBar, long position) {
@@ -366,6 +428,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                                               boolean canceled) {
                 scrubbing = false;
                 if (player != null) player.seekTo(position);
+                // Selesai menyeret: hitungan 5 detik dimulai lagi.
+                showControls();
             }
         });
         column.addView(timeBar, new LinearLayout.LayoutParams(
@@ -377,25 +441,40 @@ public class AnimePlayerActivity extends AppCompatActivity {
         row.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), Ui.dp(this, 6));
 
         previous = chip("‹ Sebelumnya", "anime_player_previous");
-        previous.setOnClickListener(v -> step(-1));
+        previous.setOnClickListener(v -> {
+            showControls();
+            step(-1);
+        });
         row.addView(previous, new LinearLayout.LayoutParams(0,
                 Ui.dp(this, Ui.TOUCH_DP), 1f));
 
         Button back10 = chip("-10s", "anime_player_back10");
-        back10.setOnClickListener(v -> seekBy(-SEEK_STEP_MS));
+        back10.setOnClickListener(v -> {
+            showControls();
+            seekBy(-SEEK_STEP_MS);
+        });
         row.addView(back10);
 
         playButton = chip("Putar", "anime_player_play");
-        playButton.setOnClickListener(v -> togglePlay());
+        playButton.setOnClickListener(v -> {
+            showControls();
+            togglePlay();
+        });
         row.addView(playButton, new LinearLayout.LayoutParams(0,
                 Ui.dp(this, Ui.TOUCH_DP), 1f));
 
         Button forward10 = chip("+10s", "anime_player_forward10");
-        forward10.setOnClickListener(v -> seekBy(SEEK_STEP_MS));
+        forward10.setOnClickListener(v -> {
+            showControls();
+            seekBy(SEEK_STEP_MS);
+        });
         row.addView(forward10);
 
         next = chip("Berikutnya ›", "anime_player_next");
-        next.setOnClickListener(v -> step(1));
+        next.setOnClickListener(v -> {
+            showControls();
+            step(1);
+        });
         row.addView(next, new LinearLayout.LayoutParams(0,
                 Ui.dp(this, Ui.TOUCH_DP), 1f));
 
@@ -467,6 +546,19 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private void ensurePlayer() {
         if (player != null) return;
+        try {
+            createPlayer();
+        } catch (Throwable error) {
+            // Perangkat tanpa codec/permukaan yang cocok tidak boleh membuat
+            // aplikasi tertutup: pemutaran dilaporkan gagal, UI tetap hidup.
+            player = null;
+            showUnavailable(kegagalanServer(activeServerName,
+                    "Pemutar tidak dapat disiapkan pada perangkat ini.")
+                    + (error.getMessage() == null ? "" : " (" + error.getMessage() + ")"));
+        }
+    }
+
+    private void createPlayer() {
         // Buffer wajar: cukup untuk koneksi lambat tanpa menyimpan banyak video.
         DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
                 .setBufferDurationsMs(15_000, 60_000, 1_500, 3_000)
@@ -491,10 +583,16 @@ public class AnimePlayerActivity extends AppCompatActivity {
                     saveProgress(true);
                     markFinished();
                 }
+                // Saat buffering video belum berjalan: kontrol penting tetap
+                // terlihat supaya pengguna tidak kehilangan jalan memulihkan.
+                if (state == Player.STATE_BUFFERING) showControls();
             }
 
             @Override public void onIsPlayingChanged(boolean playing) {
                 updatePlayButton();
+                // Selama tidak diputar, kontrol ditahan terlihat.
+                if (!playing) showControls();
+                else scheduleHideControls();
             }
 
             @Override public void onTracksChanged(Tracks tracks) {
@@ -502,9 +600,12 @@ public class AnimePlayerActivity extends AppCompatActivity {
             }
 
             @Override public void onPlayerError(androidx.media3.common.PlaybackException error) {
+                // Galat pemutaran tidak menutup aplikasi dan tidak menutup
+                // Activity: pesan spesifik + tiga jalan keluar.
                 showError(kegagalanServer(activeServerName,
                         "Berkas video gagal dimuat.")
                         + " Kode: " + error.errorCode + ".");
+                showControls();
             }
         });
     }
@@ -601,24 +702,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
 
         popupPanel(panel.build(mirrors, probedServers, probingServers,
-                new OtakudesuServerPanel.Listener() {
-                    @Override public void onPick(OtakudesuPlayback.Mirror mirror) {
-                        int index = mirrors.indexOf(mirror);
-                        OtakudesuPlayback.Source ready = probedServers.get(index);
-                        if (ready != null) {
-                            switchServer(mirror, ready);
-                            return;
-                        }
-                        probeServer(mirror, index, true);
-                    }
-
-                    @Override public void onCheckAll() {
-                        for (int i = 0; i < mirrors.size(); i++) {
-                            if (probedServers.containsKey(i) || probingServers.contains(i)) continue;
-                            probeServer(mirrors.get(i), i, false);
-                        }
-                    }
-                }));
+                panelListener()));
 
         // Pemeriksaan latar belakang dibatasi: hanya dua server yang paling
         // mungkin terbuka, dan tidak menumpuk bila ada yang sedang berjalan.
@@ -627,22 +711,23 @@ public class AnimePlayerActivity extends AppCompatActivity {
         // berarti sembilan permintaan ke penyedia.
         for (OtakudesuPlayback.Mirror mirror : OtakudesuServerPicker.probeOrder(mirrors)) {
             if (probingServers.size() >= 2) break;
-            int index = mirrors.indexOf(mirror);
-            if (index < 0 || probedServers.containsKey(index) || probingServers.contains(index)) {
-                continue;
-            }
-            probeServer(mirror, index, false);
+            if (mirror == null) continue;
+            String id = mirror.key();
+            if (probedServers.containsKey(id) || probingServers.contains(id)) continue;
+            probeServer(mirror, id, false);
         }
     }
 
     private void dismissServerPanel() {
         if (serverPanel != null && serverPanel.isShowing()) serverPanel.dismiss();
         serverPanel = null;
+        setPanelOpen(false);
     }
 
     /** Panel ditampilkan sebagai popup agar tidak memindahkan layar video. */
     private void popupPanel(View content) {
         dismissServerPanel();
+        setPanelOpen(true);
         int width = Math.min(getResources().getDisplayMetrics().widthPixels - Ui.dp(this, 24),
                 Ui.dp(this, 420));
         serverPanel = new PopupWindow(content, width,
@@ -688,11 +773,62 @@ public class AnimePlayerActivity extends AppCompatActivity {
     }
 
     /** Membuka satu server lalu memeriksa berkasnya; hasilnya ditulis ke layar. */
-    private void probeServer(OtakudesuPlayback.Mirror mirror, int index, boolean pickWhenReady) {
-        if (probingServers.contains(index)) return;
-        probingServers.add(index);
+    /**
+     * Listener panel server — satu implementasi untuk kedua jalur tampilan.
+     *
+     * <p>Pemilihan memakai {@link OtakudesuPlayback.Mirror#key()}, bukan posisi
+     * di daftar: panel yang masih terbuka bisa memegang mirror dari daftar
+     * sebelumnya, dan {@code indexOf} atas mirror seperti itu menghasilkan -1.
+     * Indeks -1 dulu dipakai untuk membaca dan menulis daftar, yang melempar
+     * {@code IndexOutOfBoundsException} — persis crash saat memilih server.
+     */
+    private OtakudesuServerPanel.Listener panelListener() {
+        return new OtakudesuServerPanel.Listener() {
+            @Override public void onPick(OtakudesuPlayback.Mirror mirror) {
+                if (mirror == null) return;
+                pickServer(mirror);
+            }
+
+            @Override public void onCheckAll() {
+                for (OtakudesuPlayback.Mirror mirror : new ArrayList<>(mirrors)) {
+                    String id = mirror.key();
+                    if (probedServers.containsKey(id) || probingServers.contains(id)) continue;
+                    probeServer(mirror, id, false);
+                }
+            }
+        };
+    }
+
+    /**
+     * Pengguna memilih satu server.
+     *
+     * <p>Transisi diserialisasi: selama perpindahan berjalan, ketukan berikutnya
+     * diabaikan (bukan dijalankan bersamaan). Ini mencegah dua
+     * {@code prepare()} saling menimpa dan mencegah callback lama menulis ke
+     * pemutar yang sudah memuat server lain.
+     */
+    private void pickServer(OtakudesuPlayback.Mirror mirror) {
+        if (switchingServer) {
+            Toast.makeText(this, "Sedang berpindah server…", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String id = mirror.key();
+        OtakudesuPlayback.Source ready = probedServers.get(id);
+        if (ready != null) {
+            switchServer(mirror, ready);
+            return;
+        }
+        probeServer(mirror, id, true);
+    }
+
+    private void probeServer(OtakudesuPlayback.Mirror mirror, String id, boolean pickWhenReady) {
+        if (mirror == null || id == null) return;
+        if (probingServers.contains(id)) return;
+        if (id.isEmpty()) return;
+        probingServers.add(id);
+        final int probeGeneration = serverGeneration;
         refreshServerPanel();
-        main.postDelayed(this::refreshServerPanel, 150);
+        main.postDelayed(refreshServerPanelTask, 150);
 
         worker.execute(() -> {
             OtakudesuServerPicker.Probed result;
@@ -700,6 +836,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 result = OtakudesuServerPicker.probe(mirror, OtakudesuServerPicker.networkHttp(),
                         episodeDoc);
             } catch (Throwable error) {
+                // Kegagalan apa pun dari penyedia (jaringan, parser, format
+                // tak dikenal) berakhir sebagai status, bukan crash.
                 result = new OtakudesuServerPicker.Probed(
                         OtakudesuServerPicker.Status.UNAVAILABLE, null,
                         error.getMessage() == null ? "Server tidak dapat diperiksa." : error.getMessage());
@@ -707,27 +845,21 @@ public class AnimePlayerActivity extends AppCompatActivity {
             final OtakudesuServerPicker.Probed outcome = result;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
-                probingServers.remove(Integer.valueOf(index));
-                if (outcome.playable()) probedServers.put(index, outcome.source);
-                if (!outcome.playerUrl.isEmpty() && index < mirrors.size()) {
-                    // Alamat pemutar disimpan di daftar server, supaya tombol
-                    // "Buka Player Sumber" tetap tahu tujuannya nanti.
-                    mirrors.set(index, mirrors.get(index).withPlayer(outcome.playerUrl));
+                probingServers.remove(id);
+                // Hasil dari generasi lama tidak boleh menyentuh keadaan baru.
+                if (probeGeneration != serverGeneration) return;
+                if (outcome.playable() && outcome.source != null) {
+                    probedServers.put(id, outcome.source);
                 }
+                markMirrorPlayerUrl(id, outcome.playerUrl);
                 refreshServerPanel();
-                if (pickWhenReady) {
-                    activePlayerUrl = outcome.playerUrl;
+                if (!pickWhenReady) return;
+                if (outcome.playable() && outcome.source != null) {
+                    switchServer(mirror, outcome.source);
+                } else {
                     activeServerName = OtakudesuServerPanel.summary(mirror);
-                }
-                if (outcome.playable() && pickWhenReady) {
-                    pendingResumeMs = savedPosition(episodeUrl);
-                    dismissServerPanel();
-                    activeServerLabel = activeServerName;
-                    updateServerButton();
-                    play(outcome.source, OtakudesuPlayback.singletonQuality(outcome.source));
-                } else if (!outcome.playable() && pickWhenReady) {
-                    // Jangan layar hitam tanpa penjelasan: sebut server, sebabnya,
-                    // dan beri dua jalan keluar (server lain / pemutar sumber).
+                    activePlayerUrl = outcome.playerUrl == null ? "" : outcome.playerUrl;
+                    switchingServer = false;
                     showUnavailable(kegagalanServer(activeServerName, outcome.note));
                     showServerPanel();
                 }
@@ -735,30 +867,39 @@ public class AnimePlayerActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Simpan alamat pemutar ke mirror yang tepat.
+     *
+     * <p>Dulu memakai {@code mirrors.set(index, ...)} dengan penjaga
+     * {@code index < mirrors.size()} saja — untuk {@code index == -1} penjaga
+     * itu lolos dan daftar ditulis di posisi negatif. Sekarang dicari lewat
+     * kunci kanonis, dan tidak ada penulisan bila mirrornya sudah tidak ada.
+     */
+    private void markMirrorPlayerUrl(String id, String playerUrl) {
+        if (playerUrl == null || playerUrl.isEmpty()) return;
+        for (int i = 0; i < mirrors.size(); i++) {
+            OtakudesuPlayback.Mirror current = mirrors.get(i);
+            if (current != null && id.equals(current.key())) {
+                mirrors.set(i, current.withPlayer(playerUrl));
+                return;
+            }
+        }
+    }
+
+    private final Runnable refreshServerPanelTask = new Runnable() {
+        @Override public void run() {
+            if (isFinishing() || isDestroyed()) return;
+            refreshServerPanel();
+        }
+    };
+
     private void refreshServerPanel() {
         if (serverPanel == null || !serverPanel.isShowing()) return;
         OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
         OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
         serverPanel.setContentView(panel.build(mirrors, probedServers, probingServers,
-                new OtakudesuServerPanel.Listener() {
-                    @Override public void onPick(OtakudesuPlayback.Mirror mirror) {
-                        int index = mirrors.indexOf(mirror);
-                        OtakudesuPlayback.Source ready = probedServers.get(index);
-                        if (ready != null) {
-                            switchServer(mirror, ready);
-                            return;
-                        }
-                        probeServer(mirror, index, true);
-                    }
-
-                    @Override public void onCheckAll() {
-                        for (int i = 0; i < mirrors.size(); i++) {
-                            if (probedServers.containsKey(i) || probingServers.contains(i)) continue;
-                            probeServer(mirrors.get(i), i, false);
-                        }
-                    }
-                }));
+                panelListener()));
     }
 
     /**
@@ -769,6 +910,16 @@ public class AnimePlayerActivity extends AppCompatActivity {
      * progres episode tetap utuh — hanya satu field posisi yang dibawa.
      */
     private void switchServer(OtakudesuPlayback.Mirror mirror, OtakudesuPlayback.Source ready) {
+        if (mirror == null || ready == null) {
+            // Jangan pernah menyerahkan sumber kosong ke pemutar: itulah bentuk
+            // kegagalan yang tampil sebagai crash.
+            switchingServer = false;
+            showUnavailable("Server ini tidak menyediakan berkas video yang bisa diputar.");
+            return;
+        }
+        if (switchingServer) return;
+        switchingServer = true;
+        serverGeneration++;
         long position = savedPosition(episodeUrl);
         pendingResumeMs = position;
         dismissServerPanel();
@@ -776,14 +927,23 @@ public class AnimePlayerActivity extends AppCompatActivity {
         activeServerName = activeServerLabel;
         activePlayerUrl = knownPlayerUrl(mirror);
         updateServerButton();
-        play(ready, OtakudesuPlayback.singletonQuality(ready));
+        try {
+            play(ready, OtakudesuPlayback.singletonQuality(ready));
+        } finally {
+            // Transisi selesai begitu sumber baru sudah diserahkan ke pemutar;
+            // kegagalan setelah ini ditangani listener pemutar.
+            switchingServer = false;
+        }
     }
 
     /** Alamat pemutar server ini, bila sudah pernah dibuka saat diperiksa. */
     private String knownPlayerUrl(OtakudesuPlayback.Mirror mirror) {
-        int index = mirrors.indexOf(mirror);
-        if (index >= 0 && !mirrors.get(index).playerUrl.isEmpty()) {
-            return mirrors.get(index).playerUrl;
+        if (mirror == null) return "";
+        if (mirror.playerUrl != null && !mirror.playerUrl.isEmpty()) return mirror.playerUrl;
+        for (OtakudesuPlayback.Mirror known : mirrors) {
+            if (known != null && known.key().equals(mirror.key()) && !known.playerUrl.isEmpty()) {
+                return known.playerUrl;
+            }
         }
         for (OtakudesuPlayback.Mirror known : mirrors) {
             if (known.provider.equalsIgnoreCase(mirror.provider)
@@ -832,7 +992,12 @@ public class AnimePlayerActivity extends AppCompatActivity {
      * tidak hilang, tetapi posisinya terbuang.
      */
     private void play(OtakudesuPlayback.Source source, List<String> qualities) {
+        if (source == null || source.url == null || source.url.isEmpty()) {
+            showUnavailable("Sumber ini tidak menyediakan berkas video yang bisa diputar.");
+            return;
+        }
         ensurePlayer();
+        if (player == null) return;
         // Tetap satu player: episode baru memakai player yang sama, bukan
         // Activity atau player bertumpuk.
         player.setMediaItem(mediaItem(source), Math.max(0L, pendingResumeMs));
@@ -919,7 +1084,11 @@ public class AnimePlayerActivity extends AppCompatActivity {
     }
 
     private void startTicker() {
+        // Keduanya dibatalkan lebih dulu: tanpa ini setiap perpindahan server
+        // menambah satu rantai clockTick yang memposting dirinya sendiri, dan
+        // setelah beberapa perpindahan ada beberapa timer yang berebut UI.
         main.removeCallbacks(saveTick);
+        main.removeCallbacks(clockTick);
         main.postDelayed(saveTick, SAVE_EVERY_MS);
         main.postDelayed(clockTick, 500);
     }
@@ -993,6 +1162,23 @@ public class AnimePlayerActivity extends AppCompatActivity {
         return heights;
     }
 
+    /**
+     * Dialog pilihan yang menahan auto-hide selama terbuka.
+     *
+     * <p>Tanpa ini, kontrol bisa hilang di tengah pengguna memilih kualitas atau
+     * subtitle, dan pengguna kehilangan tempat kembali.
+     */
+    private void showOptionsDialog(String title, String[] labels,
+                                   android.content.DialogInterface.OnClickListener onPick) {
+        cancelHideControls();
+        setPanelOpen(true);
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setItems(labels, onPick)
+                .setOnDismissListener(dialog -> setPanelOpen(false))
+                .show();
+    }
+
     private void showQualityMenu() {
         List<Integer> heights = videoHeights();
         if (heights.isEmpty()) return;
@@ -1000,8 +1186,11 @@ public class AnimePlayerActivity extends AppCompatActivity {
         labels.add("Otomatis");
         for (Integer height : heights) labels.add(height + "p");
 
+        cancelHideControls();
+        setPanelOpen(true);
         new AlertDialog.Builder(this)
                 .setTitle("Kualitas video")
+                .setOnDismissListener(dialog -> setPanelOpen(false))
                 .setItems(labels.toArray(new String[0]), (dialog, which) -> {
                     if (player == null || trackSelector == null) return;
                     if (which == 0) {
@@ -1037,8 +1226,11 @@ public class AnimePlayerActivity extends AppCompatActivity {
         }
         if (groups.isEmpty()) return;
 
+        cancelHideControls();
+        setPanelOpen(true);
         new AlertDialog.Builder(this)
                 .setTitle("Subtitle")
+                .setOnDismissListener(dialog -> setPanelOpen(false))
                 .setItems(labels.toArray(new String[0]), (dialog, which) -> {
                     if (which == 0) {
                         trackSelector.setParameters(trackSelector.buildUponParameters()
@@ -1061,8 +1253,11 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private void showSpeedMenu() {
         if (player == null) return;
         String[] labels = {"0.5x", "0.75x", "Normal", "1.25x", "1.5x", "2x"};
+        cancelHideControls();
+        setPanelOpen(true);
         new AlertDialog.Builder(this)
                 .setTitle("Kecepatan")
+                .setOnDismissListener(dialog -> setPanelOpen(false))
                 .setItems(labels, (dialog, which) -> {
                     player.setPlaybackParameters(new PlaybackParameters(SPEEDS[which]));
                 })
@@ -1085,91 +1280,203 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private void setFullscreen(boolean enable) {
         if (fullscreen == enable) return;
         fullscreen = enable;
-        // Masuk layar penuh biasa membatalkan mode landscape paksa supaya kedua
-        // tombol tidak saling menimpa keadaan satu sama lain.
-        if (!enable) rotatedFullscreen = false;
         WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (enable) {
-            topBar.setVisibility(View.GONE);
             controller.setSystemBarsBehavior(
                     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             controller.hide(WindowInsetsCompat.Type.systemBars());
+            // Masuk layar penuh selalu memunculkan kontrol, lalu dihitung ulang.
+            showControls();
         } else {
-            topBar.setVisibility(View.VISIBLE);
             controller.show(WindowInsetsCompat.Type.systemBars());
+            // Di luar layar penuh kontrol selalu terlihat: tidak ada yang
+            // menghalangi gambar, dan pengguna butuh jalur kembali.
+            cancelHideControls();
+            setControlsVisible(true);
         }
-        // Diamkan orientasi. Memanggil setRequestedOrientation di sini akan
-        // memutar layar dan, pada sebagian perangkat, membuat ulang Activity
-        // sehingga pemutaran terulang dari awal.
-        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        applyOrientation();
     }
 
     /**
-     * "Putar Layar" — pilihan eksplisit, terpisah dari layar penuh.
+     * Satu-satunya tempat orientasi ditentukan.
      *
-     * <p>Menukar orientasi manually hanya saat pengguna memintanya, dan pemutar
-     * tetap satu: posisi, buffer, dan state ExoPlayer tidak disentuh.
+     * <p>Dipanggil dari {@link #setFullscreen(boolean)} dan
+     * {@link #setOrientationMode(int)}, jadi tidak ada dua penulis yang bisa
+     * saling menimpa. Tidak dipanggil dari layout pass, dari ticker, atau dari
+     * callback lifecycle lain — keadaan yang dipilih pengguna tidak diganti
+     * oleh kejadian di sekitarnya.
      */
+    private void applyOrientation() {
+        try {
+            if (orientationMode == ORIENTATION_FORCED_LANDSCAPE) {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            } else {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            }
+        } catch (RuntimeException ignored) {
+            // Sebagian perangkat/OEM menolak permintaan orientasi. Tata letak
+            // tetap menyesuaikan orientasi yang berlaku; tidak ada layar penuh
+            // palsu yang mengaku landscape padahal tidak.
+        }
+    }
+
+    /** Ubah mode orientasi; layar penuh ikut dinyalakan saat landscape dipaksa. */
+    private void setOrientationMode(int mode) {
+        if (orientationMode == mode) return;
+        if (mode == ORIENTATION_FORCED_LANDSCAPE) {
+            orientationBeforeForced = getRequestedOrientation();
+            orientationMode = mode;
+            if (!fullscreen) setFullscreen(true);
+            else applyOrientation();
+            Toast.makeText(this, "Landscape penuh aktif. Tekan lagi untuk kembali.",
+                    Toast.LENGTH_SHORT).show();
+        } else {
+            orientationMode = ORIENTATION_FOLLOW_DEVICE;
+            int kembali = orientationBeforeForced;
+            orientationBeforeForced = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+            try {
+                setRequestedOrientation(kembali == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                        ? ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED : kembali);
+            } catch (RuntimeException ignored) {
+                applyOrientation();
+            }
+            if (fullscreen) setFullscreen(false);
+            else applyOrientation();
+        }
+    }
+
+    /** "Putar layar": landscape + layar penuh sekaligus; tekan lagi untuk keluar. */
     private void rotateScreen() {
-        if (rotatedFullscreen) {
-            exitRotatedFullscreen();
+        if (orientationMode == ORIENTATION_FORCED_LANDSCAPE) {
+            setOrientationMode(ORIENTATION_FOLLOW_DEVICE);
+        } else {
+            setOrientationMode(ORIENTATION_FORCED_LANDSCAPE);
+        }
+        updateOrientationMenuLabel();
+    }
+
+    // ------------------------------------------------------- kontrol 5 detik
+
+    /**
+     * Menyembunyikan kontrol setelah {@link #CONTROLS_TIMEOUT_MS} tanpa
+     * interaksi. Satu penjadwal saja: setiap permintaan baru membatalkan yang
+     * lama ({@code removeCallbacks}) sebelum memasang yang baru, jadi tidak ada
+     * dua timer yang saling berlomba.
+     */
+    private void scheduleHideControls() {
+        uiHandler.removeCallbacks(hideControlsTask);
+        if (!fullscreen) return;
+        if (panelOpen || scrubbing || controlsPinned()) return;
+        uiHandler.postDelayed(hideControlsTask, CONTROLS_TIMEOUT_MS);
+    }
+
+    private void cancelHideControls() {
+        uiHandler.removeCallbacks(hideControlsTask);
+    }
+
+    /**
+     * Kontrol ditahan terlihat saat video dijeda, buffering, atau galat.
+     *
+     * <p>Bisa di-override pengujian untuk memisahkan perilaku penjadwalan dari
+     * keadaan pemutar yang sesungguhnya.
+     */
+    protected boolean controlsPinned() {
+        if (player == null) return true;
+        int state = player.getPlaybackState();
+        if (state == Player.STATE_BUFFERING || state == Player.STATE_IDLE) return true;
+        if (errorBox != null && errorBox.getVisibility() == View.VISIBLE) return true;
+        return !player.isPlaying();
+    }
+
+    private void showControls() {
+        setControlsVisible(true);
+        scheduleHideControls();
+    }
+
+    private void toggleControls() {
+        if (!fullscreen) return;
+        if (panelOpen) {
+            // Saat panel/dialog terbuka, ketukan di luar tidak boleh
+            // menyembunyikan kontrol di belakangnya.
+            showControls();
             return;
         }
-        int now = getResources().getConfiguration().orientation;
-        // Keluar dari mode ini mengembalikan orientasi yang berlaku sebelumnya,
-        // bukan orientasi yang dikarang.
-        orientationBeforeRotate = getRequestedOrientation();
-        rotatedFullscreen = true;
-
-        // Landscape DAN layar penuh sekaligus. Orientasi landscape diminta
-        // secara eksplisit lewat kebijakan yang sah pada versi Android ini;
-        // bila sistem menolak (mis. auto-rotate dikunci di level sistem), mode
-        // layar penuh tetap berlaku dan video tetap memakai rasio aslinya —
-        // pengguna tidak pernah disuguhi "layar penuh palsu" yang mengaku
-        // landscape padahal tidak.
-        int target = now == Configuration.ORIENTATION_LANDSCAPE
-                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
-        try {
-            setRequestedOrientation(target);
-        } catch (RuntimeException ignored) {
-            // Sebagian perangkat/OEM menolak permintaan orientasi.
+        if (controlsVisible) {
+            if (controlsPinned()) {
+                // Saat dijeda/buffering, ketukan tidak menyembunyikan kontrol:
+                // pengguna butuh tombol putar untuk melanjutkan.
+                showControls();
+                return;
+            }
+            hideControlsNow();
+        } else {
+            showControls();
         }
-        if (!fullscreen) setFullscreen(true);
-        Toast.makeText(this, "Mode putar layar: landscape penuh. Tekan lagi untuk kembali.",
-                Toast.LENGTH_SHORT).show();
     }
 
-    /** Keluar dari mode landscape paksa dan pulihkan orientasi semula. */
-    private void exitRotatedFullscreen() {
-        rotatedFullscreen = false;
-        try {
-            setRequestedOrientation(orientationBeforeRotate == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    ? ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-                    : orientationBeforeRotate);
-        } catch (RuntimeException ignored) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
-        }
-        orientationBeforeRotate = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-        if (fullscreen) setFullscreen(false);
+    private void hideControlsNow() {
+        uiHandler.removeCallbacks(hideControlsTask);
+        setControlsVisible(false);
     }
 
     /**
-     * Ukuran layar sempit dipakai untuk menyembunyikan label yang panjang.
+     * Satu-satunya penulis visibilitas kontrol.
      *
-     * <p>Diperiksa dari lebar layar terkecil, bukan dari lebar layar saat ini,
-     * supaya hasilnya sama pada kedua orientasi.
+     * <p>Bilah atas dan bawah adalah overlay di atas permukaan video, jadi
+     * menyembunyikannya tidak mengubah ukuran video dan tidak memicu lompatan
+     * tata letak. Video tidak pernah diredupkan atau diubah warnanya.
      */
-    private boolean isCompactScreen() {
-        return getResources().getConfiguration().smallestScreenWidthDp < 400;
+    private void setControlsVisible(boolean visible) {
+        if (controlsVisible == visible
+                && (topBar == null || topBar.getVisibility() == (visible ? View.VISIBLE : View.INVISIBLE))) {
+            return;
+        }
+        controlsVisible = visible;
+        fadeBar(topBar, visible);
+        fadeBar(bottomBar, visible);
+    }
+
+    /**
+     * Pudarkan satu bilah kontrol.
+     *
+     * <p>Saat muncul: tampilkan dulu, lalu naikkan alfa — jadi tidak ada kedip.
+     * Saat hilang: turunkan alfa dulu, baru sembunyikan setelah animasi selesai,
+     * sehingga tidak ada lompatan visibilitas di tengah animasi. Memakai
+     * INVISIBLE (bukan GONE) menjaga tata letak overlay tetap sama, jadi video
+     * tidak berubah ukuran.
+     */
+    private void fadeBar(final View bar, final boolean visible) {
+        if (bar == null) return;
+        bar.animate().cancel();
+        if (visible) {
+            bar.setVisibility(View.VISIBLE);
+            bar.animate().alpha(1f).setDuration(CONTROLS_FADE_MS).start();
+        } else {
+            bar.animate().alpha(0f).setDuration(CONTROLS_FADE_MS)
+                    .withEndAction(() -> {
+                        if (!controlsVisible) bar.setVisibility(View.INVISIBLE);
+                    })
+                    .start();
+        }
+    }
+
+    private void updateOrientationMenuLabel() {
+        // Label menu dibaca saat menu dibuka; tidak ada state tambahan di sini.
+    }
+
+    /** Catat bahwa sebuah dialog/panel sedang terbuka agar timer tidak jalan. */
+    private void setPanelOpen(boolean open) {
+        panelOpen = open;
+        if (open) cancelHideControls();
+        else scheduleHideControls();
     }
 
     @Override public void onBackPressed() {
         // Urutan yang konsisten: keluar dari mode rotasi lebih dulu, lalu layar
         // penuh, baru meninggalkan pemutar — riwayat pemutaran tidak hilang.
-        if (rotatedFullscreen) {
-            exitRotatedFullscreen();
+        if (orientationMode == ORIENTATION_FORCED_LANDSCAPE) {
+            setOrientationMode(ORIENTATION_FOLLOW_DEVICE);
             return;
         }
         if (fullscreen) {
@@ -1197,6 +1504,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     /** Sumber tidak bisa diputar native: jelaskan, jangan tampilkan layar hitam. */
     private void showUnavailable(String message) {
+        showControls();
         if (player != null) {
             player.pause();
         }
@@ -1262,8 +1570,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
     @Override protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         if (player != null) out.putLong("resume_ms", player.getCurrentPosition());
-        out.putBoolean("rotated_fullscreen", rotatedFullscreen);
-        out.putInt("orientation_before_rotate", orientationBeforeRotate);
+        out.putInt("orientation_mode", orientationMode);
+        out.putInt("orientation_before_forced", orientationBeforeForced);
         out.putBoolean("immersive_fullscreen", fullscreen);
     }
 
@@ -1292,6 +1600,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
     @Override protected void onDestroy() {
         main.removeCallbacks(saveTick);
         main.removeCallbacks(clockTick);
+        main.removeCallbacks(refreshServerPanelTask);
+        uiHandler.removeCallbacks(hideControlsTask);
         worker.shutdownNow();
         // Satu-satunya tempat player dilepas: tidak ada player yang tertinggal.
         if (player != null) {

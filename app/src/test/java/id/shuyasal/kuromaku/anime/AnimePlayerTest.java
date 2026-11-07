@@ -3,6 +3,7 @@ package id.shuyasal.kuromaku.anime;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -279,4 +280,346 @@ public class AnimePlayerTest {
         intent.putExtra("episode_label", "Episode 1");
         return Robolectric.buildActivity(AnimePlayerActivity.class, intent).setup().visible();
     }
+
+    // ------------------------------------------------ orientasi yang menetap
+
+    /**
+     * "Putar layar" meminta landscape dan landscape itu TIDAK dibatalkan.
+     *
+     * <p>Akar bug: {@code setFullscreen()} selalu menulis
+     * {@code SCREEN_ORIENTATION_UNSPECIFIED} di akhir, dan "Putar layar"
+     * memanggilnya tepat setelah meminta landscape. Hasilnya layar sempat
+     * miring lalu kembali sendiri. Sekarang hanya satu metode yang menulis
+     * orientasi, dan layar penuh tidak menyentuhnya.
+     */
+    @Test public void landscapeTetapSetelahLayarPenuhDinyalakan() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            invoke(activity, "rotateScreen");
+
+            assertEquals("landscape harus tetap diminta",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                    activity.getRequestedOrientation());
+
+            // Kejadian di sekitar pemutaran tidak boleh mengubahnya: perubahan
+            // konfigurasi, resume, dan tata letak ulang.
+            activity.onConfigurationChanged(
+                    activity.getResources().getConfiguration());
+            controller.pause().resume();
+            activity.getWindow().getDecorView().requestLayout();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+
+            assertEquals("landscape tidak boleh dibatalkan kejadian di sekitarnya",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                    activity.getRequestedOrientation());
+            assertTrue("layar penuh mati", (Boolean) field(activity, "fullscreen"));
+        } finally {
+            controller.close();
+        }
+    }
+
+    /** Layar penuh biasa tidak pernah memaksa landscape. */
+    @Test public void layarPenuhBiasaTidakMenyentuhOrientasi() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            invoke(activity, "setFullscreen", true);
+            assertEquals("orientasi tetap mengikuti perangkat",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                    activity.getRequestedOrientation());
+            assertTrue("layar penuh tetap menyala", (Boolean) field(activity, "fullscreen"));
+        } finally {
+            controller.close();
+        }
+    }
+
+    /** Menekan "Putar layar" dua kali mengembalikan orientasi semula. */
+    @Test public void putarLayarDuaKaliKembaliKeSemula() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            invoke(activity, "rotateScreen");
+            invoke(activity, "rotateScreen");
+            assertEquals("orientasi kembali mengikuti perangkat",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                    activity.getRequestedOrientation());
+            assertFalse("layar penuh ikut dimatikan", (Boolean) field(activity, "fullscreen"));
+        } finally {
+            controller.close();
+        }
+    }
+
+    /** State orientasi dipulihkan saat Activity dibuat ulang. */
+    @Test public void orientasiDipulihkanSaatActivityDibuatUlang() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            invoke(activity, "rotateScreen");
+
+            android.os.Bundle out = new android.os.Bundle();
+            controller.saveInstanceState(out);
+            controller.pause().stop().destroy();
+
+            try (ActivityController<AnimePlayerActivity> kedua =
+                         Robolectric.buildActivity(AnimePlayerActivity.class, intent())
+                                 .setup(out).visible()) {
+                assertEquals("mode landscape dipulihkan",
+                        android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                        kedua.get().getRequestedOrientation());
+            }
+        } finally {
+            controller.close();
+        }
+    }
+
+    // ------------------------------------------------ kontrol auto-hide 5 dtk
+
+    /**
+     * Kontrol hilang setelah 5 detik, muncul lagi saat diketuk, lalu hilang lagi.
+     *
+     * <p>{@code controlsPinned()} di-override agar perilaku penjadwalan diuji
+     * terpisah dari keadaan pemutar (tanpa perangkat, pemutar tidak pernah
+     * benar-benar memutar video).
+     */
+    @Test public void kontrolHilangSetelahLimaDetikDanMunculSaatDiketuk() throws Exception {
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            View top = activity.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_player_back");
+            View bar = (View) top.getParent();
+            View surface = activity.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_player_surface");
+
+            invoke(activity, "setFullscreen", true);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("kontrol tampil saat masuk layar penuh", View.VISIBLE, bar.getVisibility());
+
+            // Belum lima detik: masih tampil.
+            org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                    .idleFor(java.time.Duration.ofMillis(4_000));
+            assertEquals("belum hilang sebelum 5 detik", View.VISIBLE, bar.getVisibility());
+
+            // Lewat lima detik: tersembunyi.
+            org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                    .idleFor(java.time.Duration.ofMillis(1_800));
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("hilang setelah 5 detik", View.INVISIBLE, bar.getVisibility());
+
+            // Ketuk permukaan video: muncul lagi.
+            surface.performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("ketukan memunculkan kontrol", View.VISIBLE, bar.getVisibility());
+
+            // Dan hilang lagi setelah 5 detik tanpa interaksi.
+            org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                    .idleFor(java.time.Duration.ofMillis(5_800));
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("hilang lagi setelah 5 detik tanpa interaksi",
+                    View.INVISIBLE, bar.getVisibility());
+        }
+    }
+
+    /** Di luar layar penuh kontrol selalu terlihat. */
+    @Test public void kontrolSelaluTerlihatDiLuarLayarPenuh() throws Exception {
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            View bar = (View) activity.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_player_back").getParent();
+            org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                    .idleFor(java.time.Duration.ofMillis(8_000));
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("kontrol tidak pernah hilang di mode normal",
+                    View.VISIBLE, bar.getVisibility());
+        }
+    }
+
+    /** Ketukan pada tombol kontrol tidak diteruskan menjadi ketukan video. */
+    @Test public void ketukanPadaTombolTidakIkutMenyembunyikanKontrol() throws Exception {
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            View bar = (View) activity.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_player_back").getParent();
+            invoke(activity, "setFullscreen", true);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+
+            // Kontrol sempat tersembunyi, lalu tombol ditekan.
+            org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                    .idleFor(java.time.Duration.ofMillis(5_500));
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals(View.INVISIBLE, bar.getVisibility());
+
+            activity.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_player_more").performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("menekan tombol memunculkan kontrol, bukan menyembunyikannya lagi",
+                    View.VISIBLE, bar.getVisibility());
+        }
+    }
+
+    // ------------------------------------------------ tidak crash saat pilih server
+
+    /**
+     * Memilih server yang sudah tidak ada di daftar tidak melempar apa pun.
+     *
+     * <p>Akar crash: pilihan dicari dengan {@code mirrors.indexOf(mirror)}.
+     * Panel yang masih terbuka bisa memegang mirror dari daftar episode
+     * sebelumnya, sehingga hasilnya -1; indeks itu lalu dipakai untuk membaca
+     * dan menulis daftar — {@code mirrors.get(-1)} / {@code mirrors.set(-1, …)}
+     * melempar IndexOutOfBoundsException. Sekarang identitas mirror dipakai
+     * sebagai kunci, dan indeks tidak pernah dipakai untuk menulis.
+     */
+    @Test public void memilihMirrorBasiTidakCrash() throws Exception {
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            OtakudesuPlayback.Mirror basi = new OtakudesuPlayback.Mirror(
+                    "720p", "vidhide", "srv-1", 3, "");
+
+            // Tidak boleh melempar, dan status transisi kembali bersih.
+            invoke(activity, "pickServer", basi);
+            assertFalse("transisi tidak tertinggal menyala",
+                    (Boolean) field(activity, "switchingServer"));
+        }
+    }
+
+    /** Dua server pada resolusi sama punya identitas berbeda. */
+    @Test public void identitasMirrorTidakBentrokPadaResolusiSama() {
+        OtakudesuPlayback.Mirror odcdn = new OtakudesuPlayback.Mirror("480p", "odcdn", "", 0, "");
+        OtakudesuPlayback.Mirror vidhide = new OtakudesuPlayback.Mirror("480p", "vidhide", "", 1, "");
+        assertNotEquals("480p ODCDN dan 480p Vidhide bukan server yang sama",
+                odcdn.key(), vidhide.key());
+
+        // Kunci sama untuk mirror yang sama walau objeknya berbeda.
+        OtakudesuPlayback.Mirror salinan = new OtakudesuPlayback.Mirror("480p", "odcdn", "", 0, "");
+        assertEquals(odcdn.key(), salinan.key());
+    }
+
+    /** Memilih cepat berkali-kali tidak menjalankan dua transisi bersamaan. */
+    @Test public void pilihanCepatTidakMenjalankanDuaTransisi() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            java.lang.reflect.Field switching =
+                    AnimePlayerActivity.class.getDeclaredField("switchingServer");
+            switching.setAccessible(true);
+            switching.set(activity, true);
+            int sebelum = (Integer) field(activity, "serverGeneration");
+
+            OtakudesuPlayback.Mirror mirror = new OtakudesuPlayback.Mirror(
+                    "720p", "vidhide", "srv", 1, "");
+            invoke(activity, "pickServer", mirror);
+
+            assertEquals("tidak ada transisi baru saat yang lain berjalan",
+                    (int) sebelum, (int) (Integer) field(activity, "serverGeneration"));
+        } finally {
+            controller.close();
+        }
+    }
+
+    /** Galat pemutaran tidak menutup Activity. */
+    @Test public void galatPemutaranTidakMenutupActivity() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            invoke(activity, "showUnavailable", "Server tidak kompatibel.");
+            assertFalse("Activity tetap hidup", activity.isFinishing());
+            View galat = activity.getWindow().getDecorView()
+                    .findViewWithTag("anime_player_error");
+            assertEquals("pesan galat tampil", View.VISIBLE, galat.getVisibility());
+        } finally {
+            controller.close();
+        }
+    }
+
+
+    /**
+     * Menyimpan alamat pemutar untuk mirror yang sudah tidak ada tidak menyentuh
+     * daftar sama sekali.
+     *
+     * <p>Ini baris yang dulu melempar {@code IndexOutOfBoundsException}: penjaga
+     * {@code index < mirrors.size()} lolos untuk {@code index == -1}, lalu
+     * {@code mirrors.get(-1)} dan {@code mirrors.set(-1, …)} dijalankan.
+     */
+    @Test public void menyimpanAlamatPemutarTidakPernahMemakaiIndeksNegatif() throws Exception {
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            @SuppressWarnings("unchecked")
+            java.util.List<OtakudesuPlayback.Mirror> mirrors =
+                    (java.util.List<OtakudesuPlayback.Mirror>) field(activity, "mirrors");
+            mirrors.clear();
+            mirrors.add(new OtakudesuPlayback.Mirror("480p", "odcdn", "", 0, ""));
+            mirrors.add(new OtakudesuPlayback.Mirror("480p", "vidhide", "", 1, ""));
+
+            // Mirror basi: kuncinya tidak ada di daftar.
+            invoke(activity, "markMirrorPlayerUrl",
+                    new OtakudesuPlayback.Mirror("720p", "mega", "srv-x", 9, "").key(),
+                    "https://contoh.invalid/player");
+            assertEquals("daftar tidak berubah", 2, mirrors.size());
+            assertEquals("tidak ada mirror yang diisi", "", mirrors.get(0).playerUrl);
+
+            // Mirror yang benar: hanya barisnya sendiri yang diperbarui.
+            invoke(activity, "markMirrorPlayerUrl", mirrors.get(1).key(),
+                    "https://contoh.invalid/player");
+            assertEquals("480p ODCDN tidak ikut terisi", "", mirrors.get(0).playerUrl);
+            assertEquals("480p Vidhide terisi",
+                    "https://contoh.invalid/player", mirrors.get(1).playerUrl);
+        }
+    }
+
+    // ------------------------------------------------------------- perkakas
+
+    /** Subclass yang menganggap video sedang berjalan, untuk menguji timer. */
+    public static class Playable extends AnimePlayerActivity {
+        @Override protected boolean controlsPinned() {
+            return false;
+        }
+    }
+
+    private static Intent intent() {
+        Intent intent = new Intent(ApplicationProvider.getApplicationContext(),
+                Playable.class);
+        intent.putExtra("anime_id", "fxskc");
+        intent.putExtra("title", "FX Senshi Kurumi-chan");
+        intent.putExtra("episode_url",
+                "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/");
+        intent.putExtra("episode_label", "Episode 1");
+        return intent;
+    }
+
+    private static void invoke(Object target, String name, Object... args) throws Exception {
+        // Telusuri seluruh hierarki kelas: metode privat (setFullscreen,
+        // pickServer) dideklarasikan di AnimePlayerActivity, bukan di subclass uji.
+        Class<?> type = target.getClass();
+        while (type != null) {
+            for (java.lang.reflect.Method method : type.getDeclaredMethods()) {
+                if (!method.getName().equals(name)) continue;
+                if (method.getParameterTypes().length != args.length) continue;
+                method.setAccessible(true);
+                method.invoke(target, args);
+                return;
+            }
+            type = type.getSuperclass();
+        }
+        throw new NoSuchMethodException(name);
+    }
+
+    private static Object field(Object target, String name) throws Exception {
+        Class<?> type = target.getClass();
+        while (type != null) {
+            try {
+                java.lang.reflect.Field f = type.getDeclaredField(name);
+                f.setAccessible(true);
+                return f.get(target);
+            } catch (NoSuchFieldException ignored) {
+                type = type.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
+    }
+
 }

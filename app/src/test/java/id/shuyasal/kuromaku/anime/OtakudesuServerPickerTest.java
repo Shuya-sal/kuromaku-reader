@@ -341,8 +341,8 @@ public class OtakudesuServerPickerTest {
 
     @Test public void pilihanPanelMenyebutStatusTerpisahDariNama() {
         List<OtakudesuPlayback.Mirror> mirrors = OtakudesuServerPicker.parseMirrors(episode());
-        LinkedHashMap<Integer, OtakudesuPlayback.Source> probed = new LinkedHashMap<>();
-        probed.put(0, new OtakudesuPlayback.Source(
+        LinkedHashMap<String, OtakudesuPlayback.Source> probed = new LinkedHashMap<>();
+        probed.put(mirrors.get(0).key(), new OtakudesuPlayback.Source(
                 "https://cdn.odcloud.net/a_720p.mp4", OtakudesuPlayback.Kind.PROGRESSIVE, "720p"));
 
         List<OtakudesuPlayback.Choice> choices =

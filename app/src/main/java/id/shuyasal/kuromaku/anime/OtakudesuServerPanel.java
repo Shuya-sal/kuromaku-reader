@@ -67,13 +67,13 @@ final class OtakudesuServerPanel {
      * Menyusun tampilan panel.
      *
      * @param mirrors       semua mirror yang tersedia, urut seperti di sumber
-     * @param probed        indeks mirror → sumber hasil pemeriksaan (boleh kosong)
-     * @param probing       indeks mirror yang sedang diperiksa
+     * @param probed        kunci mirror → sumber hasil pemeriksaan (boleh kosong)
+     * @param probing       kunci mirror yang sedang diperiksa
      * @param listener      aksi pengguna
      */
     View build(List<OtakudesuPlayback.Mirror> mirrors,
-               LinkedHashMap<Integer, OtakudesuPlayback.Source> probed,
-               List<Integer> probing,
+               LinkedHashMap<String, OtakudesuPlayback.Source> probed,
+               List<String> probing,
                Listener listener) {
         ScrollView scroll = new ScrollView(context);
         scroll.setTag("anime_server_panel");
@@ -96,9 +96,9 @@ final class OtakudesuServerPanel {
         for (String quality : groups.keySet()) {
             column.addView(groupHeader(quality));
             for (OtakudesuPlayback.Mirror mirror : groups.get(quality)) {
-                int index = mirrors.indexOf(mirror);
-                column.addView(row(mirror, index, probed.get(index),
-                        probing.contains(index), listener));
+                String id = mirror.key();
+                column.addView(row(mirror, mirror.index, probed.get(id),
+                        probing.contains(id), listener));
             }
         }
 
@@ -254,16 +254,16 @@ final class OtakudesuServerPanel {
 
     /** Pilihan sintetis untuk hasil pemeriksaan yang dipakai pemutar. */
     static List<OtakudesuPlayback.Choice> choices(List<OtakudesuPlayback.Mirror> mirrors,
-                                                 LinkedHashMap<Integer, OtakudesuPlayback.Source> probed) {
+                                                 LinkedHashMap<String, OtakudesuPlayback.Source> probed) {
         List<OtakudesuPlayback.Choice> choices = new ArrayList<>();
         for (int i = 0; i < mirrors.size(); i++) {
             OtakudesuPlayback.Mirror mirror = mirrors.get(i);
             choices.add(new OtakudesuPlayback.Choice(
                     mirror.quality,
                     summary(mirror),
-                    probed.get(i),
+                    probed.get(mirror.key()),
                     i,
-                    probed.get(i) == null
+                    probed.get(mirror.key()) == null
                             ? OtakudesuServerPicker.Status.UNTESTED
                             : OtakudesuServerPicker.Status.READY));
         }
