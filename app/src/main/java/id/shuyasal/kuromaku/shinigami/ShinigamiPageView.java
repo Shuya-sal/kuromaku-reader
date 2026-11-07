@@ -43,8 +43,13 @@ public final class ShinigamiPageView extends FrameLayout {
      *
      * <p>Pembagiannya disengaja: <b>satu ketukan</b> untuk masuk/keluar layar
      * penuh, <b>dua ketukan</b> untuk zoom 2×, <b>tiga ketukan</b> untuk zoom 3×.
-     * Ketukan tunggal tidak lagi membuka zoom, karena sekarang itu tombol layar
-     * penuh.
+     *
+     * <p>Ketukan tunggal baru dijalankan setelah {@link ShinigamiTaps#WINDOW_MS}
+     * milik {@code onSingleTapConfirmed} habis tanpa ketukan lanjutan. Jadi
+     * rangkaian yang ternyata dua atau tiga ketukan tidak pernah sempat
+     * mengubah layar penuh — perilaku yang sama dengan yang diminta pada
+     * {@code GestureDetector.onSingleTapConfirmed()} dan
+     * {@code onDoubleTap()}: aksi ketukan tunggal harus dipastikan dulu.
      */
     public interface ZoomRequest {
         /**
@@ -71,6 +76,13 @@ public final class ShinigamiPageView extends FrameLayout {
     private float downY;
     private boolean tapMoved;
     private final float tapSlop;
+    /**
+     * Menyelesaikan rangkaian ketukan setelah jendela konfirmasi habis.
+     *
+     * <p>Inilah padanan {@code onSingleTapConfirmed()}: satu ketukan dijalankan
+     * di sini, bukan pada {@code ACTION_UP}, sehingga rangkaian yang ternyata
+     * dua atau tiga ketukan tidak pernah memicu layar penuh.
+     */
     private final Runnable resolveTaps = () -> {
         int count = taps.resolve();
         if (zoomRequest == null) return;
@@ -144,17 +156,29 @@ public final class ShinigamiPageView extends FrameLayout {
     }
 
     /**
-     * Satu ketukan pada gambar, tanpa menunggu jendela ketukan berakhir.
+     * Aksi satu ketukan yang <b>sudah dikonfirmasi</b>: masuk/keluar layar penuh.
      *
-     * <p>Dipanggil oleh tes dan oleh gestur sungguhan lewat {@link #trackTaps}.
-     * Jalur ini sengaja tidak menunggu: satu ketukan tidak lagi perlu
-     * dibedakan dari dua ketukan untuk urusan layar penuh, karena menunggu
-     * membuat layar penuh terasa lambat.
+     * <p>Ini jalur yang sama dengan {@code onSingleTapConfirmed()}. Gestur
+     * sungguhan sampai ke sini lewat {@link #resolveTaps} setelah jendela
+     * konfirmasi habis, sehingga rangkaian dua atau tiga ketukan tidak pernah
+     * memicunya.
      */
     public void tapOnce(float focusY) {
         taps.reset();
         if (zoomRequest == null) return;
         zoomRequest.onSingleTap(Math.max(0f, Math.min(1f, focusY)));
+    }
+
+    /**
+     * Menunggu jendela konfirmasi untuk gestur yang sedang berjalan.
+     *
+     * <p>Dipakai tes: setelah ketukan sungguhan masuk lewat
+     * {@link #onInterceptTouchEvent}, tunggu selama ini untuk melihat apakah
+     * rangkaiannya berakhir sebagai satu ketukan atau berlanjut.
+     */
+    public void settleTaps() {
+        tapsHandler.removeCallbacks(resolveTaps);
+        resolveTaps.run();
     }
 
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
@@ -175,17 +199,26 @@ public final class ShinigamiPageView extends FrameLayout {
                 break;
             case MotionEvent.ACTION_UP:
                 if (tapMoved) {
+                    // Jari bergeser lebih dari ambang: ini gulir atau geser,
+                    // bukan ketukan. Rangkaian ketukan dibatalkan supaya
+                    // menggulir tidak pernah mengubah layar penuh.
                     taps.reset();
+                    tapsHandler.removeCallbacks(resolveTaps);
                     break;
                 }
                 tapX = event.getX();
                 tapY = event.getY();
-                if (taps.register(android.os.SystemClock.uptimeMillis()) == 1) {
-                    // Ketukan pertama diteruskan langsung: layar penuh harus
-                    // terasa seketika, bukan menunggu 280 ms untuk memastikan
-                    // pengguna tidak sedang mengetuk dua kali.
-                    tapOnce(tapY / Math.max(1, getHeight()));
+                int registered = taps.register(android.os.SystemClock.uptimeMillis());
+                if (registered >= 3) {
+                    // Tiga ketukan sudah pasti: tidak ada yang perlu ditunggu.
+                    tapsHandler.removeCallbacks(resolveTaps);
+                    resolveTaps.run();
+                    break;
                 }
+                // Satu dan dua ketukan menunggu jendela konfirmasi. Ketukan yang
+                // ternyata berlanjut membatalkan aksi sebelumnya lewat
+                // resolveTaps, sehingga aksi ketukan tunggal tidak pernah jalan
+                // untuk rangkaian dua atau tiga ketukan.
                 tapsHandler.removeCallbacks(resolveTaps);
                 tapsHandler.postDelayed(resolveTaps, ShinigamiTaps.WINDOW_MS);
                 break;

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
@@ -299,13 +300,13 @@ public class ShinigamiReaderNavTest {
     }
 
     /**
-     * Ketukan tunggal pada gambar harus menyalakan/mematikan layar penuh, dan
-     * tidak menggeser halaman.
+     * Satu ketukan pada gambar menyalakan dan mematikan layar penuh, dan
+     * mengembalikan bilah aplikasi saat keluar.
      *
-     * <p>Pemeriksaannya langsung pada jalur yang dipakai pembaca: satu
-     * {@link ShinigamiPageView} diberi pengendali yang sama dengan yang dipasang
-     * adapter, lalu diperiksa bahwa bilah dan panah chapter benar-benar
-     * disembunyikan lalu dimunculkan kembali.
+     * <p>Ketukan dikirim sebagai {@link android.view.MotionEvent} sungguhan
+     * lewat {@code onInterceptTouchEvent} — jalur yang sama dengan sentuhan
+     * pengguna — lalu jendela konfirmasi dilewati dengan
+     * {@code settleTaps()}, padanan {@code onSingleTapConfirmed()}.
      */
     @Test public void satuKetukanPadaGambarMasukDanKeluarLayarPenuh() throws Exception {
         try (ActivityController<Reader> controller =
@@ -328,11 +329,13 @@ public class ShinigamiReaderNavTest {
                 }
             });
 
-            page.tapOnce(0.5f);
+            tapAt(page, 40f, 400f);
+            page.settleTaps();
             assertEquals("satu ketukan menyembunyikan bilah", View.GONE, bar.getVisibility());
             assertEquals("satu ketukan menyembunyikan panah chapter", View.GONE, nav.getVisibility());
 
-            page.tapOnce(0.5f);
+            tapAt(page, 40f, 400f);
+            page.settleTaps();
             assertEquals("ketukan berikutnya memunculkan bilah lagi",
                     View.VISIBLE, bar.getVisibility());
             assertEquals(View.VISIBLE, nav.getVisibility());
@@ -340,21 +343,25 @@ public class ShinigamiReaderNavTest {
     }
 
     /**
-     * Pembagian gestur: satu ketukan layar penuh, dua dan tiga ketukan zoom.
-     * Ketukan tunggal tidak boleh ikut membuka zoom.
+     * Rangkaian dua ketukan <b>tidak</b> boleh mengubah layar penuh.
+     *
+     * <p>Inilah permintaan "jangan langsung dijalankan pada tap pertama": aksi
+     * ketukan tunggal menunggu jendela konfirmasi, jadi ketukan kedua
+     * membatalkannya dan hanya membuka zoom.
      */
-    @Test public void satuKetukanTidakMembukaZoom() throws Exception {
+    @Test public void duaKetukanTidakMengubahLayarPenuh() throws Exception {
         try (ActivityController<Reader> controller =
                      Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
             Reader reader = controller.get();
             await(reader);
+            View bar = (View) tagged(reader, "shinigami_reader_fullscreen").getParent();
 
             ShinigamiPageView page = new ShinigamiPageView(reader);
-            final int[] zoomed = {0};
+            final int[] zoom = {0};
             final int[] toggled = {0};
             page.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
                 @Override public void onZoom(int factor, float focusY) {
-                    zoomed[0]++;
+                    zoom[0] = factor;
                 }
 
                 @Override public void onSingleTap(float focusY) {
@@ -362,10 +369,148 @@ public class ShinigamiReaderNavTest {
                 }
             });
 
-            page.tapOnce(0.35f);
-            assertEquals("satu ketukan hanya menyalakan layar penuh", 1, toggled[0]);
-            assertEquals("satu ketukan tidak boleh membuka zoom", 0, zoomed[0]);
+            tapAt(page, 40f, 400f);
+            tapAt(page, 40f, 400f);
+            page.settleTaps();
+
+            assertEquals("dua ketukan membuka zoom 2x", 2, zoom[0]);
+            assertEquals("dua ketukan tidak mengubah layar penuh", 0, toggled[0]);
+            assertEquals("bilah tetap seperti semula", View.VISIBLE, bar.getVisibility());
         }
+    }
+
+    /** Tiga ketukan: zoom 3x, layar penuh tidak tersentuh. */
+    @Test public void tigaKetukanTidakMengubahLayarPenuh() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            ShinigamiPageView page = new ShinigamiPageView(reader);
+            final int[] zoom = {0};
+            final int[] toggled = {0};
+            page.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
+                @Override public void onZoom(int factor, float focusY) {
+                    zoom[0] = factor;
+                }
+
+                @Override public void onSingleTap(float focusY) {
+                    toggled[0]++;
+                }
+            });
+
+            tapAt(page, 40f, 400f);
+            tapAt(page, 40f, 400f);
+            tapAt(page, 40f, 400f);
+            page.settleTaps();
+
+            assertEquals("tiga ketukan membuka zoom 3x", 3, zoom[0]);
+            assertEquals("tiga ketukan tidak mengubah layar penuh", 0, toggled[0]);
+        }
+    }
+
+    /**
+     * Menggulir atau menggeser gambar tidak pernah mengubah layar penuh,
+     * walaupun ada ketukan di ujungnya.
+     */
+    @Test public void geserTidakMengubahLayarPenuh() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            ShinigamiPageView page = new ShinigamiPageView(reader);
+            final int[] toggled = {0};
+            page.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
+                @Override public void onZoom(int factor, float focusY) {
+                }
+
+                @Override public void onSingleTap(float focusY) {
+                    toggled[0]++;
+                }
+            });
+
+            // Jari turun, bergeser jauh (menggulir), lalu lepas.
+            long now = android.os.SystemClock.uptimeMillis();
+            page.onInterceptTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, 40f, 600f, 0));
+            page.onInterceptTouchEvent(android.view.MotionEvent.obtain(
+                    now, now + 40, android.view.MotionEvent.ACTION_MOVE, 40f, 300f, 0));
+            page.onInterceptTouchEvent(android.view.MotionEvent.obtain(
+                    now, now + 80, android.view.MotionEvent.ACTION_UP, 40f, 300f, 0));
+            page.settleTaps();
+
+            assertEquals("geser bukan ketukan", 0, toggled[0]);
+        }
+    }
+
+    /** Ketukan pada tombol toolbar tidak boleh ikut mengubah layar penuh. */
+    @Test public void tombolToolbarTidakMemicuKetukanGambar() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            // Tombol lain di toolbar ditekan: mode tidak berubah.
+            View bar = (View) tagged(reader, "shinigami_reader_fullscreen").getParent();
+            tagged(reader, "shinigami_reader_more").performClick();
+            assertEquals("menekan tombol toolbar tidak mengubah mode",
+                    View.VISIBLE, bar.getVisibility());
+        }
+    }
+
+    /**
+     * Beralih mode tidak boleh menggeser posisi baca.
+     *
+     * <p>Bilah atas dan bar navigasi memakai ruang tata letaknya sendiri di
+     * luar daftar halaman, jadi menyembunyikannya tidak memindahkan satu pun
+     * halaman. Tes ini mengunci sifat itu: daftar tetap pada posisi yang sama
+     * sebelum dan sesudah mode berubah, dan tidak ada adapter yang dibuat ulang.
+     */
+    @Test public void beralihModeTidakMenggeserPosisiBaca() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            androidx.recyclerview.widget.RecyclerView list =
+                    (androidx.recyclerview.widget.RecyclerView)
+                            tagged(reader, "shinigami_reader_list");
+            androidx.recyclerview.widget.RecyclerView.Adapter<?> before = list.getAdapter();
+            androidx.recyclerview.widget.LinearLayoutManager manager =
+                    (androidx.recyclerview.widget.LinearLayoutManager)
+                            list.getLayoutManager();
+            int firstBefore = manager.findFirstVisibleItemPosition();
+            int heightBefore = list.getHeight();
+
+            tagged(reader, "shinigami_reader_fullscreen").performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+
+            assertSame("daftar tidak boleh dibuat ulang", before, list.getAdapter());
+            assertSame("LayoutManager tidak boleh dibuat ulang", manager, list.getLayoutManager());
+            assertEquals("halaman pertama yang terlihat tidak berpindah",
+                    firstBefore, manager.findFirstVisibleItemPosition());
+            assertTrue("area baca bertambah tinggi saat bilah disembunyikan",
+                    list.getHeight() > heightBefore);
+
+            tagged(reader, "shinigami_reader_fullscreen").performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+
+            assertSame("keluar mode juga tidak membuat ulang daftar", before, list.getAdapter());
+            assertSame(manager, list.getLayoutManager());
+            assertEquals("kembali normal pada halaman yang sama",
+                    firstBefore, manager.findFirstVisibleItemPosition());
+            assertEquals("tinggi kembali seperti semula", heightBefore, list.getHeight());
+        }
+    }
+
+    /** Ketukan pada gambar dalam satu titik, seperti sentuhan sungguhan. */
+    private static void tapAt(ShinigamiPageView page, float x, float y) {
+        long now = android.os.SystemClock.uptimeMillis();
+        page.onInterceptTouchEvent(android.view.MotionEvent.obtain(
+                now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+        page.onInterceptTouchEvent(android.view.MotionEvent.obtain(
+                now, now + 20, android.view.MotionEvent.ACTION_UP, x, y, 0));
     }
 
     @Test public void areaKetukLayarPenuhTidakLagiAdaKarenaGambarSendiriYangJadiTombol() throws Exception {

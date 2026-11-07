@@ -391,25 +391,47 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         return size == null ? 800 : size[0];
     }
 
+    /**
+     * Masuk atau keluar layar penuh tanpa menyentuh isi bacaan.
+     *
+     * <p>Yang berubah hanya tinggi bilah, bukan daftar halaman: bilah atas dan
+     * bar navigasi chapter memakai ruang tata letak sendiri di luar daftar
+     * halaman, jadi menyembunyikannya menambah tinggi area baca tanpa
+     * memindahkan posisi satu pun halaman. Tidak ada adapter yang dibuat ulang,
+     * tidak ada halaman yang dimuat ulang, dan tidak ada scroll yang direset —
+     * karena itu tidak ada kedipan maupun layar hitam saat beralih mode.
+     *
+     * <p>Saat keluar, bilah aplikasi <b>dan</b> bilah sistem dikembalikan, lalu
+     * padding dari window insets dipasang ulang supaya toolbar tidak tertutup
+     * status bar.
+     */
     private void toggleFullscreen() {
         fullscreen = !fullscreen;
         bar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
         if (chapterNav != null) chapterNav.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+
+        androidx.core.view.WindowInsetsControllerCompat controller =
+                androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (fullscreen) {
-            Toast.makeText(this, "Layar penuh. Ketuk sekali pada gambar untuk keluar.",
-                    Toast.LENGTH_SHORT).show();
-        }
-        if (fullscreen) {
-            androidx.core.view.WindowInsetsControllerCompat controller =
-                    androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
             controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
             controller.setSystemBarsBehavior(
                     androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         } else {
-            androidx.core.view.WindowInsetsControllerCompat controller =
-                    androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
             controller.show(androidx.core.view.WindowInsetsCompat.Type.systemBars());
         }
+        applyReaderInsets();
+    }
+
+    /**
+     * Pasang ulang padding dari tinggi bilah sistem.
+     *
+     * <p>Dipanggil setiap kali mode berubah: saat layar penuh tingginya nol,
+     * dan saat kembali normal toolbar mendapat ruangnya lagi.
+     */
+    private void applyReaderInsets() {
+        View root = findViewById(android.R.id.content);
+        if (root == null) return;
+        androidx.core.view.ViewCompat.requestApplyInsets(root);
     }
 
     /**
