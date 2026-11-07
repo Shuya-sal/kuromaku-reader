@@ -34,6 +34,7 @@ public final class OtakudesuStore {
     private static final String KEY_HISTORY_V2 = "history_v2";
     private static final String KEY_LAST_EPISODE = "last_episode:";
     private static final String KEY_WATCHED = "watched:";
+    private static final String KEY_POSITION = "position:";
     private static final int HISTORY_LIMIT = 40;
     private static final int WATCHED_LIMIT = 500;
 
@@ -301,6 +302,89 @@ public final class OtakudesuStore {
             array.put(item);
         }
         prefs.edit().putString(KEY_HISTORY_V2, array.toString()).apply();
+    }
+
+    // ------------------------------------------------- posisi pemutaran native
+
+    /** Posisi tonton satu episode; dipakai pemutar native untuk melanjutkan. */
+    public static final class Progress {
+        public final long positionMs;
+        public final long durationMs;
+        public final long updatedAt;
+        public final boolean finished;
+
+        public Progress(long positionMs, long durationMs, long updatedAt, boolean finished) {
+            this.positionMs = Math.max(0, positionMs);
+            this.durationMs = Math.max(0, durationMs);
+            this.updatedAt = updatedAt;
+            this.finished = finished;
+        }
+
+        /** 0..100, atau -1 bila durasi belum diketahui. */
+        public int percent() {
+            if (durationMs <= 0) return -1;
+            return Math.max(0, Math.min(100,
+                    Math.round(positionMs * 100f / durationMs)));
+        }
+
+        /** Lanjutkan hanya bila ada posisi yang berarti dan belum selesai. */
+        public long resumePositionMs() {
+            if (finished) return 0L;
+            return positionMs >= 5_000L ? positionMs : 0L;
+        }
+    }
+
+    public Progress progress(String animeId, String episodeKey) {
+        if (animeId == null || animeId.isEmpty()) return null;
+        if (episodeKey == null || episodeKey.isEmpty()) return null;
+        String raw = prefs.getString(KEY_POSITION + animeId + "|" + episodeKey, "");
+        if (raw == null || raw.isEmpty()) return null;
+        try {
+            JSONObject item = new JSONObject(raw);
+            return new Progress(item.optLong("position", 0L), item.optLong("duration", 0L),
+                    item.optLong("updated", 0L), item.optBoolean("finished", false));
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Menyimpan posisi pemutaran. Nilai tidak pernah mundur kecuali episode
+     * ditonton ulang dari awal setelah selesai.
+     */
+    public void saveProgress(String animeId, String episodeKey, long positionMs,
+                             long durationMs, boolean finished) {
+        if (animeId == null || animeId.isEmpty()) return;
+        if (episodeKey == null || episodeKey.isEmpty()) return;
+        Progress previous = progress(animeId, episodeKey);
+        long position = Math.max(0, positionMs);
+        long duration = Math.max(durationMs, previous == null ? 0 : previous.durationMs);
+        if (previous != null && !previous.finished && !finished) {
+            position = Math.max(position, previous.positionMs);
+        }
+        boolean done = finished || (duration > 0 && position >= duration - 5_000L);
+        JSONObject item = new JSONObject();
+        try {
+            item.put("position", position);
+            item.put("duration", duration);
+            item.put("updated", System.currentTimeMillis());
+            item.put("finished", done);
+        } catch (Exception ignored) {
+            return;
+        }
+        prefs.edit().putString(KEY_POSITION + animeId + "|" + episodeKey,
+                item.toString()).apply();
+    }
+
+    /** Semua posisi tersimpan untuk satu anime. */
+    public List<String> progressKeys(String animeId) {
+        List<String> keys = new ArrayList<>();
+        if (animeId == null) return keys;
+        String prefix = KEY_POSITION + animeId + "|";
+        for (String key : prefs.getAll().keySet()) {
+            if (key.startsWith(prefix)) keys.add(key.substring(prefix.length()));
+        }
+        return keys;
     }
 
     // ------------------------------------------------ episode yang sudah dibuka

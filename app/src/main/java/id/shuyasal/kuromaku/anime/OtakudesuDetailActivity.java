@@ -421,16 +421,16 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
 
     private void watch(OtakudesuAnime.Episode episode) {
         if (episode == null) return;
-        Intent intent = new Intent(this, OtakudesuPlayerActivity.class)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_ANIME_ID, animeId)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_ANIME_TITLE, animeTitle)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_ANIME_POSTER, animePoster)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_URL, episode.url)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_LABEL, episode.label)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_NUMBER,
+        Intent intent = new Intent(this, AnimePlayerActivity.class)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_ID, animeId)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_TITLE, animeTitle)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_POSTER, animePoster)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_URL, episode.url)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_LABEL, episode.label)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_NUMBER,
                         (int) Math.round(Math.max(0, episode.number)))
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_TOTAL, parseTotal())
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODES,
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_TOTAL, parseTotal())
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODES,
                         OtakudesuEpisodes.toJson(storyOrder()));
         startActivity(intent);
     }

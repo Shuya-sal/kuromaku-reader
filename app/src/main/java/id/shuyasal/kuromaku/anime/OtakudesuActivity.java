@@ -749,14 +749,14 @@ public class OtakudesuActivity extends AppCompatActivity {
             startActivity(intent);
             return;
         }
-        startActivity(new Intent(this, OtakudesuPlayerActivity.class)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_ANIME_ID, entry.animeId)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_ANIME_TITLE, entry.title)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_ANIME_POSTER, entry.posterUrl)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_URL, entry.episodeUrl)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_LABEL, entry.episodeLabel)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_NUMBER, entry.number)
-                .putExtra(OtakudesuPlayerActivity.EXTRA_EPISODE_TOTAL, entry.total));
+        startActivity(new Intent(this, AnimePlayerActivity.class)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_ID, entry.animeId)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_TITLE, entry.title)
+                .putExtra(AnimePlayerActivity.EXTRA_ANIME_POSTER, entry.posterUrl)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_URL, entry.episodeUrl)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_LABEL, entry.episodeLabel)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_NUMBER, entry.number)
+                .putExtra(AnimePlayerActivity.EXTRA_EPISODE_TOTAL, entry.total));
     }
 
     static boolean isDayName(String value) {
@@ -939,8 +939,14 @@ public class OtakudesuActivity extends AppCompatActivity {
             holder.title.setText(entry.title.isEmpty() ? entry.animeId : entry.title);
             StringBuilder meta = new StringBuilder();
             if (!entry.episodeLabel.isEmpty()) meta.append(entry.episodeLabel);
-            int percent = entry.progressPercent();
-            if (percent >= 0) {
+            // Utamakan posisi pemutaran native; nomor episode hanya cadangan.
+            OtakudesuStore.Progress progress = store.progress(entry.animeId,
+                    OtakudesuSource.episodeId(entry.episodeUrl));
+            int percent = progress != null ? progress.percent() : entry.progressPercent();
+            if (progress != null && progress.finished) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append("Selesai");
+            } else if (percent >= 0) {
                 if (meta.length() > 0) meta.append(" · ");
                 meta.append(percent).append('%');
             }

@@ -52,9 +52,9 @@
             android:exported="false" />
 
         <activity
-            android:name=".anime.OtakudesuPlayerActivity"
+            android:name=".anime.AnimePlayerActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|keyboardHidden" />
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" />
 
         <activity
             android:name=".shinigami.ShinigamiDetailActivity"

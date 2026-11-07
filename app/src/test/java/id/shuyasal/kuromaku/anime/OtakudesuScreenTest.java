@@ -281,7 +281,7 @@ public class OtakudesuScreenTest {
     @Test public void tigaActivityAnimeTerdaftarDiManifest() {
         Context context = ApplicationProvider.getApplicationContext();
         for (Class<?> screen : new Class<?>[]{OtakudesuActivity.class,
-                OtakudesuDetailActivity.class, OtakudesuPlayerActivity.class}) {
+                OtakudesuDetailActivity.class, AnimePlayerActivity.class}) {
             Intent intent = new Intent(context, screen);
             assertNotNull(screen.getSimpleName() + " harus terdaftar",
                     context.getPackageManager().resolveActivity(intent, 0));

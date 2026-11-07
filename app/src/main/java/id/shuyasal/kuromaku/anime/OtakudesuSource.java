@@ -36,7 +36,6 @@ public final class OtakudesuSource {
     private static final String USER_AGENT =
             "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) "
                     + "Chrome/120.0 Mobile Safari/537.36 Kuromaku/1.0";
-    private static final int MAX_BODY = 4 * 1024 * 1024;
     private static final Pattern EPISODE_NUMBER =
             Pattern.compile("(?i)episode\\s*([0-9]+(?:[.,][0-9]+)?)");
 
@@ -58,6 +57,20 @@ public final class OtakudesuSource {
     interface Transport {
         String get(String url) throws IOException, SourceException;
     }
+
+    /** Ukuran respons dibatasi agar satu halaman tidak menghabiskan memori. */
+    static final int MAX_BODY = 4 * 1024 * 1024;
+
+    private static final OkHttpClient POST_CLIENT = new OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .callTimeout(35, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .build();
+
+    private static final String MOBILE_UA =
+            "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) "
+                    + "Chrome/120.0 Mobile Safari/537.36 Kuromaku/1.0";
 
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -336,6 +349,77 @@ public final class OtakudesuSource {
             }
         }
         return max;
+    }
+
+    /** HTML mentah satu halaman; dipakai pemeriksa sumber video. */
+    public String html(String url) throws SourceException {
+        return getHtml(url);
+    }
+
+    /** HTML halaman apa pun (termasuk halaman penyedia) untuk pemeriksaan. */
+    public static String fetchHtml(String url) throws SourceException {
+        if (url == null || !url.startsWith("https://")) {
+            throw new SourceException("Alamat sumber harus HTTPS.");
+        }
+        try {
+            Request request = new Request.Builder().url(url)
+                    .header("User-Agent", MOBILE_UA)
+                    .header("Accept", "text/html,application/xhtml+xml")
+                    .build();
+            try (Response response = POST_CLIENT.newCall(request).execute()) {
+                ResponseBody body = response.body();
+                if (response.code() < 200 || response.code() >= 300) {
+                    throw new SourceException("Sumber menolak permintaan (HTTP "
+                            + response.code() + ").");
+                }
+                if (body == null) throw new SourceException("Respons sumber kosong.");
+                String text = body.string();
+                if (text.length() > MAX_BODY) throw new SourceException("Halaman terlalu besar.");
+                return text;
+            }
+        } catch (IOException error) {
+            throw new SourceException(
+                    "Sumber tidak dapat diakses: koneksi gagal atau waktu tunggu habis.", error);
+        }
+    }
+
+    /**
+     * POST form ke halaman sumber, dipakai untuk memilih mirror seperti yang
+     * dilakukan halaman episode. Tidak ada token atau kredensial yang dikarang:
+     * parameter dan nilainya sama dengan yang dikirim halaman itu sendiri.
+     */
+    public static String postForm(String url, List<String[]> fields) throws SourceException {
+        if (url == null || !url.startsWith("https://")) {
+            throw new SourceException("Alamat sumber harus HTTPS.");
+        }
+        okhttp3.FormBody.Builder form = new okhttp3.FormBody.Builder();
+        if (fields != null) {
+            for (String[] field : fields) {
+                if (field == null || field.length < 2) continue;
+                form.add(field[0], field[1] == null ? "" : field[1]);
+            }
+        }
+        Request request = new Request.Builder()
+                .url(url)
+                .header("User-Agent", MOBILE_UA)
+                .header("Referer", BASE + "/")
+                .header("X-Requested-With", "XMLHttpRequest")
+                .post(form.build())
+                .build();
+        try (Response response = POST_CLIENT.newCall(request).execute()) {
+            ResponseBody body = response.body();
+            if (response.code() < 200 || response.code() >= 300) {
+                throw new SourceException("Sumber menolak permintaan (HTTP "
+                        + response.code() + ").");
+            }
+            if (body == null) throw new SourceException("Respons sumber kosong.");
+            String text = body.string();
+            if (text.length() > MAX_BODY) throw new SourceException("Respons terlalu besar.");
+            return text;
+        } catch (IOException error) {
+            throw new SourceException(
+                    "Sumber tidak dapat diakses: koneksi gagal atau waktu tunggu habis.", error);
+        }
     }
 
     private String getHtml(String url) throws SourceException {
