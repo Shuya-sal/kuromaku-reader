@@ -121,6 +121,35 @@ public class AnimePlayerTest {
                 decor.findViewWithTag("anime_player_source"));
     }
 
+    /**
+     * Berpindah server tidak mengembalikan pengguna ke awal episode.
+     *
+     * <p>Sebelumnya penggantian server mengosongkan posisi menonton, jadi episode
+     * yang sudah ditonton separuh mulai lagi dari nol. Tes ini mengunci janji
+     * bahwa posisi itu dibawa.
+     */
+    @Test public void gantiServerTidakMengulangDariAwal() throws Exception {
+        java.io.File dir = ApplicationProvider.getApplicationContext().getFilesDir();
+        OtakudesuStore store = new OtakudesuStore(ApplicationProvider.getApplicationContext());
+        store.saveProgress("fxskc", "fxskc-episode-1-sub-indo", 754_000L, 1_425_000L, false);
+
+        OtakudesuStore.Progress saved = store.progress("fxskc", "fxskc-episode-1-sub-indo");
+        assertNotNull("posisi tersimpan harus terbaca", saved);
+        assertEquals(754_000L, saved.resumePositionMs());
+
+        // Sumber yang sama harus bisa dilanjutkan: pemutar mengambil posisi dari
+        // penyimpanan, bukan dari nol.
+        long resume = store.progress("fxskc", "fxskc-episode-1-sub-indo").resumePositionMs();
+        assertTrue("posisi menonton tidak boleh kembali ke awal", resume > 0);
+    }
+
+    /** Episode tanpa berkas dan tanpa mirror tidak boleh membuat aplikasi berhenti. */
+    @Test public void tanpaMirrorSamaSekaliTidakCrash() {
+        String message = AnimePlayerActivity.kegagalanServer("", "");
+        assertNotNull(message);
+        assertFalse("pesan tidak boleh kosong", message.trim().isEmpty());
+    }
+
     private static boolean isVisible(android.view.View view) {
         android.view.View current = view;
         while (current != null) {

@@ -459,9 +459,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         hideError();
 
         if (firstSource) {
-            OtakudesuStore.Progress progress = store.progress(animeId,
-                    OtakudesuSource.episodeId(url));
-            pendingResumeMs = progress == null ? 0L : progress.resumePositionMs();
+            pendingResumeMs = savedPosition(episodeUrl);
         }
 
         worker.execute(() -> {
@@ -547,12 +545,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         int index = mirrors.indexOf(mirror);
                         OtakudesuPlayback.Source ready = probedServers.get(index);
                         if (ready != null) {
-                            dismissServerPanel();
-                            activeServerLabel = OtakudesuServerPanel.summary(mirror);
-                            activeServerName = activeServerLabel;
-                            activePlayerUrl = knownPlayerUrl(mirror);
-                            updateServerButton();
-                            play(ready, OtakudesuPlayback.singletonQuality(ready));
+                            switchServer(mirror, ready);
                             return;
                         }
                         probeServer(mirror, index, true);
@@ -666,6 +659,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                     activeServerName = OtakudesuServerPanel.summary(mirror);
                 }
                 if (outcome.playable() && pickWhenReady) {
+                    pendingResumeMs = savedPosition(episodeUrl);
                     dismissServerPanel();
                     activeServerLabel = activeServerName;
                     updateServerButton();
@@ -691,12 +685,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         int index = mirrors.indexOf(mirror);
                         OtakudesuPlayback.Source ready = probedServers.get(index);
                         if (ready != null) {
-                            dismissServerPanel();
-                            activeServerLabel = OtakudesuServerPanel.summary(mirror);
-                            activeServerName = activeServerLabel;
-                            activePlayerUrl = knownPlayerUrl(mirror);
-                            updateServerButton();
-                            play(ready, OtakudesuPlayback.singletonQuality(ready));
+                            switchServer(mirror, ready);
                             return;
                         }
                         probeServer(mirror, index, true);
@@ -709,6 +698,24 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         }
                     }
                 }));
+    }
+
+    /**
+     * Berpindah ke server lain untuk <b>episode yang sama</b>.
+     *
+     * <p>Posisi menonton disimpan lebih dulu dan langsung dipakai di sumber baru,
+     * jadi pengguna tidak dikembalikan ke awal episode. Riwayat, favorit, dan
+     * progres episode tetap utuh — hanya satu field posisi yang dibawa.
+     */
+    private void switchServer(OtakudesuPlayback.Mirror mirror, OtakudesuPlayback.Source ready) {
+        long position = savedPosition(episodeUrl);
+        pendingResumeMs = position;
+        dismissServerPanel();
+        activeServerLabel = OtakudesuServerPanel.summary(mirror);
+        activeServerName = activeServerLabel;
+        activePlayerUrl = knownPlayerUrl(mirror);
+        updateServerButton();
+        play(ready, OtakudesuPlayback.singletonQuality(ready));
     }
 
     /** Alamat pemutar server ini, bila sudah pernah dibuka saat diperiksa. */
@@ -755,6 +762,14 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private OtakudesuPlayback activePlayback;
 
+    /**
+     * Memutar satu sumber.
+     *
+     * <p>Posisi menonton yang tersimpan selalu dipakai lagi saat sumber berganti.
+     * Sebelumnya penggantian server mengosongkan {@code pendingResumeMs}, jadi
+     * berpindah server membuat episode mulai dari awal — riwayat menontonnya
+     * tidak hilang, tetapi posisinya terbuang.
+     */
     private void play(OtakudesuPlayback.Source source, List<String> qualities) {
         ensurePlayer();
         // Tetap satu player: episode baru memakai player yang sama, bukan
@@ -807,6 +822,24 @@ public class AnimePlayerActivity extends AppCompatActivity {
         firstSource = false;
         episodeNumber = (int) Math.round(Math.max(0, target.number));
         loadEpisode(target.url, target.label);
+    }
+
+    /**
+     * Posisi menonton tersimpan untuk sebuah episode.
+     *
+     * <p>Dipisah sebagai fungsi supaya penggantian server bisa memakai posisi
+     * yang sama: kalau pemutar masih memutar episode ini, posisi saat ini lebih
+     * baru daripada yang tersimpan.
+     */
+    private long savedPosition(String url) {
+        if (player != null && episodeUrl != null && episodeUrl.equals(url)
+                && player.getDuration() > 0) {
+            return Math.max(0L, player.getCurrentPosition());
+        }
+        if (animeId.isEmpty()) return 0L;
+        OtakudesuStore.Progress progress = store.progress(animeId,
+                OtakudesuSource.episodeId(url));
+        return progress == null ? 0L : progress.resumePositionMs();
     }
 
     private void updateNeighbors() {
