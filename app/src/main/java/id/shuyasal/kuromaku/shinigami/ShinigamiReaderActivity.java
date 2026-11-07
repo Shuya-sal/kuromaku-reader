@@ -790,6 +790,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             int generation;
             /** Berkas/alamat yang benar-benar sedang tampil di holder ini. */
             String shownKey;
+            /** Posisi halaman yang sedang tampil; dipakai bertahan saat recycle. */
+            int shownPosition = -1;
             Holder(ShinigamiPageView item) { super(item); cell = item; }
         }
 
@@ -832,6 +834,16 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         private void load(Holder holder) {
             final int position = holder.bound;
             if (position < 0 || position >= pages.size()) return;
+            // Halaman yang sudah tampil di holder ini tidak dimuat ulang sama
+            // sekali. Ini bertahan melewati recycle: RecyclerView sering
+            // me-recycle lalu mengikat ulang posisi yang sama di tepi viewport,
+            // dan sebelumnya itu memicu showLoading() → area hitam + spinner.
+            if (holder.shownPosition == position && holder.shownKey != null
+                    && holder.cell.hasContent()) {
+                pageLog("bind-ulang dilewati pos=" + position + " key=" + holder.shownKey);
+                return;
+            }
+            if (holder.shownPosition != position) holder.shownKey = null;
             final int generation = ++holder.generation;
 
             File local = downloader.pageFile(chapterId, position);
@@ -858,6 +870,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 display(holder, position, cached);
                 return;
             }
+            pageLog("cache miss pos=" + position);
             // Belum ada berkas untuk halaman ini. Placeholder hanya dipasang bila
             // holder memang belum menampilkan gambar valid — gambar yang masih
             // terlihat tidak pernah dikosongkan lebih dulu.
@@ -875,10 +888,15 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 final String reason = failure;
                 main.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
-                    if (holder.bound != position || holder.generation != generation) return;
+                    if (holder.bound != position || holder.generation != generation) {
+                        pageLog("hasil dibuang pos=" + position + " (holder sudah pindah)");
+                        return;
+                    }
                     if (ready != null) {
                         holder.shownKey = ready.getAbsolutePath();
+                        holder.shownPosition = position;
                         holder.cell.showFile(ready, quality);
+                        pageLog("unduh selesai pos=" + position);
                         rememberRatio(position, ready);
                         prefetch(position + 1);
                         int[] size = ShinigamiPageTiles.bounds(ready);
@@ -901,9 +919,11 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
          */
         private void display(Holder holder, int position, File file) {
             String key = file.getAbsolutePath();
-            if (key.equals(holder.shownKey)) return;
+            if (key.equals(holder.shownKey) && holder.shownPosition == position) return;
             holder.shownKey = key;
+            holder.shownPosition = position;
             holder.cell.showFile(file, quality);
+            pageLog("tampil pos=" + position + " dari=" + (file.getName()));
             rememberRatio(position, file);
             prefetch(position + 1);
         }
@@ -948,13 +968,22 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             // ulang dari berkas (offline/cache), bukan mewarisi tampilan holder lama.
             holder.generation++;
             holder.bound = -1;
-            holder.shownKey = null;
+            // shownKey/shownPosition SENGAJA dipertahankan: bila RecyclerView
+            // mengikat ulang posisi yang sama, gambarnya tidak perlu dimuat lagi.
+            pageLog("recycle pos=" + holder.shownPosition);
             // Bitmap dan decoder di TiledSurface sengaja TIDAK dibersihkan di sini;
             // showLoading() menutup permukaan, dan load() berikutnya membuka ulang
             // decoder dari berkas yang sama (murah, file-based).
             super.onViewRecycled(holder);
         }
         @Override public int getItemCount() { return pages.size(); }
+    }
+
+    /** Diagnostik reader; hanya aktif bila log DEBUG diizinkan untuk tag ini. */
+    static void pageLog(String message) {
+        if (android.util.Log.isLoggable("ShinigamiReader", android.util.Log.DEBUG)) {
+            android.util.Log.d("ShinigamiReader", message);
+        }
     }
 
     private void openZoomed(int position) {

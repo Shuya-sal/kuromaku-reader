@@ -69,6 +69,41 @@ public class ShinigamiPageViewTest {
         file.delete();
     }
 
+    /**
+     * Muat ulang tidak boleh menutupi gambar yang sudah tampil dengan spinner.
+     *
+     * <p>Inilah keluhan utama: gambar yang terlihat tiba-tiba menjadi area hitam
+     * dengan indikator loading. Sekarang showLoading() pada halaman yang sudah
+     * punya gambar valid tidak melakukan apa pun.
+     */
+    @Test public void loadingOverlayNeverReplacesAVisibleImage() throws Exception {
+        Context context = ApplicationProvider.getApplicationContext();
+        File file = new File(context.getCacheDir(), "page-loading-test.png");
+        Bitmap bitmap = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, out));
+        }
+
+        ShinigamiPageView cell = new ShinigamiPageView(context);
+        cell.showFile(file, ShinigamiQuality.AUTO);
+        View surface = cell.findViewWithTag("shinigami_page_surface");
+        assertEquals(View.VISIBLE, surface.getVisibility());
+
+        cell.showLoading();
+        assertEquals("gambar tidak boleh hilang saat diminta loading",
+                View.VISIBLE, surface.getVisibility());
+        assertEquals("spinner tidak boleh menutupi gambar",
+                View.GONE, cell.findViewWithTag("shinigami_page_loading").getVisibility());
+        assertTrue(cell.hasContent());
+
+        // Kegagalan yang datang belakangan juga tidak boleh menghapus gambar.
+        cell.showFailure("HTTP 500");
+        assertEquals(View.VISIBLE, surface.getVisibility());
+        assertEquals(View.GONE, cell.findViewWithTag("shinigami_page_error").getVisibility());
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
+    }
+
     /** Placeholder memakai rasio yang diketahui, jadi tidak melompat saat gambar tiba. */
     @Test public void placeholderUsesKnownRatioInsteadOfScreenHeight() {
         Context context = ApplicationProvider.getApplicationContext();

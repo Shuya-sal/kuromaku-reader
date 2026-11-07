@@ -4,6 +4,15 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
+* **@VERSION@ — Perbaikan menyeluruh gambar reader yang berkedip (area hitam + loading).**
+  - **Akar masalah 1 — identitas halaman dibuang saat recycle.** `onViewRecycled()` mengosongkan `shownKey`, jadi setiap kali RecyclerView me-recycle lalu mengikat ulang posisi yang sama (sangat sering di tepi viewport saat scroll), `load()` menganggap halaman itu belum punya gambar. Sekarang `shownKey` + `shownPosition` dipertahankan melewati recycle, dan `load()` langsung kembali bila halaman yang sama masih tampil.
+  - **Akar masalah 2 — `showLoading()` tidak punya penjaga.** Metode ini selalu mengosongkan ImageView, menutup permukaan gambar, lalu menampilkan spinner — persis "area hitam + loading" di video. Sekarang ia tidak melakukan apa pun bila `hasContent()` benar. `showFailure()` juga tidak lagi menghapus gambar yang valid; kegagalan hanya dicatat.
+  - **Akar masalah 3 — tile di-recycle saat cache penuh.** `removeEldestEntry` memanggil `bitmap.recycle()` untuk potongan yang bisa saja masih berada di area gambar, sehingga potongan itu hilang sesaat. Sekarang tidak ada `recycle()` di jalur gambar; pemangkasan lewat `trim(from, to)` dan potongan yang sedang terlihat tidak pernah dibuang.
+  - **Diagnostik** ditambahkan (tag `ShinigamiReader`, level DEBUG): posisi halaman, cache hit/miss, hasil unduhan yang dibuang, bind-ulang yang dilewati, dan recycle. Tidak ada token/cookie yang dicatat.
+  - Prefetch **tidak** dimatikan: setelah kunci per-URL, prefetch terbukti tidak membatalkan permintaan halaman yang sedang tampil (ada tesnya).
+  - **Bukti pengujian:** 646 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Tes baru: `showLoading()`/`showFailure()` pada halaman yang sudah tampil tidak menyembunyikan gambar dan tidak memunculkan spinner.
+  - **Belum diuji pada perangkat fisik.** Kriteria "diamkan 15 detik, scroll lambat/cepat/balik, ulangi" pada Demonic Emperor 927, Nano Machine, dan judul lain harus Master Lupi jalankan sendiri; kalau masih berkedip, logcat tag `ShinigamiReader` akan menunjukkan penyebabnya.
+
 * **@VERSION@ — Default Chapter Terbaru, top bar anti-kedip, dan gambar reader tanpa flicker.**
   - **Beranda dibuka di Chapter Terbaru.** Urutan tab kini Chapter Terbaru | Terpopuler | Manga Terbaru | Riwayat | Favorit | Unduhan. Label tidak pernah bertukar, dan tiap tab tetap memakai kursor pagination + cache sendiri.
   - **Migrasi preferensi lama:** state yang masih menyimpan `sort=rank` dari tombol lama dibuka pada tab Terpopuler; preferensi lain (pencarian, genre, status, tema, progres) tidak disentuh. Tanpa state lama, default selalu Chapter Terbaru.

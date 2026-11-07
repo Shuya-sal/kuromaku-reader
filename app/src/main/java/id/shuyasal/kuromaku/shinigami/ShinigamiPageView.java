@@ -200,6 +200,14 @@ public final class ShinigamiPageView extends FrameLayout {
     }
 
     public void showLoading() {
+        // Gambar yang sudah tampil TIDAK boleh dikosongkan. Sebelumnya setiap
+        // rebind memanggil ini, menutup permukaan gambar lalu menampilkan
+        // spinner — itulah area hitam + loading yang berkedip di video.
+        if (hasContent()) {
+            loading.setVisibility(GONE);
+            errorBox.setVisibility(GONE);
+            return;
+        }
         // ratio TIDAK direset: placeholder mempertahankan tinggi yang sudah
         // diketahui supaya daftar tidak melompat saat halaman dimuat ulang.
         image.setImageDrawable(null);
@@ -208,6 +216,11 @@ public final class ShinigamiPageView extends FrameLayout {
         loading.setVisibility(VISIBLE);
         errorBox.setVisibility(GONE);
         requestLayout();
+    }
+
+    /** True bila halaman ini sedang menampilkan gambar yang valid. */
+    public boolean hasContent() {
+        return surface.getVisibility() == VISIBLE && surface.hasContent();
     }
 
     /** Mode bitmap tunggal (dipakai tes dan pemanggil lama). */
@@ -265,6 +278,12 @@ public final class ShinigamiPageView extends FrameLayout {
     }
 
     public void showFailure(String reason) {
+        // Kesalahan pada halaman yang gambarnya sudah tampil tidak boleh
+        // mengubah tampilan menjadi area kosong; cukup dicatat.
+        if (hasContent()) {
+            android.util.Log.w("ShinigamiReader", "kegagalan diabaikan (gambar valid): " + reason);
+            return;
+        }
         image.setVisibility(INVISIBLE);
         surface.setVisibility(GONE);
         loading.setVisibility(GONE);
@@ -306,14 +325,17 @@ public final class ShinigamiPageView extends FrameLayout {
         private int generation;
 
         private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.ANTI_ALIAS_FLAG);
+        /**
+         * Potongan yang sudah didekode.
+         *
+         * <p>Tidak memakai {@code removeEldestEntry} yang me-recycle bitmap:
+         * potongan yang baru saja digambar bisa ikut terbuang dan memicu
+         * "trying to use a recycled bitmap" atau area kosong sesaat.
+         * Pemangkasan dilakukan di {@link #trim(int, int)} dan tidak pernah
+         * menyentuh potongan yang sedang terlihat.
+         */
         private final Map<Integer, Bitmap> tiles =
-                new LinkedHashMap<Integer, Bitmap>(ShinigamiPageTiles.CACHE_TILES + 1, 0.75f, true) {
-                    @Override protected boolean removeEldestEntry(Map.Entry<Integer, Bitmap> eldest) {
-                        if (size() <= ShinigamiPageTiles.CACHE_TILES) return false;
-                        eldest.getValue().recycle();
-                        return true;
-                    }
-                };
+                new LinkedHashMap<Integer, Bitmap>(ShinigamiPageTiles.CACHE_TILES * 2, 0.75f, true);
 
         Listener listener;
         private File file;
@@ -365,7 +387,8 @@ public final class ShinigamiPageView extends FrameLayout {
             generation++;
             pending.clear();
             synchronized (decoderLock) {
-                for (Bitmap bitmap : tiles.values()) bitmap.recycle();
+                // Referensi dilepas saja; bitmap dibiarkan dibersihkan GC supaya
+                // tidak ada bitmap yang di-recycle saat masih dipakai draw pass.
                 tiles.clear();
                 if (decoder != null && !decoder.isRecycled()) decoder.recycle();
                 decoder = null;
@@ -385,6 +408,7 @@ public final class ShinigamiPageView extends FrameLayout {
             int from = Math.max(0, (int) Math.floor((clip.top / scale) / tileHeight));
             int to = Math.min(ShinigamiPageTiles.slices(sourceHeight, tileHeight).size() - 1,
                     (int) Math.floor((clip.bottom / scale) / tileHeight));
+            trim(from, to);
             for (int index = from; index <= to; index++) {
                 Bitmap tile = tiles.get(index);
                 if (tile == null) {
@@ -399,6 +423,23 @@ public final class ShinigamiPageView extends FrameLayout {
                 int bottom = Math.min(sourceHeight, top + tileHeight);
                 Rect dst = new Rect(0, Math.round(top * scale), getWidth(), Math.round(bottom * scale));
                 canvas.drawBitmap(tile, null, dst, paint);
+            }
+        }
+
+        /** True bila ada decoder hidup dan tidak pernah gagal. */
+        boolean hasContent() {
+            return decoder != null && !decoder.isRecycled() && !failed
+                    && sourceWidth > 0 && sourceHeight > 0;
+        }
+
+        /** Buang potongan jauh dari area terlihat; yang terlihat tidak disentuh. */
+        private void trim(int from, int to) {
+            if (tiles.size() <= ShinigamiPageTiles.CACHE_TILES) return;
+            java.util.Iterator<Map.Entry<Integer, Bitmap>> iterator = tiles.entrySet().iterator();
+            while (iterator.hasNext() && tiles.size() > ShinigamiPageTiles.CACHE_TILES) {
+                Map.Entry<Integer, Bitmap> entry = iterator.next();
+                if (entry.getKey() >= from && entry.getKey() <= to) continue;
+                iterator.remove();
             }
         }
 
