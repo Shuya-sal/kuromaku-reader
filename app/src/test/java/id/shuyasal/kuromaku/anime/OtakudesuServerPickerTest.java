@@ -377,4 +377,42 @@ public class OtakudesuServerPickerTest {
         return java.util.Base64.getEncoder().encodeToString(
                 value.getBytes(StandardCharsets.UTF_8));
     }
+
+    /**
+     * Dua server pada resolusi sama tetap dua pilihan terpisah.
+     *
+     * <p>Panel tidak boleh menggabungkan mirror hanya karena resolusinya sama —
+     * 480p ODCDN dan 480p Vidhide adalah dua sumber berbeda. Nama dan resolusinya
+     * harus terbaca pada baris masing-masing, bukan hanya pada header grup yang
+     * bisa tergulir keluar layar.
+     */
+    @Test public void namaDanResolusiTampilPerBaris() throws Exception {
+        org.jsoup.nodes.Document doc = episode();
+        java.util.List<OtakudesuPlayback.Mirror> mirrors = OtakudesuServerPicker.parseMirrors(doc);
+        assertEquals("seluruh mirror di halaman harus menjadi pilihan", 12, mirrors.size());
+
+        int seri480 = 0;
+        for (OtakudesuPlayback.Mirror m : mirrors) {
+            if ("480p".equals(m.quality)) seri480++;
+            assertFalse("nama server tidak boleh kosong", m.provider.trim().isEmpty());
+            assertEquals("nama server diambil apa adanya dari halaman",
+                    m.provider, OtakudesuServerPanel.serverName(m));
+        }
+        assertTrue("480p harus punya lebih dari satu pilihan", seri480 >= 2);
+
+        // Setiap mirror punya pasangan indeks khas, jadi tidak ada yang dibuang
+        // atau disatukan saat dipilih.
+        java.util.Set<String> kunci = new java.util.HashSet<>();
+        for (OtakudesuPlayback.Mirror m : mirrors) {
+            assertTrue("kunci mirror harus khas", kunci.add(m.quality + "|" + m.provider + "|" + m.index));
+        }
+    }
+
+    /** Server tanpa nama tetap tampil, tidak disembunyikan dan tidak dikarang. */
+    @Test public void serverTanpaNamaTetapPunyaLabelJelas() {
+        OtakudesuPlayback.Mirror kosong =
+                new OtakudesuPlayback.Mirror("720p", "", "", 0, "");
+        assertEquals("Server tanpa nama", OtakudesuServerPanel.serverName(kosong));
+    }
+
 }

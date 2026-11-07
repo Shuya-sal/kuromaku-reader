@@ -2,6 +2,7 @@ package id.shuyasal.kuromaku.anime;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Bundle;
@@ -248,26 +249,65 @@ public class AnimePlayerActivity extends AppCompatActivity {
         bar.addView(title, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        serverButton = chip("Server", "anime_player_server");
+        // Baris atas hanya memuat kontrol yang paling sering dipakai pada layar
+        // sempit: tombol kembali, judul singkat, satu pintasan server (supaya
+        // pemilih server tetap satu sentuhan), dan menu tambahan. Server,
+        // Kualitas, Subtitle, dan Kecepatan semuanya tersedia di menu itu juga,
+        // jadi tidak ada kontrol yang hilang pada layar kecil.
+        serverButton = chip(serverChipLabel(), "anime_player_server");
         serverButton.setOnClickListener(v -> showServerPanel());
         bar.addView(serverButton);
 
-        qualityButton = chip("Kualitas", "anime_player_quality");
-        qualityButton.setOnClickListener(v -> showQualityMenu());
-        bar.addView(qualityButton);
-
-        subtitleButton = chip("Subtitle", "anime_player_subtitle");
-        subtitleButton.setOnClickListener(v -> showSubtitleMenu());
-        bar.addView(subtitleButton);
-
-        Button speed = chip("1x", "anime_player_speed");
-        speed.setOnClickListener(v -> showSpeedMenu());
-        bar.addView(speed);
-
-        Button full = chip("Layar penuh", "anime_player_fullscreen");
-        full.setOnClickListener(v -> setFullscreen(!fullscreen));
-        bar.addView(full);
+        Button more = chip("\u22ef", "anime_player_more");
+        more.setContentDescription("Menu lainnya");
+        more.setOnClickListener(v -> showMoreMenu(bar));
+        bar.addView(more);
         return bar;
+    }
+
+    /** Label pintasan server: nama server aktif bila sudah diketahui. */
+    private String serverChipLabel() {
+        String name = activeServerLabel == null ? "" : activeServerLabel.trim();
+        if (name.isEmpty() || !name.contains(" ")) return "Server";
+        String quality = name.substring(0, name.indexOf(' ')).trim();
+        return quality.isEmpty() ? "Server" : "Server " + quality;
+    }
+
+    /**
+     * Menu tambahan pemutar: Server, Kualitas, Subtitle, dan Kecepatan.
+     *
+     * <p>Keempatnya dulu berupa chip pada baris atas; pada layar sempit baris itu
+     * meluber ke kanan sehingga chip terpotong dan tidak bisa ditekan. Menu ini
+     * menampung semuanya dengan label yang jelas.
+     */
+    private void showMoreMenu(View anchor) {
+        boolean hasQuality = activeServerLabel != null && !activeServerLabel.trim().isEmpty();
+        java.util.List<String> items = new java.util.ArrayList<>();
+        items.add("Server  \u00b7  " + (activeServerLabel == null || activeServerLabel.trim().isEmpty()
+                ? "belum dipilih" : activeServerLabel));
+        if (hasQuality) items.add("Kualitas");
+        items.add("Subtitle");
+        items.add("Kecepatan");
+        items.add("Putar layar");
+        String[] labels = items.toArray(new String[0]);
+
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Menu pemutar")
+                .setItems(labels, (dialog, which) -> {
+                    String chosen = labels[which];
+                    if (chosen.startsWith("Server")) {
+                        showServerPanel();
+                    } else if (chosen.equals("Kualitas")) {
+                        showQualityMenu();
+                    } else if (chosen.equals("Subtitle")) {
+                        showSubtitleMenu();
+                    } else if (chosen.equals("Putar layar")) {
+                        rotateScreen();
+                    } else {
+                        showSpeedMenu();
+                    }
+                })
+                .show();
     }
 
     private TextView titleView;
@@ -1010,21 +1050,59 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     // ------------------------------------------------------------- fullscreen
 
+    /**
+     * Layar penuh = menyembunyikan bilah, bukan memaksa orientasi.
+     *
+     * <p>Sebelumnya tombol ini memanggil {@code SCREEN_ORIENTATION_SENSOR_LANDSCAPE},
+     * jadi menekan "Layar penuh" pada posisi portrait memutar perangkat ke
+     * samping dengan sendirinya — perilaku yang tidak diminta pengguna. Sekarang
+     * orientasi dibiarkan mengikuti perangkat: layar penuh pada portrait tetap
+     * portrait, dan bila perangkat diputar manual (rotasi diizinkan) tata letak
+     * mengikuti landscape seperti biasa. Pemutaran paksa disediakan terpisah
+     * lewat {@link #rotateScreen()}.
+     */
     private void setFullscreen(boolean enable) {
+        if (fullscreen == enable) return;
         fullscreen = enable;
         WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (enable) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
             topBar.setVisibility(View.GONE);
             controller.setSystemBarsBehavior(
                     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             controller.hide(WindowInsetsCompat.Type.systemBars());
         } else {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             topBar.setVisibility(View.VISIBLE);
             controller.show(WindowInsetsCompat.Type.systemBars());
         }
+        // Diamkan orientasi. Memanggil setRequestedOrientation di sini akan
+        // memutar layar dan, pada sebagian perangkat, membuat ulang Activity
+        // sehingga pemutaran terulang dari awal.
+        setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+    }
+
+    /**
+     * "Putar Layar" — pilihan eksplisit, terpisah dari layar penuh.
+     *
+     * <p>Menukar orientasi manually hanya saat pengguna memintanya, dan pemutar
+     * tetap satu: posisi, buffer, dan state ExoPlayer tidak disentuh.
+     */
+    private void rotateScreen() {
+        int now = getResources().getConfiguration().orientation;
+        int target = now == Configuration.ORIENTATION_LANDSCAPE
+                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        setRequestedOrientation(target);
+    }
+
+    /**
+     * Ukuran layar sempit dipakai untuk menyembunyikan label yang panjang.
+     *
+     * <p>Diperiksa dari lebar layar terkecil, bukan dari lebar layar saat ini,
+     * supaya hasilnya sama pada kedua orientasi.
+     */
+    private boolean isCompactScreen() {
+        return getResources().getConfiguration().smallestScreenWidthDp < 400;
     }
 
     @Override public void onBackPressed() {

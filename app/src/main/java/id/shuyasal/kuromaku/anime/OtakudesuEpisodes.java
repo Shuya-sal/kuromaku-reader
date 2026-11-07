@@ -4,6 +4,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -71,11 +73,58 @@ public final class OtakudesuEpisodes {
     public static OtakudesuAnime.Episode neighbor(List<OtakudesuAnime.Episode> episodes,
                                                   String currentUrl, int delta) {
         if (episodes == null || episodes.isEmpty() || currentUrl == null) return null;
-        int index = indexOf(episodes, currentUrl);
+        // Urutan cerita tidak boleh bergantung pada urutan halaman sumber.
+        // Halaman episode Otakudesu menulis episode terbaru lebih dulu, jadi
+        // indeks daftar menurun sedangkan cerita menaik. Memakai indeks apa
+        // adanya membuat tombol Berikutnya justru mundur ke episode sebelumnya
+        // (dan pada Episode 1, Berikutnya mati sama sekali).
+        List<OtakudesuAnime.Episode> ordered = inStoryOrder(episodes);
+        int index = indexOf(ordered, currentUrl);
         if (index < 0) return null;
         int target = index + delta;
-        if (target < 0 || target >= episodes.size()) return null;
-        return episodes.get(target);
+        if (target < 0 || target >= ordered.size()) return null;
+        return ordered.get(target);
+    }
+
+    /**
+     * Daftar episode dalam urutan cerita (nomor menaik).
+     *
+     * <p>Dipisah supaya arah tombol dapat diuji tanpa Activity. Episode yang
+     * nomornya tidak terbaca diletakkan di akhir dengan urutan aslinya, tidak
+     * dibuang dan tidak dibuat-buat nomornya.
+     */
+    public static List<OtakudesuAnime.Episode> inStoryOrder(
+            List<OtakudesuAnime.Episode> episodes) {
+        List<OtakudesuAnime.Episode> ordered = new ArrayList<>();
+        if (episodes == null) return ordered;
+        for (OtakudesuAnime.Episode episode : episodes) {
+            if (episode != null) ordered.add(episode);
+        }
+        boolean allNumbered = !ordered.isEmpty();
+        for (OtakudesuAnime.Episode episode : ordered) {
+            if (episode.number < 0) {
+                allNumbered = false;
+                break;
+            }
+        }
+        if (!allNumbered) return ordered;
+        Collections.sort(ordered, new Comparator<OtakudesuAnime.Episode>() {
+            @Override public int compare(OtakudesuAnime.Episode a, OtakudesuAnime.Episode b) {
+                return Double.compare(a.number, b.number);
+            }
+        });
+        return ordered;
+    }
+
+    /** Episode pertama dan terakhir menurut urutan cerita. */
+    public static OtakudesuAnime.Episode first(List<OtakudesuAnime.Episode> episodes) {
+        List<OtakudesuAnime.Episode> ordered = inStoryOrder(episodes);
+        return ordered.isEmpty() ? null : ordered.get(0);
+    }
+
+    public static OtakudesuAnime.Episode last(List<OtakudesuAnime.Episode> episodes) {
+        List<OtakudesuAnime.Episode> ordered = inStoryOrder(episodes);
+        return ordered.isEmpty() ? null : ordered.get(ordered.size() - 1);
     }
 
     public static int indexOf(List<OtakudesuAnime.Episode> episodes, String url) {

@@ -92,6 +92,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private boolean offlineChapter;
     private boolean progressReliable = true;
     private boolean positionReady;
+    private android.widget.ProgressBar readingProgress;
+    private android.widget.TextView readingPercent;
     /** Notifikasi offline hanya sekali per pembukaan chapter. */
     private boolean noticeShown;
     private final Runnable hideNotice = this::fadeOutNotice;
@@ -159,6 +161,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             @Override
             public void onScrolled(RecyclerView view, int dx, int dy) {
                 saveProgress();
+                // Ringan: hanya memperbarui satu ProgressBar, tanpa relayout.
+                updateReadingIndicator();
             }
         });
         body.addView(list, new FrameLayout.LayoutParams(
@@ -208,6 +212,25 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
 
         chapterNav = buildChapterNav();
         root.addView(chapterNav, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Indikator progres membaca: satu garis tipis + angka persen kecil.
+        // Ditaruh paling bawah, di atas navigation bar, dan tidak ikut
+        // mengubah tinggi daftar halaman.
+        readingProgress = new android.widget.ProgressBar(this, null,
+                android.R.attr.progressBarStyleHorizontal);
+        readingProgress.setTag("shinigami_reader_progress_bar");
+        readingProgress.setMax(1000);
+        readingProgress.setIndeterminate(false);
+        root.addView(readingProgress, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 3)));
+
+        readingPercent = Ui.label(this, "", 10, palette.muted);
+        readingPercent.setTag("shinigami_reader_progress_text");
+        readingPercent.setGravity(Gravity.END);
+        readingPercent.setPadding(0, 0, Ui.dp(this, 10), 0);
+        readingPercent.setVisibility(View.GONE);
+        root.addView(readingPercent, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         setContentView(root);
@@ -704,8 +727,84 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         if (first < 0) return;
         store.setPage(chapterId, first);
         if (!progressReliable) return;
-        int percent = (int) Math.round(((first + 1) * 100.0) / pages.size());
-        store.setProgress(chapterId, percent);
+        store.setProgress(chapterId, readingPercent());
+        updateReadingIndicator();
+    }
+
+    /**
+     * Persentase membaca 0–100 dari posisi scroll dan panjang konten nyata.
+     *
+     * <p>Sebelumnya persen dihitung dari {@code first / jumlah halaman}, jadi
+     * bergantung pada berapa halaman yang <em>sudah dimuat</em> — angka itu
+     * meloncat saat halaman berikutnya masuk. Di sini dipakai jarak piksel yang
+     * sudah digulir dibagi panjang konten, dan panjang konten diperkirakan dari
+     * rasio dimensi gambar yang tersimpan sehingga halaman yang belum dimuat
+     * tetap terhitung.
+     */
+    private int readingPercent() {
+        LinearLayoutManager manager = (LinearLayoutManager) list.getLayoutManager();
+        if (manager == null || pages.isEmpty()) return 0;
+        int width = list.getWidth() - list.getPaddingLeft() - list.getPaddingRight();
+        if (width <= 0) return 0;
+
+        // Halaman yang sudah terukur: tingginya nyata.
+        int first = manager.findFirstVisibleItemPosition();
+        int last = manager.findLastVisibleItemPosition();
+        if (first < 0) return 0;
+        double content = 0;
+        double scrolled = 0;
+        for (int i = 0; i < pages.size(); i++) {
+            double ratio = store.pageRatio(chapterId, i);
+            double height = ratio > 0 ? ratio * width : width * 1.4;
+            if (i < first) {
+                scrolled += height;
+            } else if (i == first) {
+                View view = manager.findViewByPosition(i);
+                if (view != null) {
+                    // Bagian halaman pertama yang sudah lewat di atas layar.
+                    scrolled += Math.max(0, -view.getTop());
+                }
+                content += height;
+            } else {
+                content += height;
+            }
+        }
+        if (content <= 0) return 0;
+        double total = scrolled + content;
+        if (total <= 0) return 0;
+        int percent = (int) Math.round(Math.max(0, Math.min(1, scrolled / total)) * 100);
+        return Math.max(0, Math.min(100, percent));
+    }
+
+    /** Perbarui tampilan bar tanpa relayout dan tanpa notifyDataSetChanged(). */
+    private void updateReadingIndicator() {
+        if (readingProgress == null) return;
+        if (!progressVisible()) {
+            if (readingProgress.getVisibility() != View.GONE) {
+                readingProgress.setVisibility(View.GONE);
+            }
+            if (readingPercent != null && readingPercent.getVisibility() != View.GONE) {
+                readingPercent.setVisibility(View.GONE);
+            }
+            return;
+        }
+        if (readingProgress.getVisibility() != View.VISIBLE) {
+            readingProgress.setVisibility(View.VISIBLE);
+        }
+        int percent = readingPercent();
+        // Nilai ditulis sebagai 0–1000 supaya bar bergerak mulus, bukan meloncat
+        // per satu persen.
+        readingProgress.setProgress((int) Math.round(percent * 10.0));
+        if (readingPercent != null) {
+            boolean showNumber = store.showReadingPercent();
+            readingPercent.setVisibility(showNumber ? View.VISIBLE : View.GONE);
+            if (showNumber) readingPercent.setText(percent + "%");
+        }
+    }
+
+    /** Bar tampil kapan saja, kecuali pengguna mematikannya di Pengaturan. */
+    private boolean progressVisible() {
+        return store.showReadingProgress();
     }
 
     /** Tampilkan sekali per pembukaan chapter, lalu hilang sendiri. */

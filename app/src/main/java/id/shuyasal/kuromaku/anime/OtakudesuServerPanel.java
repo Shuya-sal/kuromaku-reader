@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.util.TypedValue;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -133,26 +134,65 @@ final class OtakudesuServerPanel {
 
         LinearLayout text = new LinearLayout(context);
         text.setOrientation(LinearLayout.VERTICAL);
+
+        // Resolusi diulang pada baris server: header grup bisa tergulir keluar
+        // layar, dan pengguna tetap harus tahu resolusi pilihannya.
+        LinearLayout heading = new LinearLayout(context);
+        heading.setOrientation(LinearLayout.HORIZONTAL);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView name = new TextView(context);
-        name.setText(mirror.provider.isEmpty() ? "Server tanpa nama" : mirror.provider);
+        name.setText(serverName(mirror));
         name.setTag("anime_server_name");
+        // Warna permukaan tema dipakai apa adanya supaya kontras terjaga pada
+        // tema terang maupun gelap; sebelumnya teks dipaksa putih 0xFFFFFFFF.
         name.setTextColor(palette.onSurface);
         name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
-        text.addView(name);
+        name.setSingleLine(true);
+        name.setEllipsize(TextUtils.TruncateAt.END);
+        heading.addView(name, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView quality = new TextView(context);
+        quality.setText(mirror.quality.isEmpty() ? "\u2014" : mirror.quality);
+        quality.setTag("anime_server_resolution");
+        quality.setTextColor(palette.muted);
+        quality.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        quality.setPadding(dp(8), 0, 0, 0);
+        heading.addView(quality);
+
+        text.addView(heading);
         text.addView(statusView(source, checking));
         row.addView(text, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        TextView action = new TextView(context);
+        Button action = new Button(context);
         action.setText(source == null ? "Pilih" : "Putar");
-        action.setTextColor(palette.accent);
+        action.setTag("anime_server_action");
+        action.setAllCaps(false);
         action.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        action.setTypeface(Typeface.DEFAULT_BOLD);
-        action.setPadding(dp(12), dp(8), dp(4), dp(8));
+        // Tombol berwarna tema punya kontras yang sama dengan bilah lainnya,
+        // jadi tombol ini tetap terbaca pada kedua tema.
+        action.setTextColor(palette.accent);
+        action.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
+                palette.accent & 0x33FFFFFF, palette.ripple, 10, context));
+        action.setPadding(dp(14), dp(8), dp(14), dp(8));
+        action.setMinimumHeight(dp(40));
+        action.setMinimumWidth(dp(64));
+        action.setOnClickListener(v -> listener.onPick(mirror));
         row.addView(action);
 
         row.setOnClickListener(v -> listener.onPick(mirror));
+
+        row.setOnClickListener(v -> listener.onPick(mirror));
         return row;
+    }
+
+    /** Nama server apa adanya dari halaman episode; tidak pernah dikarang. */
+    static String serverName(OtakudesuPlayback.Mirror mirror) {
+        if (mirror == null) return "Server tanpa nama";
+        String name = mirror.provider == null ? "" : mirror.provider.trim();
+        return name.isEmpty() ? "Server tanpa nama" : name;
     }
 
     private TextView statusView(OtakudesuPlayback.Source source, boolean checking) {

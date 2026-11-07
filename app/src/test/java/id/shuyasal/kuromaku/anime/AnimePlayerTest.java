@@ -3,9 +3,11 @@ package id.shuyasal.kuromaku.anime;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Intent;
+import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -15,6 +17,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.android.controller.ActivityController;
 import org.robolectric.annotation.Config;
 
 /**
@@ -176,4 +179,105 @@ public class AnimePlayerTest {
         assertNotNull(error);
         assertTrue(text(error).contains("tidak memiliki alamat"));
     }
+
+    // ------------------------------------------------- toolbar & layar penuh
+
+    /**
+     * Toolbar pemutar tidak memuat chip yang meluber.
+     *
+     * <p>Akar bug: baris atas menampung lima chip (Server, Kualitas, Subtitle,
+     * 1x, Layar penuh) di samping tombol kembali dan judul. Pada layar sempit
+     * chip terakhir terpotong di luar tepi kanan sehingga tidak bisa ditekan.
+     * Sekarang baris atas hanya memuat kembali, judul, pintasan server, dan menu
+     * tambahan; sisanya pindah ke menu.
+     */
+    @Test public void toolbarTidakMeluberDanMenuTambahanAda() {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            View decor = controller.get().getWindow().getDecorView();
+            assertNotNull("pintasan server tetap satu sentuhan",
+                    decor.findViewWithTag("anime_player_server"));
+            assertNotNull("menu tambahan harus ada",
+                    decor.findViewWithTag("anime_player_more"));
+            assertNull("chip kualitas tidak lagi menumpuk di baris atas",
+                    decor.findViewWithTag("anime_player_quality"));
+            assertNull("chip subtitle tidak lagi menumpuk di baris atas",
+                    decor.findViewWithTag("anime_player_subtitle"));
+            assertNull("chip kecepatan tidak lagi menumpuk di baris atas",
+                    decor.findViewWithTag("anime_player_speed"));
+            // Judul tetap ada dan dibatasi satu baris supaya tidak mendorong
+            // kontrol lain keluar layar.
+            TextView title = decor.findViewWithTag("anime_player_title");
+            assertNotNull(title);
+            assertTrue("judul harus satu baris", title.getMaxLines() == 1);
+        } finally {
+            controller.close();
+        }
+    }
+
+    /**
+     * Layar penuh tidak boleh memaksa orientasi.
+     *
+     * <p>Akar bug: tombol "Layar penuh" memanggil SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+     * jadi menonton dalam posisi portrait langsung diputar ke samping dengan
+     * sendirinya. Orientasi sekarang dibiarkan mengikuti perangkat, dan pemutaran
+     * paksa tersedia terpisah lewat "Putar layar".
+     */
+    @Test public void layarPenuhTidakMemaksaRotasi() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            activity.setRequestedOrientation(
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            java.lang.reflect.Method setFullscreen =
+                    AnimePlayerActivity.class.getDeclaredMethod("setFullscreen", boolean.class);
+            setFullscreen.setAccessible(true);
+            setFullscreen.invoke(activity, true);
+
+            assertEquals("layar penuh tidak boleh memutar layar",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                    activity.getRequestedOrientation());
+        } finally {
+            controller.close();
+        }
+    }
+
+    /** Arah "Putar layar" menukar orientasi, bukan selalu ke landscape. */
+    @Test public void putarLayarMenukarOrientasi() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            java.lang.reflect.Method rotate =
+                    AnimePlayerActivity.class.getDeclaredMethod("rotateScreen");
+            rotate.setAccessible(true);
+            activity.setRequestedOrientation(
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            rotate.invoke(activity);
+            int setelah = activity.getRequestedOrientation();
+            assertTrue("orientasi harus diminta secara eksplisit",
+                    setelah == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                            || setelah == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
+
+            // Arah mengikuti orientasi perangkat saat itu: pada portrait
+            // permintaannya landscape, jadi hasilnya harus salah satu dari dua
+            // nilai eksplisit itu — bukan UNSPECIFIED, yang berarti "ikuti
+            // perangkat" dan bukan pemutaran paksa.
+            assertFalse("pemutaran paksa tidak boleh berarti ikut perangkat",
+                    setelah == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        } finally {
+            controller.close();
+        }
+    }
+
+    private ActivityController<AnimePlayerActivity> player() {
+        Intent intent = new Intent(ApplicationProvider.getApplicationContext(),
+                AnimePlayerActivity.class);
+        intent.putExtra("anime_id", "fxskc");
+        intent.putExtra("title", "FX Senshi Kurumi-chan");
+        intent.putExtra("episode_url",
+                "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/");
+        intent.putExtra("episode_label", "Episode 1");
+        return Robolectric.buildActivity(AnimePlayerActivity.class, intent).setup();
+    }
+
 }

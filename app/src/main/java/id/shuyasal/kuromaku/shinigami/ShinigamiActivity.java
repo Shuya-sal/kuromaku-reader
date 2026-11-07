@@ -1441,14 +1441,35 @@ public class ShinigamiActivity extends AppCompatActivity {
 
     /** Menu Pengaturan: tema (Light/Dark/System) dan domain sumber. */
     private void showSettingsMenu() {
-        String[] options = {"Tema tampilan", "Domain sumber"};
+        String[] options = {"Tema tampilan", "Domain sumber", "Indikator progres membaca"};
         new AlertDialog.Builder(this)
                 .setTitle("Pengaturan Manga Shinigami")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) showThemeDialog();
-                    else showDomainDialog();
+                    else if (which == 1) showDomainDialog();
+                    else showReadingProgressDialog();
                 })
                 .setNegativeButton("Tutup", null)
+                .show();
+    }
+
+    /**
+     * Pengaturan indikator progres membaca.
+     *
+     * <p>Progres <em>membaca</em> terpisah dari progres <em>unduhan</em>: yang
+     * diatur di sini hanya tampilan bar di bawah reader, bukan antrean unduhan.
+     */
+    private void showReadingProgressDialog() {
+        ShinigamiStore store = new ShinigamiStore(this);
+        String[] opsi = {"Bar progres membaca", "Angka persen di samping bar"};
+        boolean[] aktif = {store.showReadingProgress(), store.showReadingPercent()};
+        new AlertDialog.Builder(this)
+                .setTitle("Indikator progres membaca")
+                .setMultiChoiceItems(opsi, aktif, (dialog, which, checked) -> {
+                    if (which == 0) store.setShowReadingProgress(checked);
+                    else store.setShowReadingPercent(checked);
+                })
+                .setPositiveButton("Simpan", null)
                 .show();
     }
 

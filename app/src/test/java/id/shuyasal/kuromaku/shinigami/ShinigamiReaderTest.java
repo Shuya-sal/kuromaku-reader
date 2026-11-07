@@ -124,7 +124,12 @@ public class ShinigamiReaderTest {
             assertEquals(5, manager.findFirstVisibleItemPosition());
             controller.pause();
             assertEquals(5, store.page("d6cd3f14-a528-4752-a546-0d14873e9a4a"));
-            assertEquals(33, store.progress("d6cd3f14-a528-4752-a546-0d14873e9a4a"));
+            // Progres membaca kini dihitung dari jarak gulir dan panjang konten,
+            // bukan dari (halaman + 1) / jumlah halaman. Angkanya tetap di dalam
+            // rentang 0-100 dan tetap lebih dari nol setelah menggulir jauh.
+            int progress = store.progress("d6cd3f14-a528-4752-a546-0d14873e9a4a");
+            assertTrue("progres harus dihitung", progress > 0);
+            assertTrue("progres harus 0-100", progress <= 100);
         }
     }
     @Test public void connectionFailureUsesCachedPageOrder() throws Exception {

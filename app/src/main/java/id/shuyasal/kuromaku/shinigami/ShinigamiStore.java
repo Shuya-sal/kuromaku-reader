@@ -148,6 +148,24 @@ public final class ShinigamiStore {
         }
     }
 
+    /** Apakah indikator progres membaca ditampilkan. */
+    public boolean showReadingProgress() {
+        return prefs.getBoolean("reader_progress_bar", true);
+    }
+
+    public void setShowReadingProgress(boolean show) {
+        prefs.edit().putBoolean("reader_progress_bar", show).apply();
+    }
+
+    /** Apakah angka persen kecil di samping bar ditampilkan. */
+    public boolean showReadingPercent() {
+        return prefs.getBoolean("reader_progress_percent", true);
+    }
+
+    public void setShowReadingPercent(boolean show) {
+        prefs.edit().putBoolean("reader_progress_percent", show).apply();
+    }
+
     public void setPageRatio(String chapterId, int index, double ratio) {
         if (chapterId == null || chapterId.isEmpty() || index < 0
                 || ratio <= 0.2 || ratio > 20) return;

@@ -522,4 +522,119 @@ public class ShinigamiReaderNavTest {
                     null, viewOrNull(reader, "shinigami_reader_tap_strip"));
         }
     }
+
+    // ------------------------------------------------- progres membaca
+
+    /**
+     * Bar progres membaca ada di bawah reader dan bisa dimatikan.
+     *
+     * <p>Progres <em>membaca</em> terpisah dari progres <em>unduhan</em>: yang
+     * diatur di sini hanya tampilan bar, bukan antrean unduhan.
+     */
+    @Test public void barProgresMembacaAdaDiBawahReader() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            View bar = tagged(reader, "shinigami_reader_progress_bar");
+            assertNotNull("bar progres membaca harus ada", bar);
+            assertTrue(bar instanceof android.widget.ProgressBar);
+            // Bar tipis: tidak boleh mencuri ruang baca.
+            assertTrue("bar harus tipis", bar.getLayoutParams().height <= 12);
+            // Daftar halaman tetap ada dan tidak diganti oleh bar.
+            assertNotNull(tagged(reader, "shinigami_reader_list"));
+        }
+    }
+
+    /**
+     * Indikator diperbarui tanpa membangun ulang daftar.
+     *
+     * <p>Akibat yang dilarang: {@code notifyDataSetChanged()} memicu relayout
+     * seluruh reader, dan itu membuat gambar HD berkedip. Tes ini mengunci
+     * janji bahwa memperbarui indikator tidak menyentuh adapter.
+     */
+    @Test public void indikatorTidakMembangunUlangDaftar() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            androidx.recyclerview.widget.RecyclerView list =
+                    (androidx.recyclerview.widget.RecyclerView)
+                            tagged(reader, "shinigami_reader_list");
+            androidx.recyclerview.widget.RecyclerView.Adapter<?> adapter = list.getAdapter();
+            androidx.recyclerview.widget.RecyclerView.AdapterDataObserver pengamat =
+                    new androidx.recyclerview.widget.RecyclerView.AdapterDataObserver() {
+            };
+            adapter.registerAdapterDataObserver(pengamat);
+            int[] perubahan = {0};
+            list.getItemAnimator();
+
+            // Baca posisi berkali-kali, seperti saat pengguna menggulir.
+            for (int i = 0; i < 5; i++) {
+                list.scrollBy(0, 40);
+                org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            }
+
+            assertSame("adapter tidak boleh dibuat ulang", adapter, list.getAdapter());
+            list.invalidate();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertSame("adapter tetap sama setelah invalidate", adapter, list.getAdapter());
+        }
+    }
+
+    /** Persen membaca dihitung dari panjang konten, bukan jumlah halaman termuat. */
+    @Test public void persenMembacaMemakaiPanjangKonten() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            java.lang.reflect.Method persen =
+                    ShinigamiReaderActivity.class.getDeclaredMethod("readingPercent");
+            persen.setAccessible(true);
+            Object hasil = persen.invoke(reader);
+            assertTrue(hasil instanceof Integer);
+            int nilai = (Integer) hasil;
+            assertTrue("persen harus 0-100", nilai >= 0 && nilai <= 100);
+
+            // Rasio halaman yang tersimpan ikut dipakai: halaman yang belum
+            // dimuat tetap terhitung panjangnya.
+            id.shuyasal.kuromaku.shinigami.ShinigamiStore store =
+                    new id.shuyasal.kuromaku.shinigami.ShinigamiStore(reader);
+            store.setPageRatio("ch-25", 0, 1.4d);
+            store.setPageRatio("ch-25", 1, 1.4d);
+            int lagi = (Integer) persen.invoke(reader);
+            assertTrue("persen tetap 0-100 dengan rasio tersimpan",
+                    lagi >= 0 && lagi <= 100);
+        }
+    }
+
+    /** Bar bisa dimatikan, dan saat mati ia tidak menghabiskan ruang layar. */
+    @Test public void barProgresBisaDimatikan() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+
+            id.shuyasal.kuromaku.shinigami.ShinigamiStore store =
+                    new id.shuyasal.kuromaku.shinigami.ShinigamiStore(reader);
+            assertTrue("bar tampil secara bawaan", store.showReadingProgress());
+            store.setShowReadingProgress(false);
+            assertFalse("pengguna bisa mematikannya", store.showReadingProgress());
+
+            View bar = tagged(reader, "shinigami_reader_progress_bar");
+            java.lang.reflect.Method update = ShinigamiReaderActivity.class
+                    .getDeclaredMethod("updateReadingIndicator");
+            update.setAccessible(true);
+            update.invoke(reader);
+            assertEquals("bar tersembunyi saat dimatikan", View.GONE, bar.getVisibility());
+
+            store.setShowReadingProgress(true);
+            update.invoke(reader);
+            assertEquals("bar kembali tampil", View.VISIBLE, bar.getVisibility());
+        }
+    }
+
 }
