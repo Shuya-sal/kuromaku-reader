@@ -341,6 +341,13 @@ public class MangaActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onAnimeOtakudesu() {
+                startActivity(new Intent(MangaActivity.this,
+                        id.shuyasal.kuromaku.anime.OtakudesuActivity.class));
+                finish();
+            }
+
+            @Override
             public void onBackup() {
                 openNovelDataAction("backup");
             }

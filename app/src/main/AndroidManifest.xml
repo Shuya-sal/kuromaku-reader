@@ -44,6 +44,19 @@
             android:exported="false" />
 
         <activity
+            android:name=".anime.OtakudesuActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".anime.OtakudesuDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".anime.OtakudesuPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
+        <activity
             android:name=".shinigami.ShinigamiDetailActivity"
             android:exported="false" />
 

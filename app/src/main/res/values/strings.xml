@@ -6,7 +6,7 @@
 
     <string name="source_hub_eyebrow">KUROMAKU READER</string>
     <string name="source_hub_title">Pilih sumber bacaan</string>
-    <string name="source_hub_subtitle">Tiga perpustakaan dalam satu aplikasi. Progres, bookmark, dan favorit tetap tersimpan per sumber.</string>
+    <string name="source_hub_subtitle">Empat perpustakaan dalam satu aplikasi. Progres, bookmark, dan favorit tetap tersimpan per sumber.</string>
     <string name="source_hub_footer">Ketuk kartu untuk mulai membaca</string>
     <string name="source_hub_open">Buka sumber</string>
     <string name="source_hub_background_description">Latar halaman pemilih sumber</string>
@@ -17,6 +17,8 @@
     <string name="source_voratoon_note">Baca manga Voratoon langsung di dalam aplikasi.</string>
     <string name="source_shinigami">Manga Shinigami</string>
     <string name="source_shinigami_note">Baca manga Shinigami, lengkap dengan unduhan offline.</string>
+    <string name="source_otakudesu">Anime Otakudesu</string>
+    <string name="source_otakudesu_note">Streaming anime subtitle Indonesia dari Otakudesu.</string>
 
     <string name="home">Beranda</string>
 

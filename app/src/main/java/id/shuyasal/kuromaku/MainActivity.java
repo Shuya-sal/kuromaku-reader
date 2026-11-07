@@ -382,6 +382,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onAnimeOtakudesu() {
+                startActivity(new Intent(MainActivity.this,
+                        id.shuyasal.kuromaku.anime.OtakudesuActivity.class));
+            }
+
+            @Override
             public void onBackup() {
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -437,7 +443,9 @@ public class MainActivity extends AppCompatActivity {
             if (requestCode == REQUEST_BACKUP) {
                 SharedPreferences store = getSharedPreferences(Prefs.FILE_NAME, MODE_PRIVATE);
                 SharedPreferences manga = getSharedPreferences(ShinigamiStore.FILE_NAME, MODE_PRIVATE);
-                String document = ReadingBackup.export(store, manga);
+                SharedPreferences anime = getSharedPreferences(
+                        id.shuyasal.kuromaku.anime.OtakudesuStore.FILE_NAME, MODE_PRIVATE);
+                String document = ReadingBackup.export(store, manga, anime);
                 try (OutputStream out = getContentResolver().openOutputStream(data.getData())) {
                     if (out == null) throw new java.io.IOException("Berkas tujuan tidak bisa dibuka");
                     out.write(document.getBytes(StandardCharsets.UTF_8));
@@ -461,7 +469,10 @@ public class MainActivity extends AppCompatActivity {
                 }
                 SharedPreferences store = getSharedPreferences(Prefs.FILE_NAME, MODE_PRIVATE);
                 SharedPreferences manga = getSharedPreferences(ShinigamiStore.FILE_NAME, MODE_PRIVATE);
-                int restored = ReadingBackup.restore(store, new String(bytes, StandardCharsets.UTF_8), manga);
+                SharedPreferences anime = getSharedPreferences(
+                        id.shuyasal.kuromaku.anime.OtakudesuStore.FILE_NAME, MODE_PRIVATE);
+                int restored = ReadingBackup.restore(store,
+                        new String(bytes, StandardCharsets.UTF_8), manga, anime);
                 Toast.makeText(this, restored + " progres dipulihkan", Toast.LENGTH_LONG).show();
                 // No catalogue reload needed: progress is read from the store while
                 // rendering, so going back to the shelf shows the restored bookmark

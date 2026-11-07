@@ -46,6 +46,13 @@ public final class ShinigamiNavigation {
                     }
 
                     @Override
+                    public void onAnimeOtakudesu() {
+                        activity.startActivity(new Intent(activity,
+                                id.shuyasal.kuromaku.anime.OtakudesuActivity.class));
+                        activity.finish();
+                    }
+
+                    @Override
                     public void onBackup() {
                         data(activity, "backup");
                     }

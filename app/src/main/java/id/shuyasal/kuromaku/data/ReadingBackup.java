@@ -41,6 +41,7 @@ public final class ReadingBackup {
     private static final String KEY_VALUE = "value";
 
     private static final String KEY_SHINIGAMI = "shinigami_preferences";
+    private static final String KEY_ANIME = "anime_preferences";
 
     private ReadingBackup() {
     }
@@ -52,12 +53,28 @@ public final class ReadingBackup {
 
     public static String export(SharedPreferences store, SharedPreferences shinigami)
             throws JSONException {
+        return export(store, shinigami, null);
+    }
+
+    /**
+     * Sama seperti versi dua argumen, ditambah progres Anime Otakudesu.
+     *
+     * <p>Bagian anime bersifat opsional: berkas backup lama (tanpa bagian ini)
+     * tetap terbaca, dan berkas baru tetap terbaca oleh aplikasi lama karena
+     * formatnya tidak berubah.
+     */
+    public static String export(SharedPreferences store, SharedPreferences shinigami,
+                                SharedPreferences anime) throws JSONException {
         JSONObject document = new JSONObject();
         document.put(KEY_FORMAT, FORMAT);
         document.put(KEY_PREFS, values(store));
         if (shinigami != null) {
             JSONObject extra = values(shinigami);
             if (extra.length() > 0) document.put(KEY_SHINIGAMI, extra);
+        }
+        if (anime != null) {
+            JSONObject extra = values(anime);
+            if (extra.length() > 0) document.put(KEY_ANIME, extra);
         }
         return document.toString(2);
     }
@@ -117,6 +134,12 @@ public final class ReadingBackup {
 
     public static int restore(SharedPreferences store, String document,
                               SharedPreferences shinigami) throws JSONException {
+        return restore(store, document, shinigami, null);
+    }
+
+    public static int restore(SharedPreferences store, String document,
+                              SharedPreferences shinigami,
+                              SharedPreferences anime) throws JSONException {
         if (document == null) throw new JSONException("Berkas backup kosong");
         if (document.length() > MAX_BYTES) throw new JSONException("Berkas backup terlalu besar");
 
@@ -138,6 +161,13 @@ public final class ReadingBackup {
         JSONObject extraValues = root.optJSONObject(KEY_SHINIGAMI);
         if (extraValues != null) {
             readTyped(extraValues, extraKeys, extraPending);
+        }
+
+        List<String> animeKeys = new ArrayList<>();
+        List<Object> animePending = new ArrayList<>();
+        JSONObject animeValues = root.optJSONObject(KEY_ANIME);
+        if (animeValues != null) {
+            readTyped(animeValues, animeKeys, animePending);
         }
 
         SharedPreferences.Editor editor = store.edit();
@@ -178,7 +208,28 @@ public final class ReadingBackup {
             restoredExtra = extraKeys.size();
         }
 
-        return keys.size() + restoredExtra;
+        int restoredAnime = 0;
+        if (anime != null && !animeKeys.isEmpty()) {
+            SharedPreferences.Editor animeEditor = anime.edit();
+            for (int i = 0; i < animeKeys.size(); i++) {
+                String key = animeKeys.get(i);
+                Object value = animePending.get(i);
+                if (value instanceof String) animeEditor.putString(key, (String) value);
+                else if (value instanceof Integer) animeEditor.putInt(key, (Integer) value);
+                else if (value instanceof Long) animeEditor.putLong(key, (Long) value);
+                else if (value instanceof Float) animeEditor.putFloat(key, (Float) value);
+                else if (value instanceof Boolean) animeEditor.putBoolean(key, (Boolean) value);
+                else if (value instanceof Set) {
+                    @SuppressWarnings("unchecked")
+                    Set<String> set = (Set<String>) value;
+                    animeEditor.putStringSet(key, set);
+                }
+            }
+            if (!animeEditor.commit()) throw new JSONException("Gagal menyimpan progres anime");
+            restoredAnime = animeKeys.size();
+        }
+
+        return keys.size() + restoredExtra + restoredAnime;
     }
 
     private static void readTyped(JSONObject values, List<String> keys, List<Object> pending)

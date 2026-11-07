@@ -20,6 +20,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import id.shuyasal.kuromaku.anime.OtakudesuActivity;
 import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
 import id.shuyasal.kuromaku.ui.GlassCard;
 import id.shuyasal.kuromaku.ui.Palette;
@@ -30,7 +31,7 @@ import id.shuyasal.kuromaku.ui.Ui;
 /**
  * Halaman awal aplikasi: pemilih sumber bacaan.
  *
- * <p>Tiga kartu menuju Novel, Manga Voratoon, dan Manga Shinigami. Halaman ini
+ * <p>Empat kartu menuju Novel, Manga Voratoon, Manga Shinigami, dan Anime Otakudesu. Halaman ini
  * hanya pintu masuk — tidak mengubah tampilan maupun data ketiga sumber.
  * Latar memakai gambar lokal dengan {@code centerCrop} dan lapisan gelap agar
  * teks tetap terbaca di mode terang maupun gelap.
@@ -104,6 +105,9 @@ public class SourceHubActivity extends AppCompatActivity {
         cards.addView(card(R.string.source_shinigami, R.string.source_shinigami_note,
                 R.drawable.ic_moon, 0xFFC2453F,
                 "source_hub_card_shinigami", () -> open(ShinigamiActivity.class)));
+        cards.addView(card(R.string.source_otakudesu, R.string.source_otakudesu_note,
+                R.drawable.ic_film, 0xFF2F7DE1,
+                "source_hub_card_otakudesu", () -> open(OtakudesuActivity.class)));
 
         content.addView(cards);
 

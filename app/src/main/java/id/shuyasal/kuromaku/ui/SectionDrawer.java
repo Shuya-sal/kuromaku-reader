@@ -23,7 +23,8 @@ public final class SectionDrawer {
     public enum Section {
         NOVEL,
         MANGA_VORATON,
-        MANGA_SHINIGAMI
+        MANGA_SHINIGAMI,
+        ANIME_OTAKUDESU
     }
 
     public interface Listener {
@@ -31,6 +32,10 @@ public final class SectionDrawer {
         void onMangaVoratoon();
         void onShinigami();
         void onBackup();
+
+        /** Anime Otakudesu; implementasi lama boleh mengabaikan. */
+        default void onAnimeOtakudesu() {
+        }
         void onRestore();
 
         /** Kembali ke halaman pemilih sumber. Implementasi boleh diabaikan. */
@@ -114,6 +119,14 @@ public final class SectionDrawer {
             drawer.dismiss();
             if (listener != null) listener.onShinigami();
         });
+
+        String animeLabel = currentSection == Section.ANIME_OTAKUDESU
+                ? "Anime Otakudesu  ✓" : "Anime Otakudesu";
+        addDrawerItem(activity, panel, animeLabel, "drawer_anime_otakudesu",
+                currentSection == Section.ANIME_OTAKUDESU, palette, () -> {
+                    drawer.dismiss();
+                    if (listener != null) listener.onAnimeOtakudesu();
+                });
 
         View separator = new View(activity);
         separator.setBackgroundColor(palette.divider);
