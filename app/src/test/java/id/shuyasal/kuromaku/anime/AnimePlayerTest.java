@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Intent;
@@ -242,33 +243,32 @@ public class AnimePlayerTest {
         }
     }
 
-    /** Arah "Putar layar" menukar orientasi, bukan selalu ke landscape. */
-    @Test public void putarLayarMenukarOrientasi() throws Exception {
+    /** Tombol mana pun tidak boleh membuat pemutar dilepas. */
+    @Test public void beralihModeTidakMelepasPemutar() throws Exception {
         ActivityController<AnimePlayerActivity> controller = player();
         try {
             AnimePlayerActivity activity = controller.get();
+            java.lang.reflect.Field playerField =
+                    AnimePlayerActivity.class.getDeclaredField("player");
+            playerField.setAccessible(true);
+            Object sebelum = playerField.get(activity);
+
             java.lang.reflect.Method rotate =
                     AnimePlayerActivity.class.getDeclaredMethod("rotateScreen");
             rotate.setAccessible(true);
-            activity.setRequestedOrientation(
-                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             rotate.invoke(activity);
-            int setelah = activity.getRequestedOrientation();
-            assertTrue("orientasi harus diminta secara eksplisit",
-                    setelah == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-                            || setelah == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
-
-            // Arah mengikuti orientasi perangkat saat itu: pada portrait
-            // permintaannya landscape, jadi hasilnya harus salah satu dari dua
-            // nilai eksplisit itu — bukan UNSPECIFIED, yang berarti "ikuti
-            // perangkat" dan bukan pemutaran paksa.
-            assertFalse("pemutaran paksa tidak boleh berarti ikut perangkat",
-                    setelah == android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            assertSame("pemutar tidak dibuat ulang saat mode rotasi",
+                    sebelum, playerField.get(activity));
+            rotate.invoke(activity);
+            assertSame("pemutar tetap sama saat keluar mode rotasi",
+                    sebelum, playerField.get(activity));
         } finally {
             controller.close();
         }
     }
 
+
+    /** Pemutar dengan intent lengkap, seperti dibuka dari daftar episode. */
     private ActivityController<AnimePlayerActivity> player() {
         Intent intent = new Intent(ApplicationProvider.getApplicationContext(),
                 AnimePlayerActivity.class);
@@ -277,7 +277,6 @@ public class AnimePlayerTest {
         intent.putExtra("episode_url",
                 "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/");
         intent.putExtra("episode_label", "Episode 1");
-        return Robolectric.buildActivity(AnimePlayerActivity.class, intent).setup();
+        return Robolectric.buildActivity(AnimePlayerActivity.class, intent).setup().visible();
     }
-
 }

@@ -116,7 +116,19 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private int generation;
     private boolean resumeOnStart;
+    /** Layar penuh immersive saja: bilah disembunyikan, orientasi mengikuti perangkat. */
     private boolean fullscreen;
+    /**
+     * Layar penuh landscape yang diminta lewat "Putar layar".
+     *
+     * <p>Terpisah dari {@link #fullscreen}: pengguna bisa memakai tombol Layar
+     * penuh (tanpa memaksa orientasi) atau Putar layar (landscape sekaligus
+     * layar penuh). Menggabungkan keduanya membuat salah satu tombol
+     * mengembalikan keadaan yang tidak diharapkan saat dipakai bergantian.
+     */
+    private boolean rotatedFullscreen;
+    /** Orientasi sebelum "Putar layar" ditekan, untuk dikembalikan saat keluar. */
+    private int orientationBeforeRotate = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     private boolean firstSource = true;
     private long pendingResumeMs;
     private String activeQuality = "Otomatis";
@@ -162,6 +174,10 @@ public class AnimePlayerActivity extends AppCompatActivity {
         buildUi();
         if (state != null) {
             pendingResumeMs = state.getLong("resume_ms", 0L);
+            rotatedFullscreen = state.getBoolean("rotated_fullscreen", false);
+            orientationBeforeRotate = state.getInt("orientation_before_rotate",
+                    ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            fullscreen = state.getBoolean("immersive_fullscreen", false);
             firstSource = false;
         }
         if (episodeUrl.isEmpty()) {
@@ -232,6 +248,10 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 "Kembali", palette);
         back.setTag("anime_player_back");
         back.setOnClickListener(v -> {
+            if (rotatedFullscreen) {
+                exitRotatedFullscreen();
+                return;
+            }
             if (fullscreen) {
                 setFullscreen(false);
                 return;
@@ -288,7 +308,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         if (hasQuality) items.add("Kualitas");
         items.add("Subtitle");
         items.add("Kecepatan");
-        items.add("Putar layar");
+        items.add(rotatedFullscreen ? "Kembali ke orientasi semula" : "Putar layar");
         String[] labels = items.toArray(new String[0]);
 
         new androidx.appcompat.app.AlertDialog.Builder(this)
@@ -301,7 +321,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                         showQualityMenu();
                     } else if (chosen.equals("Subtitle")) {
                         showSubtitleMenu();
-                    } else if (chosen.equals("Putar layar")) {
+                    } else if (chosen.startsWith("Putar layar")
+                            || chosen.equals("Kembali ke orientasi semula")) {
                         rotateScreen();
                     } else {
                         showSpeedMenu();
@@ -1064,6 +1085,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private void setFullscreen(boolean enable) {
         if (fullscreen == enable) return;
         fullscreen = enable;
+        // Masuk layar penuh biasa membatalkan mode landscape paksa supaya kedua
+        // tombol tidak saling menimpa keadaan satu sama lain.
+        if (!enable) rotatedFullscreen = false;
         WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
         if (enable) {
@@ -1088,11 +1112,47 @@ public class AnimePlayerActivity extends AppCompatActivity {
      * tetap satu: posisi, buffer, dan state ExoPlayer tidak disentuh.
      */
     private void rotateScreen() {
+        if (rotatedFullscreen) {
+            exitRotatedFullscreen();
+            return;
+        }
         int now = getResources().getConfiguration().orientation;
+        // Keluar dari mode ini mengembalikan orientasi yang berlaku sebelumnya,
+        // bukan orientasi yang dikarang.
+        orientationBeforeRotate = getRequestedOrientation();
+        rotatedFullscreen = true;
+
+        // Landscape DAN layar penuh sekaligus. Orientasi landscape diminta
+        // secara eksplisit lewat kebijakan yang sah pada versi Android ini;
+        // bila sistem menolak (mis. auto-rotate dikunci di level sistem), mode
+        // layar penuh tetap berlaku dan video tetap memakai rasio aslinya —
+        // pengguna tidak pernah disuguhi "layar penuh palsu" yang mengaku
+        // landscape padahal tidak.
         int target = now == Configuration.ORIENTATION_LANDSCAPE
-                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+                ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
-        setRequestedOrientation(target);
+        try {
+            setRequestedOrientation(target);
+        } catch (RuntimeException ignored) {
+            // Sebagian perangkat/OEM menolak permintaan orientasi.
+        }
+        if (!fullscreen) setFullscreen(true);
+        Toast.makeText(this, "Mode putar layar: landscape penuh. Tekan lagi untuk kembali.",
+                Toast.LENGTH_SHORT).show();
+    }
+
+    /** Keluar dari mode landscape paksa dan pulihkan orientasi semula. */
+    private void exitRotatedFullscreen() {
+        rotatedFullscreen = false;
+        try {
+            setRequestedOrientation(orientationBeforeRotate == ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    ? ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                    : orientationBeforeRotate);
+        } catch (RuntimeException ignored) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        }
+        orientationBeforeRotate = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+        if (fullscreen) setFullscreen(false);
     }
 
     /**
@@ -1106,6 +1166,12 @@ public class AnimePlayerActivity extends AppCompatActivity {
     }
 
     @Override public void onBackPressed() {
+        // Urutan yang konsisten: keluar dari mode rotasi lebih dulu, lalu layar
+        // penuh, baru meninggalkan pemutar — riwayat pemutaran tidak hilang.
+        if (rotatedFullscreen) {
+            exitRotatedFullscreen();
+            return;
+        }
         if (fullscreen) {
             setFullscreen(false);
             return;
@@ -1181,9 +1247,24 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     // ------------------------------------------------------------- lifecycle
 
+    /**
+     * Perubahan konfigurasi (rotasi) tidak boleh mematikan lalu membuat ulang
+     * pemutar: posisi, buffer, dan state ExoPlayer tetap. Penanganannya ada di
+     * {@link #onSaveInstanceState} + pemulihan, dan player tidak dilepas di
+     * {@code onStop}.
+     */
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        // Tata letak disusun ulang tanpa menyentuh pemutar.
+        if (topBar != null) topBar.requestLayout();
+    }
+
     @Override protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         if (player != null) out.putLong("resume_ms", player.getCurrentPosition());
+        out.putBoolean("rotated_fullscreen", rotatedFullscreen);
+        out.putInt("orientation_before_rotate", orientationBeforeRotate);
+        out.putBoolean("immersive_fullscreen", fullscreen);
     }
 
     @Override protected void onStart() {

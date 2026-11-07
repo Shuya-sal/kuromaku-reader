@@ -66,7 +66,7 @@ public class ShinigamiReaderNavTest {
         ShinigamiSource.clearChapterIndex(null);
         online = true;
         transport = url -> {
-            if (url.contains("/chapter/detail/")) return fixture("live_chapter_detail.json");
+            if (url.contains("/chapter/detail/")) return HALAMAN_UJI;
             if (url.contains("/chapter/") && url.contains("/list")) {
                 return chapterList(url.contains("page=2"));
             }
@@ -504,6 +504,15 @@ public class ShinigamiReaderNavTest {
         }
     }
 
+    /** Fixture dengan 6 halaman: halaman benar-benar bisa dibaca. */
+    static final String HALAMAN_UJI =
+            "{\"retcode\":0,\"data\":{\"chapter_id\":\"ch-25\","
+            + "\"chapter_number\":25,\"chapter_title\":\"Uji\","
+            + "\"base_url\":\"https://assets.shngm.id\","
+            + "\"chapter\":{\"path\":\"/chapter/uji/\","
+            + "\"data\":[\"0-a.webp\",\"1-b.webp\",\"2-c.webp\","
+            + "\"3-d.webp\",\"4-e.webp\",\"5-f.webp\"]}}}";
+
     /** Ketukan pada gambar dalam satu titik, seperti sentuhan sungguhan. */
     private static void tapAt(ShinigamiPageView page, float x, float y) {
         long now = android.os.SystemClock.uptimeMillis();
@@ -634,6 +643,253 @@ public class ShinigamiReaderNavTest {
             store.setShowReadingProgress(true);
             update.invoke(reader);
             assertEquals("bar kembali tampil", View.VISIBLE, bar.getVisibility());
+        }
+    }
+
+
+    // ------------------------------------- jalur event yang sesungguhnya
+
+    /**
+     * Ketukan satu kali lewat {@code dispatchTouchEvent} Activity benar-benar
+     * men-toggle layar penuh.
+     *
+     * <p>Ini perbedaan penting dari tes sebelumnya: yang dikirim di sini adalah
+     * event ke <b>dekorasi window</b>, jadi seluruh jalur yang dilalui sentuhan
+     * sungguhan ikut teruji — Activity → RecyclerView → ViewHolder →
+     * ShinigamiPageView → handler. Tes lama memanggil
+     * {@code ShinigamiPageView.onInterceptTouchEvent()} langsung, sehingga
+     * kegagalan di tengah jalur itu tidak pernah terlihat: itulah sebab bug
+     * "ketuk sekali tidak masuk layar penuh" masih lolos meski tesnya hijau.
+     */
+    @Test public void ketukanSungguhanSampaiKeHalamanDanMenoggleLayarPenuh() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d)).setup()) {
+            Reader reader = controller.get();
+            await(reader);
+            layout(reader);
+
+            android.view.ViewGroup daftar = (android.view.ViewGroup)
+                    tagged(reader, "shinigami_reader_list");
+            assertTrue("halaman harus terpasang", daftar.getChildCount() > 0);
+
+            // Halaman pertama mencatat setiap rangkaian ketukan yang sampai.
+            final java.util.List<Integer> diterima = new java.util.ArrayList<>();
+            for (int i = 0; i < daftar.getChildCount(); i++) {
+                ShinigamiPageView halaman = (ShinigamiPageView) daftar.getChildAt(i);
+                halaman.setZoomRequest(new ShinigamiPageView.ZoomRequest() {
+                    @Override public void onZoom(int factor, float focusY) {
+                        diterima.add(factor);
+                    }
+
+                    @Override public void onSingleTap(float focusY) {
+                        diterima.add(1);
+                    }
+                });
+            }
+
+            View decor = reader.getWindow().getDecorView();
+            float x = decor.getWidth() / 2f;
+            float y = 300f;
+            long now = android.os.SystemClock.uptimeMillis();
+            // Sentuhan lewat daftar, seperti jari menyentuh gambar di layar.
+            daftar.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+            daftar.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now + 30, android.view.MotionEvent.ACTION_UP, x, y, 0));
+
+            // Jendela konfirmasi ketukan: majukan jam looper seperti menunggu
+            // sungguhan di perangkat (Robolectric memakai clock terkendali tes).
+            org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                    .idleFor(java.time.Duration.ofMillis(ShinigamiTaps.WINDOW_MS + 60L));
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+
+            assertEquals("satu ketukan sungguhan harus sampai ke halaman sebagai ketukan tunggal",
+                    java.util.Collections.singletonList(1), diterima);
+        }
+    }
+
+    /** Dua ketukan sungguhan tidak pernah men-toggle layar penuh. */
+    @Test public void duaKetukanSungguhanTidakMenoggleLayarPenuh() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d))
+                             .setup().visible()) {
+            Reader reader = controller.get();
+            await(reader);
+            layout(reader);
+            View bar = tagged(reader, "shinigami_reader_bar");
+
+            sentuhCepat(reader, 300f);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            settle(reader);
+            assertEquals("dua ketukan hanya zoom", View.VISIBLE, bar.getVisibility());
+        }
+    }
+
+    /** Menggulir sungguhan tidak pernah men-toggle layar penuh. */
+    @Test public void gulirSungguhanTidakMenoggleLayarPenuh() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d))
+                             .setup().visible()) {
+            Reader reader = controller.get();
+            await(reader);
+            layout(reader);
+            View bar = tagged(reader, "shinigami_reader_bar");
+
+            geser(reader, 700f, 200f);
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            settle(reader);
+            assertEquals("menggulir bukan ketukan", View.VISIBLE, bar.getVisibility());
+        }
+    }
+
+    /** Layar penuh hanya punya satu sumber kebenaran, bukan dua handler. */
+    @Test public void layarPenuhHanyaSatuJalurToggle() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d))
+                             .setup().visible()) {
+            Reader reader = controller.get();
+            await(reader);
+            layout(reader);
+
+            java.lang.reflect.Method toggle = ShinigamiReaderActivity.class
+                    .getDeclaredMethod("toggleReaderFullscreen");
+            toggle.setAccessible(true);
+            java.lang.reflect.Field state = ShinigamiReaderActivity.class
+                    .getDeclaredField("readerFullscreen");
+            state.setAccessible(true);
+
+            assertFalse("awal: normal", (Boolean) state.get(reader));
+            toggle.invoke(reader);
+            assertTrue("toggle pertama: layar penuh", (Boolean) state.get(reader));
+            toggle.invoke(reader);
+            assertFalse("toggle kedua: normal", (Boolean) state.get(reader));
+
+            // Tombol di toolbar memakai handler yang sama.
+            tagged(reader, "shinigami_reader_fullscreen").performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertTrue("tombol toolbar memakai state yang sama", (Boolean) state.get(reader));
+        }
+    }
+
+    /** Sentuhan pada tombol kontrol tidak ikut men-toggle layar penuh. */
+    @Test public void sentuhanPadaTombolTidakMenoggleLayarPenuh() throws Exception {
+        try (ActivityController<Reader> controller =
+                     Robolectric.buildActivity(Reader.class, intent("ch-25", 25d))
+                             .setup().visible()) {
+            Reader reader = controller.get();
+            await(reader);
+            layout(reader);
+            java.lang.reflect.Field state = ShinigamiReaderActivity.class
+                    .getDeclaredField("readerFullscreen");
+            state.setAccessible(true);
+
+            View more = tagged(reader, "shinigami_reader_more");
+            int[] lokasi = new int[2];
+            more.getLocationOnScreen(lokasi);
+            if (lokasi[1] > 0) {
+                sentuhDi(reader, 300f, lokasi[1] + more.getHeight() / 2f);
+                org.robolectric.shadows.ShadowLooper.idleMainLooper();
+                settle(reader);
+                assertFalse("ketukan pada tombol bukan ketukan pada gambar",
+                        (Boolean) state.get(reader));
+            }
+        }
+    }
+
+    /** Satu ketukan pada gambar: DOWN + UP ke dekorasi window. */
+    private static void sentuh(ShinigamiReaderActivity reader, float y) {
+        sentuhDi(reader, reader.getWindow().getDecorView().getWidth() / 2f, y);
+    }
+
+    private static void sentuhDi(ShinigamiReaderActivity reader, float x, float y) {
+        View decor = reader.getWindow().getDecorView();
+        long now = android.os.SystemClock.uptimeMillis();
+        decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+        decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                now, now + 30, android.view.MotionEvent.ACTION_UP, x, y, 0));
+        // Jendela konfirmasi ketukan: majukan jam looper supaya aksi ketukan
+        // tunggal benar-benar dijalankan, seperti sentuhan sungguhan.
+        // Robolectric memakai clock yang dikendalikan tes: tanpa memajukannya,
+        // jam sistem kembali ke nilai kecil di antara ketukan sehingga rangkaian
+        // ketukan dianggap kedaluwarsa dan aksi ketukan tunggal tidak pernah
+        // dijalankan. idleFor memajukan jam looper sekaligus menjalankan pesan
+        // yang jatuh tempo — sama seperti menunggu sungguhan di perangkat.
+        org.robolectric.shadows.ShadowLooper.getShadowMainLooper()
+                .idleFor(java.time.Duration.ofMillis(ShinigamiTaps.WINDOW_MS + 40L));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+    }
+
+    /** Dua ketukan berurutan cepat, seperti double-tap sungguhan. */
+    private static void sentuhCepat(ShinigamiReaderActivity reader, float y) {
+        View decor = reader.getWindow().getDecorView();
+        float x = decor.getWidth() / 2f;
+        long now = android.os.SystemClock.uptimeMillis();
+        for (int i = 0; i < 2; i++) {
+            long t = now + i * 60L;
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    t, t, android.view.MotionEvent.ACTION_DOWN, x, y, 0));
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    t, t + 30, android.view.MotionEvent.ACTION_UP, x, y, 0));
+        }
+    }
+
+    /** Geser jauh: DOWN, banyak MOVE, UP. */
+    private static void geser(ShinigamiReaderActivity reader, float dari, float ke) {
+        View decor = reader.getWindow().getDecorView();
+        float x = decor.getWidth() / 2f;
+        long now = android.os.SystemClock.uptimeMillis();
+        decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                now, now, android.view.MotionEvent.ACTION_DOWN, x, dari, 0));
+        for (int i = 1; i <= 5; i++) {
+            float y = dari + (ke - dari) * i / 5f;
+            decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                    now, now + i * 16L, android.view.MotionEvent.ACTION_MOVE, x, y, 0));
+        }
+        decor.dispatchTouchEvent(android.view.MotionEvent.obtain(
+                now, now + 110L, android.view.MotionEvent.ACTION_UP, x, ke, 0));
+    }
+
+    /** Tata letakkan seluruh window pada ukuran tetap supaya dispatch nyata. */
+    private static void layout(ShinigamiReaderActivity reader) {
+        // Ukur lewat AkarView dan tampilkan: mengukur dekorasi sendiri tidak
+        // memunculkan pohon (seluruh view tetap GONE), sehingga ketukan tidak
+        // pernah sampai ke halaman.
+        View decor = reader.getWindow().getDecorView();
+        int width = View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY);
+        int height = View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY);
+        decor.measure(width, height);
+        decor.layout(0, 0, 720, 1280);
+        View isi = reader.findViewById(android.R.id.content);
+        View akar = ((android.view.ViewGroup) isi).getChildAt(0);
+        akar.measure(View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY));
+        akar.layout(0, 0, 720, 1280);
+        akar.setVisibility(View.VISIBLE);
+        for (android.view.ViewGroup lapis = (android.view.ViewGroup) isi; ; ) {
+            lapis.setVisibility(View.VISIBLE);
+            if (lapis.getChildCount() == 0) break;
+            View anak = lapis.getChildAt(0);
+            if (!(anak instanceof android.view.ViewGroup)) { anak.setVisibility(View.VISIBLE); break; }
+            lapis = (android.view.ViewGroup) anak;
+        }
+        View daftar = tagged(reader, "shinigami_reader_list");
+        for (android.view.ViewParent p = daftar.getParent(); p instanceof View;
+             p = ((View) p).getParent()) {
+            ((View) p).setVisibility(View.VISIBLE);
+        }
+        daftar.setVisibility(View.VISIBLE);
+    }
+
+    /** Tunggu jendela konfirmasi ketukan pada halaman yang sedang tampil. */
+    private static void settle(ShinigamiReaderActivity reader) {
+        android.view.ViewGroup list = (android.view.ViewGroup)
+                tagged(reader, "shinigami_reader_list");
+        for (int i = 0; i < list.getChildCount(); i++) {
+            View child = list.getChildAt(i);
+            if (child instanceof ShinigamiPageView) {
+                ((ShinigamiPageView) child).settleTaps();
+            }
         }
     }
 

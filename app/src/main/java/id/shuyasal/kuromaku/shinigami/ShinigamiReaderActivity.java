@@ -88,7 +88,8 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private int indexGeneration;
     private ShinigamiPageCache cache;
     private ShinigamiQuality quality = ShinigamiQuality.AUTO;
-    private boolean fullscreen;
+    /** Status layar penuh reader. Satu-satunya sumber kebenaran. */
+    private boolean readerFullscreen;
     private boolean offlineChapter;
     private boolean progressReliable = true;
     private boolean positionReady;
@@ -283,7 +284,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         android.widget.ImageButton zoom = Ui.iconButton(this,
                 id.shuyasal.kuromaku.R.drawable.ic_fullscreen, "Layar penuh", palette);
         zoom.setTag("shinigami_reader_fullscreen");
-        zoom.setOnClickListener(v -> toggleFullscreen());
+        zoom.setOnClickListener(v -> toggleReaderFullscreen());
         bar.addView(zoom, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
@@ -308,7 +309,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         android.widget.PopupMenu menu = new android.widget.PopupMenu(this, anchor);
         menu.getMenu().add(0, MENU_QUALITY, 0, "Kualitas: " + quality.label);
         menu.getMenu().add(0, MENU_FULLSCREEN, 1,
-                fullscreen ? "Keluar layar penuh" : "Layar penuh");
+                readerFullscreen ? "Keluar layar penuh" : "Layar penuh");
         menu.getMenu().add(0, MENU_RELOAD, 2, "Muat ulang chapter");
         menu.getMenu().add(0, MENU_MAIN, 3, "Buka menu utama");
         menu.setOnMenuItemClickListener(item -> {
@@ -317,7 +318,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                     cycleQuality(null);
                     return true;
                 case MENU_FULLSCREEN:
-                    toggleFullscreen();
+                    toggleReaderFullscreen();
                     return true;
                 case MENU_RELOAD:
                     pages.clear();
@@ -428,14 +429,26 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
      * padding dari window insets dipasang ulang supaya toolbar tidak tertutup
      * status bar.
      */
+    /**
+     * Satu-satunya jalur untuk mengubah mode layar penuh.
+     *
+     * <p>Dipanggil oleh tombol toolbar dan oleh satu ketukan terkonfirmasi pada
+     * gambar, sehingga keadaan mode hanya punya satu sumber kebenaran. Dua jalur
+     * terpisah dengan variabel berbeda adalah cara paling mudah membuat satu
+     * ketukan tampak "tidak bekerja" sementara tombolnya bekerja.
+     */
+    private void toggleReaderFullscreen() {
+        toggleFullscreen();
+    }
+
     private void toggleFullscreen() {
-        fullscreen = !fullscreen;
-        bar.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
-        if (chapterNav != null) chapterNav.setVisibility(fullscreen ? View.GONE : View.VISIBLE);
+        readerFullscreen = !readerFullscreen;
+        bar.setVisibility(readerFullscreen ? View.GONE : View.VISIBLE);
+        if (chapterNav != null) chapterNav.setVisibility(readerFullscreen ? View.GONE : View.VISIBLE);
 
         androidx.core.view.WindowInsetsControllerCompat controller =
                 androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        if (fullscreen) {
+        if (readerFullscreen) {
             controller.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
             controller.setSystemBarsBehavior(
                     androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
@@ -649,17 +662,29 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (message != null) {
-                    statusText.setVisibility(View.GONE);
-                    errorText.setText(message);
-                    errorText.setVisibility(View.VISIBLE);
-                    retryButton.setVisibility(View.VISIBLE);
-                    return;
+                    // Galat hanya menutupi gambar bila memang tidak ada halaman
+                    // yang bisa dibaca. Kalau halaman sudah ada, gambar tetap
+                    // yang utama: kotak galat dan tombolnya akan menelan setiap
+                    // ketukan pada gambar.
+                    if (result.isEmpty() && pages.isEmpty()) {
+                        statusText.setVisibility(View.GONE);
+                        errorText.setText(message);
+                        errorText.setVisibility(View.VISIBLE);
+                        retryButton.setVisibility(View.VISIBLE);
+                        return;
+                    }
+                    showNoticeOnce(message);
                 }
                 if (result.isEmpty()) {
+                    if (pages.isEmpty()) {
+                        statusText.setVisibility(View.GONE);
+                        errorText.setText(offlineMessage());
+                        errorText.setVisibility(View.VISIBLE);
+                        retryButton.setVisibility(View.VISIBLE);
+                        return;
+                    }
                     statusText.setVisibility(View.GONE);
-                    errorText.setText(offlineMessage());
-                    errorText.setVisibility(View.VISIBLE);
-                    retryButton.setVisibility(View.VISIBLE);
+                    showNoticeOnce(offlineMessage());
                     return;
                 }
                 pages.clear();
@@ -851,7 +876,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (fullscreen) {
+        if (readerFullscreen) {
             toggleFullscreen();
             return;
         }
@@ -931,7 +956,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                  * dan tiga ketukan.
                  */
                 @Override public void onSingleTap(float focusY) {
-                    toggleFullscreen();
+                    toggleReaderFullscreen();
                 }
             });
             // Tinggi placeholder memakai rasio yang pernah terukur untuk halaman

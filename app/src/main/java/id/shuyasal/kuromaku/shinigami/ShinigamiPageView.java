@@ -75,6 +75,8 @@ public final class ShinigamiPageView extends FrameLayout {
     private float downX;
     private float downY;
     private boolean tapMoved;
+    /** Penjaga agar satu rangkaian sentuhan tidak dicatat dua kali. */
+    private boolean downSeen;
     private final float tapSlop;
     /**
      * Menyelesaikan rangkaian ketukan setelah jendela konfirmasi habis.
@@ -181,14 +183,39 @@ public final class ShinigamiPageView extends FrameLayout {
         resolveTaps.run();
     }
 
+    /**
+     * Melacak ketukan pada halaman ini.
+     *
+     * <p>Dipanggil dari {@link #onInterceptTouchEvent} <b>dan</b> dari
+     * {@link #onTouchEvent}. Android memanggil {@code onInterceptTouchEvent}
+     * lebih dulu; begitu mengembalikan {@code true}, sisa rangkaian sentuhan
+     * (termasuk {@code ACTION_UP}) dikirim ke {@link #onTouchEvent}. Keduanya
+     * memanggil pelacak ini, jadi harus ada penjaga agar <b>satu</b> ketukan
+     * tidak pernah tercatat dua kali: sebelumnya hal itu membuat satu ketukan
+     * dihitung sebagai dua ketukan — layar penuh tidak pernah aktif, dan yang
+     * muncul justru zoom 2×.
+     *
+     * <p>Penjaganya sederhana dan tidak bergantung pada urutan pemanggilan:
+     * hanya {@code ACTION_UP} pada rangkaian yang <em>belum</em> ditutup yang
+     * dicatat, dan setiap {@code ACTION_UP} menutup rangkaiannya.
+     */
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
         trackTaps(event);
-        return false;
+        // Halaman ini yang mengurus ketukan; tidak ada anak yang perlu
+        // menerimanya, jadi seluruh rangkaian diurus di sini dan diteruskan ke
+        // onTouchEvent oleh Android.
+        return true;
+    }
+
+    @Override public boolean onTouchEvent(MotionEvent event) {
+        trackTaps(event);
+        return true;
     }
 
     private void trackTaps(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
+                downSeen = true;
                 downX = event.getX();
                 downY = event.getY();
                 tapMoved = false;
@@ -198,6 +225,13 @@ public final class ShinigamiPageView extends FrameLayout {
                         || Math.abs(event.getY() - downY) > tapSlop) tapMoved = true;
                 break;
             case MotionEvent.ACTION_UP:
+                // Penjaga: satu ACTION_UP hanya boleh tercatat sekali per
+                // rangkaian, walau onInterceptTouchEvent dan onTouchEvent sama
+                // sama memanggil pelacak ini.
+                if (!downSeen) {
+                    break;
+                }
+                downSeen = false;
                 if (tapMoved) {
                     // Jari bergeser lebih dari ambang: ini gulir atau geser,
                     // bukan ketukan. Rangkaian ketukan dibatalkan supaya
@@ -223,6 +257,7 @@ public final class ShinigamiPageView extends FrameLayout {
                 tapsHandler.postDelayed(resolveTaps, ShinigamiTaps.WINDOW_MS);
                 break;
             case MotionEvent.ACTION_CANCEL:
+                downSeen = false;
                 taps.reset();
                 tapsHandler.removeCallbacks(resolveTaps);
                 break;
