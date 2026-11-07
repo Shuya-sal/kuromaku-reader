@@ -18,9 +18,12 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.Toast;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.core.view.ViewCompat;
@@ -57,6 +60,16 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
     public static final String EXTRA_ANIME_POSTER = "anime_poster";
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+
+    /** Sumber halaman; bisa diganti pengujian dengan data offline. */
+    protected OtakudesuSource createSource() {
+        return new OtakudesuSource();
+    }
+    /** Tombol unduh per episode, diperbarui langsung dari status unduhan. */
+    private final java.util.Map<String, Button> downloadButtons =
+            new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, ProgressBar> downloadBars =
+            new java.util.LinkedHashMap<>();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final List<OtakudesuAnime.Episode> episodes = new ArrayList<>();
     private final List<OtakudesuAnime.Episode> shown = new ArrayList<>();
@@ -82,7 +95,7 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
         super.onCreate(state);
         ThemeManager.applyTheme(this);
         palette = Palette.of(new Prefs(this).resolvedTheme());
-        source = new OtakudesuSource();
+        source = createSource();
         store = new OtakudesuStore(this);
         animeId = getIntent().getStringExtra(EXTRA_ANIME_ID);
         animeTitle = getIntent().getStringExtra(EXTRA_ANIME_TITLE);
@@ -296,7 +309,7 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
         spinner.setVisibility(View.VISIBLE);
         errorBoxRef.setVisibility(View.GONE);
         retry.setVisibility(View.GONE);
-        worker.execute(() -> {
+        runInBackground(() -> {
             OtakudesuAnime.Detail result = null;
             String failure = null;
             try {
@@ -370,6 +383,9 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
             return descending ? -byNumber : byNumber;
         });
         episodeList.removeAllViews();
+        // Baris dibuat ulang: tombol lama tidak dipakai lagi.
+        downloadButtons.clear();
+        downloadBars.clear();
         for (OtakudesuAnime.Episode episode : shown) {
             episodeList.addView(episodeRow(episode));
         }
@@ -417,26 +433,140 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
         watch.setOnClickListener(v -> watch(episode));
         row.addView(watch);
 
-        // Unduh episode: membuka pemutar yang sama, lalu langsung menawarkan
-        // server yang benar-benar bisa disimpan. Pemeriksaan berkas hanya bisa
-        // dilakukan di sana karena halaman episode harus dibuka lebih dulu.
-        Button download = Ui.chip(this, "Unduh", palette);
+        // Unduh episode di sini juga, tanpa membuka pemutar: halaman episode
+        // diperiksa di latar belakang, lalu unduhan diantrekan. Tombol ini
+        // melaporkan keadaannya sendiri (menyiapkan, persen, tersimpan, gagal).
+        final String key = AnimeDownloads.episodeKey(episode.url, episode.label);
+        Button download = Ui.chip(this, downloadLabel(key), palette);
         download.setTag("otakudesu_download_button");
         download.setMinimumHeight(Ui.dp(this, Ui.TOUCH_DP));
-        download.setContentDescription("Unduh " + episode.label);
-        download.setOnClickListener(v -> download(episode));
+        download.setOnClickListener(v -> startDownload(episode));
         LinearLayout.LayoutParams downloadParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                Ui.dp(this, 84), Ui.dp(this, Ui.TOUCH_DP));
         downloadParams.leftMargin = Ui.dp(this, 6);
         row.addView(download, downloadParams);
+
+        ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(100);
+        bar.setTag("otakudesu_download_bar");
+        bar.setVisibility(AnimeDownloadStatus.state(key) == AnimeDownloadStatus.DOWNLOADING
+                ? View.VISIBLE : View.GONE);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+                Ui.dp(this, 84), Ui.dp(this, 6));
+        barParams.leftMargin = Ui.dp(this, 6);
+        barParams.topMargin = Ui.dp(this, 2);
+        row.addView(bar, barParams);
+
+        if (!key.isEmpty()) {
+            downloadButtons.put(key, download);
+            downloadBars.put(key, bar);
+        }
         return row;
     }
 
-    /** Buka pemutar episode lalu tawarkan unduhan untuk sumber yang mendukung. */
-    private void download(OtakudesuAnime.Episode episode) {
+    /**
+     * Unduh episode dari daftar ini.
+     *
+     * <p>Tidak membuka pemutar. Bila izin penyimpanan belum diberikan, pengguna
+     * diminta menyetujui lebih dulu; setelah itu alur berjalan di latar belakang
+     * dan tombol melaporkan kemajuannya.
+     */
+    private void startDownload(final OtakudesuAnime.Episode episode) {
         if (episode == null) return;
-        startActivity(intentFor(episode).putExtra(AnimePlayerActivity.EXTRA_OPEN_DOWNLOADS, true));
+        if (!AnimeDownloadPolicy.allowed(this)) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Unduhan offline")
+                    .setMessage(AnimeDownloadPolicy.notice())
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Setuju", (dialog, which) -> {
+                        AnimeDownloadPolicy.acknowledge(this);
+                        enqueueDownload(episode);
+                    })
+                    .show();
+            return;
+        }
+        enqueueDownload(episode);
     }
+
+    private void enqueueDownload(final OtakudesuAnime.Episode episode) {
+        final String key = AnimeDownloads.episodeKey(episode.url, episode.label);
+        if (AnimeDownloads.isSaved(this, animeId, key)) {
+            Toast.makeText(this, "Episode ini sudah tersimpan di perangkat.",
+                    Toast.LENGTH_SHORT).show();
+            refreshDownloadButtons();
+            return;
+        }
+        Toast.makeText(this, "Menyiapkan unduhan…", Toast.LENGTH_SHORT).show();
+        refreshDownloadButtons();
+        runInBackground(() -> {
+            final String[] message = new String[1];
+            AnimeDownloadLauncher.start(this, source, animeId, animeTitle, animePoster,
+                    episode.label, episode.url,
+                    (queued, text) -> message[0] = text);
+            main.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                refreshDownloadButtons();
+                if (message[0] != null) {
+                    Toast.makeText(this, message[0], Toast.LENGTH_SHORT).show();
+                }
+            });
+        });
+    }
+
+    /**
+     * Label tombol unduh untuk satu episode.
+     *
+     * <p>Status diambil dari berkas dan dari {@link AnimeDownloadStatus}; tidak
+     * ada angka yang dikarang. Persen hanya muncul bila jumlah byte total
+     * diketahui.
+     */
+    String downloadLabel(String key) {
+        if (key == null || key.isEmpty()) return "Unduh";
+        if (AnimeDownloads.isSaved(this, animeId, key)) return "Tersimpan";
+        switch (AnimeDownloadStatus.state(key)) {
+            case AnimeDownloadStatus.SAVED:
+                return "Tersimpan";
+            case AnimeDownloadStatus.QUEUED:
+                return "Menyiapkan…";
+            case AnimeDownloadStatus.DOWNLOADING:
+                return AnimeDownloadStatus.total(key) > 0
+                        ? AnimeDownloadStatus.percent(key) + "%"
+                        : AnimeDownload.size(AnimeDownloadStatus.bytes(key));
+            case AnimeDownloadStatus.VERIFYING:
+                return "Memeriksa…";
+            case AnimeDownloadStatus.PAUSED:
+                return "Terjeda";
+            case AnimeDownloadStatus.FAILED:
+                return "Coba Lagi";
+            default:
+                // Proses bisa dimulai di sesi sebelumnya lalu aplikasi ditutup:
+                // sisa berkas sementara adalah bukti nyata bahwa unduhan pernah
+                // berjalan, jadi tombolnya menawarkan melanjutkan.
+                return AnimeDownloads.savedBytes(this, animeId, key) > 0
+                        ? "Lanjutkan" : "Unduh";
+        }
+    }
+
+    /** Perbarui semua tombol unduh yang sedang tampil. */
+    void refreshDownloadButtons() {
+        for (java.util.Map.Entry<String, Button> entry : downloadButtons.entrySet()) {
+            String key = entry.getKey();
+            Button button = entry.getValue();
+            if (button == null) continue;
+            String label = downloadLabel(key);
+            button.setText(label);
+            button.setContentDescription("Unduh episode: " + label);
+            ProgressBar bar = downloadBars.get(key);
+            if (bar != null) {
+                boolean running = AnimeDownloadStatus.state(key)
+                        == AnimeDownloadStatus.DOWNLOADING;
+                bar.setVisibility(running ? View.VISIBLE : View.GONE);
+                if (running) bar.setProgress(AnimeDownloadStatus.percent(key));
+            }
+        }
+    }
+
+    private final AnimeDownloadStatus.Listener downloadListener = this::refreshDownloadButtons;
 
     private void watch(OtakudesuAnime.Episode episode) {
         if (episode == null) return;
@@ -530,14 +660,43 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
         favoriteButton.setSelected(favorite);
     }
 
+    @Override protected void onStart() {
+        super.onStart();
+        AnimeDownloadStatus.addListener(downloadListener);
+        refreshDownloadButtons();
+    }
+
+    @Override protected void onStop() {
+        AnimeDownloadStatus.removeListener(downloadListener);
+        super.onStop();
+    }
+
     @Override protected void onResume() {
         super.onResume();
         // Tanda "sudah dibuka" bisa berubah setelah menonton di pemutar.
         if (detail != null && episodeSearch != null) renderEpisodes();
+        else refreshDownloadButtons();
     }
 
     @Override protected void onDestroy() {
         worker.shutdownNow();
         super.onDestroy();
+    }
+
+    /**
+     * Jalankan tugas latar hanya bila layar masih hidup.
+     *
+     * <p>Callback yang sudah mengantre bisa tiba setelah {@code onDestroy};
+     * menyerahkan tugas baru ke executor yang sudah dimatikan akan melempar
+     * {@code RejectedExecutionException}. Di sini kasus itu diabaikan dengan
+     * sengaja: tidak ada lagi yang perlu dimuat.
+     */
+    private void runInBackground(Runnable task) {
+        if (isFinishing() || isDestroyed()) return;
+        try {
+            worker.execute(task);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Executor sudah ditutup: layar memang sudah tidak ada.
+        }
     }
 }

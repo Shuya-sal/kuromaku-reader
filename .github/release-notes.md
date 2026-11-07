@@ -24,6 +24,15 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Pemutaran offline tanpa jaringan.** Episode tersimpan diputar dari berkas (`file://`), dan perpustakaan membuka pemutar dengan mode offline: tanpa permintaan jaringan sama sekali.
   - **Persetujuan sekali sebelum unduhan pertama.** Berkas disimpan untuk ditonton sendiri di perangkat ini, tidak untuk disebarkan ulang.
 
+* **@VERSION@ — Unduh dari daftar episode, pemutar lebih ringkas, tema/genre di beranda anime.**
+  - **Unduh langsung dari daftar episode.** Tombol **Unduh** pada baris episode tidak lagi membuka pemutar. Halaman episode diperiksa di latar belakang, lalu unduhan diantrekan ke WorkManager. Tombol pada baris itu sendiri melaporkan keadaan: **Unduh → Menyiapkan… → 12% (dengan bar progres mini) → Tersimpan**, atau **Coba Lagi** bila gagal, dan **Lanjutkan** bila ada sisa unduhan dari sesi sebelumnya.
+  - **Pemilihan server untuk unduhan jujur.** Berkas yang diterbitkan halaman episode dipakai lebih dulu; bila tidak ada, mirror diperiksa satu per satu dengan batas maksimal 3. HLS/DASH, halaman embed, dan mirror pemutar bertaut tidak pernah dianggap bisa diunduh — pengguna diberi alasan dan jalan "Tonton di Sumber".
+  - **Pemutar lebih ringkas.** Tombol besar **Full Screen** dan **Unduh** di area bawah dihapus; area bawah kembali hanya berisi kontrol pemutaran inti (Sebelumnya, −10s, Putar/Jeda, +10s, Berikutnya, timeline). Keduanya pindah ke menu titik tiga, bersama **Info episode** dan **Buka sumber**.
+  - **Beranda anime mengikuti pola Manga Shinigami.** Menu titik tiga memuat **Tema tampilan** (Terang / Gelap / Ikuti sistem) yang berlaku **tanpa memuat ulang data**: warna diganti di tempat, daftar anime, tab aktif, filter genre, dan posisi gulir tetap.
+  - **Filter Genre.** Chip **Genre** membuka daftar genre yang benar-benar diterbitkan sumber (`/genre-list/`), bukan daftar yang ditanam di aplikasi. Genre aktif ditandai pada chip; **Semua anime** mengembalikan daftar. Memilih tab status (Ongoing/Complete/Jadwal/Riwayat/Favorit) melepas filter genre, karena sumber tidak menyediakan gabungan keduanya.
+  - **Area atas menyusut saat scroll.** Kolom cari, "Lanjutkan Menonton", dan baris filter menyusut bersama (animasi tinggi 180 ms) ketika daftar digulir ke bawah, dan muncul kembali saat digulir ke atas atau saat daftar baru dimuat.
+  - **Pembersihan setelah layar ditutup.** Callback UI dan tugas latar tidak lagi berjalan setelah Activity dihancurkan, sehingga tidak ada `RejectedExecutionException` ketika layar ditutup di tengah pemuatan.
+
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
 * **@VERSION@ — Pemutar video native Media3 menggantikan WebView.**

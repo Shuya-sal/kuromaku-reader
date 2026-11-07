@@ -98,6 +98,121 @@ public final class OtakudesuSource {
         return parseCatalog(getHtml(url), wanted);
     }
 
+    /** Satu genre pada halaman sumber, dengan alamatnya sendiri. */
+    public static final class Genre {
+        public final String slug;
+        public final String name;
+
+        public Genre(String slug, String name) {
+            this.slug = slug == null ? "" : slug;
+            this.name = name == null || name.trim().isEmpty() ? this.slug : name.trim();
+        }
+
+        public boolean matches(String other) {
+            return other != null && slug.equalsIgnoreCase(other.trim());
+        }
+    }
+
+    /**
+     * Daftar genre yang benar-benar diterbitkan halaman {@code /genre-list/}.
+     *
+     * <p>Tidak ada daftar genre yang ditanam di aplikasi: kalau sumber
+     * menambah atau menghapus genre, menu ikut berubah tanpa pembaruan APK.
+     */
+    public List<Genre> genres() throws SourceException {
+        Document doc = Jsoup.parse(getHtml(BASE + "/genre-list/"));
+        java.util.LinkedHashMap<String, Genre> found = new java.util.LinkedHashMap<>();
+        for (Element link : doc.select("a[href*=/genres/]")) {
+            String href = link.attr("href");
+            String slug = genreSlug(href);
+            if (slug.isEmpty()) continue;
+            String name = link.text().trim();
+            if (name.isEmpty()) continue;
+            if (name.toLowerCase(java.util.Locale.US).contains("genre")) continue;
+            Genre genre = new Genre(slug, name);
+            if (!found.containsKey(slug)) found.put(slug, genre);
+        }
+        if (found.isEmpty()) {
+            throw new SourceException("Daftar genre tidak ditemukan pada halaman sumber.");
+        }
+        List<Genre> list = new ArrayList<>(found.values());
+        java.util.Collections.sort(list, (left, right) ->
+                left.name.compareToIgnoreCase(right.name));
+        return list;
+    }
+
+    /** Daftar anime pada satu genre, dengan halaman bernomor seperti katalog. */
+    public OtakudesuAnime.Page genre(String slug, int page) throws SourceException {
+        String clean = slug == null ? "" : slug.trim().toLowerCase(java.util.Locale.US);
+        if (clean.isEmpty()) throw new SourceException("Genre tidak dipilih.");
+        int wanted = Math.max(1, page);
+        String url = BASE + "/genres/" + clean + "/"
+                + (wanted > 1 ? "page/" + wanted + "/" : "");
+        return parseGenreList(getHtml(url), wanted);
+    }
+
+    /** Ambil slug dari {@code /genres/action/} maupun alamat lengkap. */
+    static String genreSlug(String href) {
+        if (href == null) return "";
+        String text = href.trim();
+        int index = text.indexOf("/genres/");
+        if (index < 0) return "";
+        String rest = text.substring(index + "/genres/".length());
+        int slash = rest.indexOf('/');
+        if (slash >= 0) rest = rest.substring(0, slash);
+        int query = rest.indexOf('?');
+        if (query >= 0) rest = rest.substring(0, query);
+        return rest.replaceAll("[^A-Za-z0-9_-]", "").toLowerCase(java.util.Locale.US);
+    }
+
+    /**
+     * Urai kartu anime pada halaman genre.
+     *
+     * <p>Markup halaman genre berbeda dari katalog (kartu memakai
+     * {@code .col-anime-con}, bukan blok katalog), jadi diurai sendiri. Judul,
+     * poster, studio, jumlah episode, dan genre diambil apa adanya.
+     */
+    OtakudesuAnime.Page parseGenreList(String html, int page) throws SourceException {
+        Document doc = Jsoup.parse(html);
+        List<OtakudesuAnime> items = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Element card : doc.select("div.col-anime-con")) {
+            Element link = card.selectFirst(".col-anime-title a[href]");
+            if (link == null) continue;
+            String href = link.absUrl("href");
+            if (href.isEmpty()) href = link.attr("href");
+            String id = animeId(href);
+            String title = link.text().trim();
+            if (id.isEmpty() || title.isEmpty() || !seen.add(id)) continue;
+
+            Element cover = card.selectFirst(".col-anime-cover img");
+            String poster = cover == null ? "" : cover.absUrl("src");
+            if (poster.isEmpty() && cover != null) poster = cover.attr("src");
+
+            Element studio = card.selectFirst(".col-anime-studio");
+            Element eps = card.selectFirst(".col-anime-eps");
+            Element date = card.selectFirst(".col-anime-date");
+            List<String> genres = new ArrayList<>();
+            for (Element tag : card.select(".col-anime-genre a")) {
+                String name = tag.text().trim();
+                if (!name.isEmpty()) genres.add(name);
+            }
+            String latest = eps == null ? "" : eps.text().trim();
+            if (studio != null && !studio.text().trim().isEmpty()) {
+                latest = latest.isEmpty() ? studio.text().trim()
+                        : latest + " · " + studio.text().trim();
+            }
+            String updated = date == null ? "" : date.text().trim();
+            items.add(new OtakudesuAnime(id, title, href, poster, latest, "",
+                    updated, genres));
+        }
+        if (items.isEmpty() && doc.select("div.col-anime-con").isEmpty()) {
+            throw new SourceException("Genre ini tidak memuat daftar anime.");
+        }
+        int total = totalPages(doc, page);
+        return new OtakudesuAnime.Page(items, page, Math.max(page, total));
+    }
+
     public OtakudesuAnime.Page search(String query, int page) throws SourceException {
         String keyword = query == null ? "" : query.trim();
         if (keyword.isEmpty()) return new OtakudesuAnime.Page(new ArrayList<OtakudesuAnime>(), 1, 1);

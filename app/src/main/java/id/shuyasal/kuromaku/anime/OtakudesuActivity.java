@@ -85,11 +85,13 @@ public class OtakudesuActivity extends AppCompatActivity {
         String statusText = "";
     }
 
-    enum Mode { CATALOGUE, SEARCH, SCHEDULE, HISTORY, FAVORITES }
+    enum Mode { CATALOGUE, SEARCH, SCHEDULE, HISTORY, FAVORITES, GENRE }
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final java.util.EnumMap<Tab, TabState> states = new java.util.EnumMap<>(Tab.class);
+    /** Halaman genre punya state sendiri, terpisah dari tab status. */
+    private final TabState genreState = new TabState();
     private final List<OtakudesuAnime> items = new ArrayList<>();
     private final List<OtakudesuStore.HistoryEntry> history = new ArrayList<>();
 
@@ -114,6 +116,14 @@ public class OtakudesuActivity extends AppCompatActivity {
     private boolean loading;
     private int requestGeneration;
     private int activeResolvedTheme = -1;
+    private View rootView;
+    private LinearLayout topSection;
+    private boolean topHidden;
+    private int topSectionHeight;
+    private String genreSlug = "";
+    private String genreName = "";
+    private final List<OtakudesuSource.Genre> genres = new ArrayList<>();
+    private boolean genresLoading;
     private final Runnable searchRunnable = this::runSearch;
 
     @Override protected void onCreate(Bundle state) {
@@ -173,10 +183,17 @@ public class OtakudesuActivity extends AppCompatActivity {
         search.setTag("otakudesu_search_button");
         search.setOnClickListener(v -> runSearch());
         searchRow.addView(search);
-        root.addView(searchRow);
+
+        // Seluruh area atas (cari, lanjutkan menonton, filter) berada dalam satu
+        // wadah supaya bisa menyusut bersama saat daftar digulir ke bawah.
+        topSection = new LinearLayout(this);
+        topSection.setOrientation(LinearLayout.VERTICAL);
+        topSection.setTag("otakudesu_top_section");
+        topSection.addView(searchRow, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         rail = buildRail();
-        root.addView(rail, new LinearLayout.LayoutParams(
+        topSection.addView(rail, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         filterRow = new LinearLayout(this);
@@ -186,7 +203,9 @@ public class OtakudesuActivity extends AppCompatActivity {
         filterScroll.setHorizontalScrollBarEnabled(false);
         filterScroll.addView(filterRow, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(filterScroll, new LinearLayout.LayoutParams(
+        topSection.addView(filterScroll, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(topSection, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         statusLine = Ui.label(this, "", 13, palette.muted);
@@ -204,8 +223,12 @@ public class OtakudesuActivity extends AppCompatActivity {
         list.setAdapter(adapter);
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView view, int dx, int dy) {
-                if (dy <= 0) return;
-                loadMoreIfNeeded();
+                if (dy > 6) {
+                    hideTopSection();
+                    loadMoreIfNeeded();
+                } else if (dy < -6) {
+                    showTopSection();
+                }
             }
         });
         body.addView(list, new FrameLayout.LayoutParams(
@@ -241,6 +264,7 @@ public class OtakudesuActivity extends AppCompatActivity {
         root.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
+        rootView = root;
         setContentView(root);
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(
@@ -255,6 +279,19 @@ public class OtakudesuActivity extends AppCompatActivity {
     }
 
     private LinearLayout errorBox;
+
+    /** Menu titik tiga: tema dan genre. */
+    private void showOverflow() {
+        String[] items = {"Tema tampilan", "Genre", "Muat ulang"};
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Anime Otakudesu")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) showThemeDialog();
+                    else if (which == 1) showGenreSheet();
+                    else reload();
+                })
+                .show();
+    }
 
     private LinearLayout buildToolbar() {
         LinearLayout bar = new LinearLayout(this);
@@ -297,6 +334,13 @@ public class OtakudesuActivity extends AppCompatActivity {
                 new android.content.Intent(this, AnimeDownloadsActivity.class)));
         bar.addView(downloads, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        android.widget.ImageButton more = Ui.iconButton(this, R.drawable.ic_more,
+                "Menu lain", palette);
+        more.setTag("otakudesu_overflow");
+        more.setOnClickListener(v -> showOverflow());
+        bar.addView(more, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         return bar;
     }
 
@@ -334,8 +378,81 @@ public class OtakudesuActivity extends AppCompatActivity {
     private void buildTabs() {
         filterRow.removeAllViews();
         for (Tab value : Tab.values()) {
-            addTab(value.label, tab == value, () -> selectTab(value));
+            addTab(value.label, mode == modeFor(value), () -> selectTab(value));
         }
+        // Genre berdiri sendiri: menu daftar genre sumber, dengan penanda nama
+        // genre yang sedang aktif.
+        addTabWithTag(genreSlug.isEmpty() ? "Genre" : "Genre: " + genreName,
+                mode == Mode.GENRE, this::showGenreSheet, "Genre");
+    }
+
+    private void addTabWithTag(String text, boolean active, Runnable action, String tag) {
+        Button chip = Ui.chip(this, text, palette);
+        chip.setTag("otakudesu_chip_" + tag);
+        chip.setSelected(active);
+        chip.setAlpha(active ? 1f : 0.7f);
+        chip.setOnClickListener(v -> action.run());
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.rightMargin = Ui.dp(this, 8);
+        filterRow.addView(chip, params);
+    }
+
+    // ------------------------------------------------- top section menyusut
+
+    /**
+     * Menyusutkan area atas (cari, lanjutkan menonton, filter) saat daftar
+     * digulir ke bawah, dan memunculkannya lagi saat digulir ke atas.
+     *
+     * <p>Tingginya dianimasikan, bukan disembunyikan sekaligus, supaya daftar
+     * tidak melompat. Tinggi semula diingat agar pemulihannya tepat.
+     */
+    private void hideTopSection() {
+        if (topHidden || topSection == null) return;
+        int height = topSection.getHeight();
+        if (height <= 0) height = topSection.getMeasuredHeight();
+        topHidden = true;
+        if (height <= 0) {
+            // Belum pernah ditata (layar belum terukur): sembunyikan langsung
+            // daripada gagal menyusut sama sekali.
+            topSection.setVisibility(View.GONE);
+            return;
+        }
+        topSectionHeight = height;
+        animateTopSection(height, 0, true);
+    }
+
+    private void showTopSection() {
+        if (!topHidden || topSection == null) return;
+        topHidden = false;
+        topSection.setVisibility(View.VISIBLE);
+        int target = topSectionHeight > 0 ? topSectionHeight : Ui.dp(this, 150);
+        animateTopSection(0, target, false);
+    }
+
+    private void animateTopSection(int from, int to, final boolean collapseAtEnd) {
+        android.animation.ValueAnimator animator =
+                android.animation.ValueAnimator.ofInt(from, to);
+        animator.setDuration(180);
+        animator.addUpdateListener(animation -> {
+            if (topSection == null) return;
+            ViewGroup.LayoutParams params = topSection.getLayoutParams();
+            params.height = (int) animation.getAnimatedValue();
+            topSection.setLayoutParams(params);
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (topSection == null) return;
+                if (collapseAtEnd) {
+                    if (topHidden) topSection.setVisibility(View.GONE);
+                } else {
+                    ViewGroup.LayoutParams params = topSection.getLayoutParams();
+                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                    topSection.setLayoutParams(params);
+                }
+            }
+        });
+        animator.start();
     }
 
     private void addTab(String text, boolean active, Runnable action) {
@@ -348,6 +465,153 @@ public class OtakudesuActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.rightMargin = Ui.dp(this, 8);
         filterRow.addView(chip, params);
+    }
+
+    // ------------------------------------------------------------- genre
+
+    /** Buka daftar genre; dimuat dari sumber sekali lalu dipakai ulang. */
+    private void showGenreSheet() {
+        if (!genres.isEmpty()) {
+            showGenreDialog();
+            return;
+        }
+        if (genresLoading) return;
+        genresLoading = true;
+        statusLine.setText("Memuat daftar genre…");
+        runInBackground(() -> {
+            List<OtakudesuSource.Genre> result = null;
+            String failure = null;
+            try {
+                result = source.genres();
+            } catch (OtakudesuSource.SourceException error) {
+                failure = error.getMessage();
+            } catch (RuntimeException error) {
+                failure = "Daftar genre tidak bisa dibaca.";
+            }
+            final List<OtakudesuSource.Genre> payload = result;
+            final String message = failure;
+            main.post(() -> {
+                genresLoading = false;
+                if (isFinishing() || isDestroyed()) return;
+                if (message != null || payload == null || payload.isEmpty()) {
+                    statusLine.setText(items.size() + " anime");
+                    Toast.makeText(this, message == null
+                            ? "Daftar genre kosong." : message, Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                genres.clear();
+                genres.addAll(payload);
+                statusLine.setText(items.size() + " anime");
+                showGenreDialog();
+            });
+        });
+    }
+
+    private void showGenreDialog() {
+        final List<String> labels = new ArrayList<>();
+        labels.add("Semua anime");
+        for (OtakudesuSource.Genre genre : genres) labels.add(genre.name);
+        int checked = 0;
+        for (int i = 0; i < genres.size(); i++) {
+            if (genres.get(i).matches(genreSlug)) checked = i + 1;
+        }
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Pilih genre")
+                .setSingleChoiceItems(labels.toArray(new String[0]), checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    if (which == 0) clearGenre();
+                    else selectGenre(genres.get(which - 1));
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
+    }
+
+    /** Terapkan satu genre: daftar dimuat ulang dengan filter genre. */
+    void selectGenre(OtakudesuSource.Genre genre) {
+        if (genre == null || genre.slug.isEmpty()) return;
+        rememberScroll();
+        genreSlug = genre.slug;
+        genreName = genre.name;
+        mode = Mode.GENRE;
+        genreState.loaded = false;
+        genreState.page = 1;
+        genreState.totalPages = 1;
+        buildTabs();
+        hideError();
+        items.clear();
+        adapter.notifyDataSetChanged();
+        loadGenre(1, false);
+    }
+
+    /** Kembali ke seluruh anime tanpa filter genre. */
+    void clearGenre() {
+        if (genreSlug.isEmpty() && mode != Mode.GENRE) return;
+        genreSlug = "";
+        genreName = "";
+        mode = modeFor(tab);
+        buildTabs();
+        hideError();
+        state(tab).loaded = false;
+        loadTab(tab, 1, false);
+    }
+
+    // -------------------------------------------------------------- tema
+
+    /**
+     * Ganti tema tanpa memuat ulang data.
+     *
+     * <p>Warna di aplikasi ini dipakai lewat {@link Palette}, bukan atribut XML,
+     * jadi tema bisa berganti di tempat: seluruh view dibangun ulang dengan
+     * palet baru sementara daftar, tab aktif, genre aktif, dan posisi gulir
+     * dipertahankan. Tidak ada permintaan jaringan yang diulang.
+     */
+    private void applyThemeInPlace() {
+        int keepScroll = firstVisiblePosition();
+        int previousResolved = activeResolvedTheme;
+        activeResolvedTheme = new Prefs(this).resolvedTheme();
+        palette = Palette.of(activeResolvedTheme);
+        if (activeResolvedTheme == previousResolved && rootView != null) return;
+
+        buildUi();
+        if (adapter != null) {
+            adapter.notifyDataSetChanged();
+            list.scrollToPosition(Math.max(0, keepScroll));
+        }
+        if (rootView != null) {
+            androidx.core.view.WindowCompat.getInsetsController(getWindow(), rootView)
+                    .setAppearanceLightStatusBars(!palette.darkIcons);
+        }
+    }
+
+    private int firstVisiblePosition() {
+        if (list == null) return 0;
+        RecyclerView.LayoutManager manager = list.getLayoutManager();
+        if (!(manager instanceof LinearLayoutManager)) return 0;
+        return Math.max(0, ((LinearLayoutManager) manager).findFirstVisibleItemPosition());
+    }
+
+    private void showThemeDialog() {
+        final String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti sistem (System)"};
+        int checked = new Prefs(this).theme();
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Tema Anime Otakudesu")
+                .setSingleChoiceItems(options, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    Prefs prefs = new Prefs(this);
+                    prefs.setTheme(which);
+                    // Tema hanya diganti di tempat: data dan posisi gulir tetap.
+                    activeResolvedTheme = -1;
+                    applyThemeInPlace();
+                    Toast.makeText(this, "Tema disimpan: " + options[which],
+                            Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Batal", null)
+                .show();
+    }
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        if (new Prefs(this).resolvedTheme() != activeResolvedTheme) applyThemeInPlace();
     }
 
     // -------------------------------------------------------------- interaksi
@@ -369,8 +633,14 @@ public class OtakudesuActivity extends AppCompatActivity {
     }
 
     private void selectTab(Tab target) {
-        if (tab == target) return;
+        if (tab == target && mode != Mode.GENRE) return;
         rememberScroll();
+        // Sumber tidak menyediakan gabungan status + genre; memilih status
+        // berarti melepas filter genre supaya hasilnya tidak menyesatkan.
+        if (mode == Mode.GENRE) {
+            genreSlug = "";
+            genreName = "";
+        }
         tab = target;
         mode = modeFor(target);
         buildTabs();
@@ -445,7 +715,19 @@ public class OtakudesuActivity extends AppCompatActivity {
     }
 
     private void loadMoreIfNeeded() {
-        if (loading || !tab.isCatalogue() || mode == Mode.SCHEDULE) return;
+        if (loading) return;
+        if (mode == Mode.GENRE) {
+            if (genreState.page >= genreState.totalPages) return;
+            RecyclerView.LayoutManager genreManager = list.getLayoutManager();
+            if (!(genreManager instanceof LinearLayoutManager)) return;
+            int lastGenre = ((LinearLayoutManager) genreManager).findLastVisibleItemPosition();
+            int totalGenre = adapter.getItemCount();
+            if (totalGenre > 0 && lastGenre >= totalGenre - 6) {
+                loadGenre(genreState.page + 1, true);
+            }
+            return;
+        }
+        if (!tab.isCatalogue() || mode == Mode.SCHEDULE) return;
         TabState current = state(tab);
         if (current.page >= current.totalPages) return;
         RecyclerView.LayoutManager manager = list.getLayoutManager();
@@ -460,6 +742,10 @@ public class OtakudesuActivity extends AppCompatActivity {
 
     private void reload() {
         hideError();
+        if (mode == Mode.GENRE && !genreSlug.isEmpty()) {
+            loadGenre(1, false);
+            return;
+        }
         if (mode == Mode.SEARCH && !query.isEmpty()) {
             loadSearch(1, false);
             return;
@@ -488,7 +774,7 @@ public class OtakudesuActivity extends AppCompatActivity {
         spinner.setVisibility(View.VISIBLE);
         if (!append) statusLine.setText("Memuat...");
 
-        worker.execute(() -> {
+        runInBackground(() -> {
             OtakudesuAnime.Page result = null;
             String failure = null;
             try {
@@ -503,6 +789,30 @@ public class OtakudesuActivity extends AppCompatActivity {
         });
     }
 
+    /** Muat satu halaman genre; state-nya terpisah dari tab status. */
+    private void loadGenre(int page, boolean append) {
+        if (loading && append) return;
+        if (genreSlug.isEmpty()) return;
+        final int generation = ++requestGeneration;
+        final String slug = genreSlug;
+        loading = true;
+        spinner.setVisibility(View.VISIBLE);
+        if (!append) statusLine.setText("Memuat genre " + genreName + "…");
+
+        runInBackground(() -> {
+            OtakudesuAnime.Page result = null;
+            String failure = null;
+            try {
+                result = source.genre(slug, page);
+            } catch (OtakudesuSource.SourceException error) {
+                failure = error.getMessage();
+            }
+            final OtakudesuAnime.Page payload = result;
+            final String message = failure;
+            main.post(() -> applyPage(tab, page, append, payload, message, generation, false));
+        });
+    }
+
     private void loadSearch(int page, boolean append) {
         if (loading && append) return;
         final int generation = ++requestGeneration;
@@ -511,7 +821,7 @@ public class OtakudesuActivity extends AppCompatActivity {
         spinner.setVisibility(View.VISIBLE);
         if (!append) statusLine.setText("Mencari \"" + wanted + "\"...");
 
-        worker.execute(() -> {
+        runInBackground(() -> {
             OtakudesuAnime.Page result = null;
             String failure = null;
             try {
@@ -539,7 +849,7 @@ public class OtakudesuActivity extends AppCompatActivity {
             return;
         }
         hideError();
-        TabState current = state(target);
+        TabState current = mode == Mode.GENRE ? genreState : state(target);
         if (!append) {
             current.items.clear();
         }
@@ -553,8 +863,9 @@ public class OtakudesuActivity extends AppCompatActivity {
         current.page = page;
         current.totalPages = payload.totalPages;
         current.loaded = true;
-        current.statusText = (search ? "Hasil untuk \"" + query + "\": " : "")
-                + current.items.size() + " anime";
+        String prefix = search ? "Hasil untuk \"" + query + "\": "
+                : (mode == Mode.GENRE ? "Genre " + genreName + ": " : "");
+        current.statusText = prefix + current.items.size() + " anime";
 
         if (target != tab) return;
         if (!append) items.clear();
@@ -562,7 +873,12 @@ public class OtakudesuActivity extends AppCompatActivity {
         if (append && added > 0) adapter.notifyItemRangeInserted(start, added);
         else adapter.notifyDataSetChanged();
         statusLine.setText(current.statusText);
-        if (!append) list.scrollToPosition(0);
+        if (!append) {
+            list.scrollToPosition(0);
+            // Daftar baru: area atas ditampilkan lagi supaya pengguna melihat
+            // filter yang sedang berlaku.
+            if (topHidden) showTopSection();
+        }
     }
 
     private void loadSchedule() {
@@ -570,7 +886,7 @@ public class OtakudesuActivity extends AppCompatActivity {
         loading = true;
         spinner.setVisibility(View.VISIBLE);
         statusLine.setText("Memuat jadwal...");
-        worker.execute(() -> {
+        runInBackground(() -> {
             List<OtakudesuAnime> result = null;
             String failure = null;
             try {
@@ -1023,5 +1339,22 @@ public class OtakudesuActivity extends AppCompatActivity {
         main.removeCallbacks(searchRunnable);
         worker.shutdownNow();
         super.onDestroy();
+    }
+
+    /**
+     * Jalankan tugas latar hanya bila layar masih hidup.
+     *
+     * <p>Callback yang sudah mengantre bisa tiba setelah {@code onDestroy};
+     * menyerahkan tugas baru ke executor yang sudah dimatikan akan melempar
+     * {@code RejectedExecutionException}. Di sini kasus itu diabaikan dengan
+     * sengaja: tidak ada lagi yang perlu dimuat.
+     */
+    private void runInBackground(Runnable task) {
+        if (isFinishing() || isDestroyed()) return;
+        try {
+            worker.execute(task);
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // Executor sudah ditutup: layar memang sudah tidak ada.
+        }
     }
 }

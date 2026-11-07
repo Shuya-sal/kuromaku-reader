@@ -45,7 +45,8 @@
 
         <activity
             android:name=".anime.OtakudesuActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:configChanges="uiMode" />
 
         <activity
             android:name=".anime.OtakudesuDetailActivity"

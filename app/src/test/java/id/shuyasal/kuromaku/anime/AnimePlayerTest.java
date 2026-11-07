@@ -580,31 +580,27 @@ public class AnimePlayerTest {
 
     // ------------------------------------------------ label dan kontrol baru
 
-    /** Tombol layar penuh berlabel "Full Screen" dan tidak ada label lama. */
-    @Test public void tombolLayarPenuhBerlabelFullScreen() throws Exception {
+    /**
+     * Tombol besar Full Screen dan Unduh tidak lagi memenuhi area bawah.
+     *
+     * <p>Keduanya pindah ke menu titik tiga, jadi area bawah hanya berisi
+     * kontrol pemutaran inti.
+     */
+    @Test public void tidakAdaTombolBesarFullScreenDanUnduhDiBawah() throws Exception {
         ActivityController<AnimePlayerActivity> controller = player();
         try {
             AnimePlayerActivity activity = controller.get();
-            android.view.View button = activity.getWindow().getDecorView()
-                    .findViewWithTag("anime_player_full_screen");
-            assertNotNull("tombol Full Screen harus ada", button);
-            assertEquals("Full Screen", ((android.widget.TextView) button).getText().toString());
-            assertEquals("Full Screen", String.valueOf(button.getContentDescription()));
-
-            button.performClick();
-            org.robolectric.shadows.ShadowLooper.idleMainLooper();
-            assertEquals("satu ketukan: landscape + layar penuh",
-                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
-                    activity.getRequestedOrientation());
-            assertEquals("Keluar dari Full Screen",
-                    ((android.widget.TextView) button).getText().toString());
-
-            button.performClick();
-            org.robolectric.shadows.ShadowLooper.idleMainLooper();
-            assertEquals("ketukan kedua: kembali mengikuti perangkat",
-                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
-                    activity.getRequestedOrientation());
-            assertEquals("Full Screen", ((android.widget.TextView) button).getText().toString());
+            android.view.View root = activity.getWindow().getDecorView();
+            assertNull("tombol Full Screen besar harus hilang",
+                    root.findViewWithTag("anime_player_full_screen"));
+            assertNull("tombol Unduh besar harus hilang",
+                    root.findViewWithTag("anime_player_download"));
+            assertNotNull("kontrol pemutaran inti tetap ada",
+                    root.findViewWithTag("anime_player_play"));
+            assertNotNull("navigasi episode tetap ada",
+                    root.findViewWithTag("anime_player_previous"));
+            assertNotNull("seek tetap ada", root.findViewWithTag("anime_player_back10"));
+            assertNotNull("menu titik tiga tetap ada", root.findViewWithTag("anime_player_more"));
         } finally {
             controller.close();
         }
@@ -672,9 +668,6 @@ public class AnimePlayerTest {
             org.robolectric.shadows.ShadowLooper.idleMainLooper();
             assertEquals("pemutar melaporkan sumber lokal", "Tersimpan · odcdn",
                     String.valueOf(field(activity, "activeServerLabel")));
-            android.view.View download = activity.getWindow().getDecorView()
-                    .findViewWithTag("anime_player_download");
-            assertEquals("Tersimpan", ((android.widget.TextView) download).getText().toString());
         } finally {
             AnimeDownloads.delete(context, animeId, key);
         }
