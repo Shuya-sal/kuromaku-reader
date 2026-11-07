@@ -13,6 +13,17 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Galat pemutaran tidak menutup aplikasi.** Kegagalan membuat pemutar, sumber kosong, dan `onPlayerError` berakhir sebagai pesan spesifik dengan tombol **Coba Lagi**, **Pilih Server Lain**, dan **Tonton di Sumber** — bukan crash, dan Activity tidak pernah `finish()` sendiri.
   - **Timer pemutar tidak lagi menumpuk.** `startTicker()` dulu hanya membatalkan `saveTick`; setiap perpindahan server menambah satu rantai `clockTick` yang memposting dirinya sendiri. Sekarang keduanya dibatalkan lebih dulu.
 
+* **@VERSION@ — Full Screen, unduh episode anime, dan perpustakaan offline.**
+  - **Satu tombol "Full Screen".** Label "Putar Layar" diganti "Full Screen" di tombol, menu, dan `contentDescription`. Satu ketukan = **landscape + immersive sekaligus**; ketukan berikutnya mengembalikan orientasi semula beserta system bar. Tidak ada lagi tombol "layar penuh tanpa rotasi" yang terpisah, jadi tidak ada dua kontrol yang mirip dengan hasil berbeda.
+  - **Kontrol hilang otomatis 5 detik** di mode layar penuh; satu ketukan menampilkannya lagi selama 5 detik. Timer ditahan saat menyeret timeline, saat dialog/panel terbuka, dan saat video dijeda atau buffering.
+  - **Unduh episode — benar-benar tersimpan.** Tombol **Unduh** ada di pemutar dan di setiap baris episode halaman detail. Unduhan berjalan lewat **WorkManager** (satu pekerjaan unik per episode) dan menulis ke penyimpanan khusus aplikasi: berkas `*.part` selama berjalan, lalu `rename` setelah lolos pemeriksaan ukuran dan kepala berkas (MP4 `ftyp` / WebM EBML). Berkas setengah jadi atau halaman HTML tidak pernah tampil sebagai "Tersimpan offline".
+  - **Hanya server yang benar-benar menyediakan berkas yang ditawarkan.** Sumber berupa MP4/WebM langsung bisa diunduh; HLS/DASH, halaman embed, dan mirror pemutar pihak ketiga ditampilkan **beserta alasannya** dan tombol **Tonton di Sumber**. Tidak ada klaim "kompatibel" sebelum diperiksa.
+  - **Lanjut unduhan yang terputus.** `Range` dipakai untuk melanjutkan; bila server mengabaikan `Range` (HTTP 200) berkas ditulis ulang dari awal supaya tidak ada data ganda. 401/403/429 berhenti dengan pesan jelas, bukan dilewati.
+  - **Perpustakaan Unduhan Anime.** Ikon Unduhan di kanan atas beranda anime. Halaman berisi poster, judul, jumlah episode, ukuran, dan **Lanjutkan Menonton**; ketuk judul untuk daftar episode; hapus satu episode atau seluruh unduhan satu anime dengan konfirmasi. Isinya dibangun dari **berkas yang tervalidasi**, bukan status WorkManager — tetap benar tanpa internet.
+  - **Progres menonton terpisah dari unduhan.** Menghapus unduhan tidak pernah menghapus riwayat atau posisi menonton.
+  - **Pemutaran offline tanpa jaringan.** Episode tersimpan diputar dari berkas (`file://`), dan perpustakaan membuka pemutar dengan mode offline: tanpa permintaan jaringan sama sekali.
+  - **Persetujuan sekali sebelum unduhan pertama.** Berkas disimpan untuk ditonton sendiri di perangkat ini, tidak untuk disebarkan ulang.
+
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
 * **@VERSION@ — Pemutar video native Media3 menggantikan WebView.**

@@ -8,6 +8,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.content.Context;
 import android.content.Intent;
 import android.view.View;
 import android.widget.Button;
@@ -392,6 +393,10 @@ public class AnimePlayerTest {
             View surface = activity.findViewById(android.R.id.content)
                     .findViewWithTag("anime_player_surface");
 
+            // Tanpa jaringan, pemutar membuka panel server; tutup dulu supaya
+            // yang diuji benar-benar penjadwalan auto-hide (panel memang
+            // menahan kontrol agar tetap terlihat).
+            invoke(activity, "dismissServerPanel");
             invoke(activity, "setFullscreen", true);
             org.robolectric.shadows.ShadowLooper.idleMainLooper();
             assertEquals("kontrol tampil saat masuk layar penuh", View.VISIBLE, bar.getVisibility());
@@ -443,6 +448,7 @@ public class AnimePlayerTest {
             Playable activity = controller.get();
             View bar = (View) activity.findViewById(android.R.id.content)
                     .findViewWithTag("anime_player_back").getParent();
+            invoke(activity, "dismissServerPanel");
             invoke(activity, "setFullscreen", true);
             org.robolectric.shadows.ShadowLooper.idleMainLooper();
 
@@ -571,6 +577,130 @@ public class AnimePlayerTest {
         }
     }
 
+
+    // ------------------------------------------------ label dan kontrol baru
+
+    /** Tombol layar penuh berlabel "Full Screen" dan tidak ada label lama. */
+    @Test public void tombolLayarPenuhBerlabelFullScreen() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            android.view.View button = activity.getWindow().getDecorView()
+                    .findViewWithTag("anime_player_full_screen");
+            assertNotNull("tombol Full Screen harus ada", button);
+            assertEquals("Full Screen", ((android.widget.TextView) button).getText().toString());
+            assertEquals("Full Screen", String.valueOf(button.getContentDescription()));
+
+            button.performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("satu ketukan: landscape + layar penuh",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                    activity.getRequestedOrientation());
+            assertEquals("Keluar dari Full Screen",
+                    ((android.widget.TextView) button).getText().toString());
+
+            button.performClick();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("ketukan kedua: kembali mengikuti perangkat",
+                    android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                    activity.getRequestedOrientation());
+            assertEquals("Full Screen", ((android.widget.TextView) button).getText().toString());
+        } finally {
+            controller.close();
+        }
+    }
+
+    /** Tidak ada label "Putar Layar" tersisa di menu pemutar. */
+    @Test public void tidakAdaLabelPutarLayar() throws Exception {
+        ActivityController<AnimePlayerActivity> controller = player();
+        try {
+            AnimePlayerActivity activity = controller.get();
+            java.lang.reflect.Method method = null;
+            for (java.lang.reflect.Method candidate : AnimePlayerActivity.class.getDeclaredMethods()) {
+                if (candidate.getName().equals("showMoreMenu")) method = candidate;
+            }
+            assertNotNull(method);
+            // Sumber label menu tidak boleh memuat istilah lama.
+            String source = readSource();
+            assertFalse("istilah lama harus hilang dari UI",
+                    source.contains("\"Putar layar\"") || source.contains("\"Putar Layar\""));
+            assertTrue(source.contains("Full Screen"));
+        } finally {
+            controller.close();
+        }
+    }
+
+    private static String readSource() {
+        try {
+            java.io.File file = new java.io.File(
+                    "src/main/java/id/shuyasal/kuromaku/anime/AnimePlayerActivity.java");
+            if (!file.isFile()) {
+                file = new java.io.File("app/src/main/java/id/shuyasal/kuromaku/anime/"
+                        + "AnimePlayerActivity.java");
+            }
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            return new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception error) {
+            throw new AssertionError("sumber tidak terbaca: " + error.getMessage(), error);
+        }
+    }
+
+    // ------------------------------------------------- pemutaran offline
+
+    /** Episode tersimpan diputar dari berkas dan tombolnya melaporkan itu. */
+    @Test public void episodeTersimpanDiputarDariBerkas() throws Exception {
+        Context context = ApplicationProvider.getApplicationContext();
+        String animeId = "fxskc";
+        String url = "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/";
+        String key = AnimeDownloads.episodeKey(url, "Episode 1");
+        java.io.File dir = AnimeDownloads.animeDir(context, animeId);
+        assertTrue(dir.isDirectory() || dir.mkdirs());
+        try (java.io.FileOutputStream out = new java.io.FileOutputStream(
+                AnimeDownloads.videoFile(context, animeId, key))) {
+            byte[] head = new byte[32];
+            head[4] = 'f'; head[5] = 't'; head[6] = 'y'; head[7] = 'p';
+            out.write(head);
+        }
+        java.io.File video = AnimeDownloads.videoFile(context, animeId, key);
+        AnimeDownloads.writeMeta(context, new AnimeDownload(key, animeId, "FX Senshi Kurumi-chan",
+                "", "Episode 1", url, "720p", "odcdn", "https://cdn.invalid/a.mp4",
+                video.length(), 1L));
+
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            assertEquals("pemutar melaporkan sumber lokal", "Tersimpan · odcdn",
+                    String.valueOf(field(activity, "activeServerLabel")));
+            android.view.View download = activity.getWindow().getDecorView()
+                    .findViewWithTag("anime_player_download");
+            assertEquals("Tersimpan", ((android.widget.TextView) download).getText().toString());
+        } finally {
+            AnimeDownloads.delete(context, animeId, key);
+        }
+    }
+
+    /** Tanpa berkas, mode offline menjelaskan keadaannya dan tidak ke jaringan. */
+    @Test public void modeOfflineTanpaBerkasTidakMenghubungiJaringan() throws Exception {
+        Context context = ApplicationProvider.getApplicationContext();
+        String key = AnimeDownloads.episodeKey(
+                "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/", "Episode 1");
+        AnimeDownloads.delete(context, "fxskc", key);
+
+        try (ActivityController<Playable> controller =
+                     Robolectric.buildActivity(Playable.class, intent()).setup().visible()) {
+            Playable activity = controller.get();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            android.view.View error = activity.getWindow().getDecorView()
+                    .findViewWithTag("anime_player_error");
+            assertEquals("pesan harus tampil", android.view.View.VISIBLE, error.getVisibility());
+            TextView text = (TextView) error;
+            assertTrue("pesan menyebut episode tidak tersimpan",
+                    String.valueOf(text.getText()).contains("tidak tersimpan"));
+            assertFalse("Activity tetap hidup", activity.isFinishing());
+        }
+    }
+
     // ------------------------------------------------------------- perkakas
 
     /** Subclass yang menganggap video sedang berjalan, untuk menguji timer. */
@@ -588,6 +718,9 @@ public class AnimePlayerTest {
         intent.putExtra("episode_url",
                 "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/");
         intent.putExtra("episode_label", "Episode 1");
+        // Tanpa berkas tersimpan pemutar tidak menyentuh jaringan sama sekali,
+        // sehingga panel server tidak terbuka sendiri selama pengujian timer.
+        intent.putExtra(AnimePlayerActivity.EXTRA_OFFLINE_ONLY, true);
         return intent;
     }
 

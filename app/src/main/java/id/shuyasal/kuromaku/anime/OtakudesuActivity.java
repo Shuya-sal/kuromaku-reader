@@ -286,6 +286,17 @@ public class OtakudesuActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         params.leftMargin = Ui.dp(this, 8);
         bar.addView(title, params);
+
+        // Unduhan: di kanan atas, sasaran sentuh 48dp.
+        android.widget.ImageButton downloads = Ui.iconButton(this, R.drawable.ic_download,
+                "Unduhan", palette);
+        downloads.setTag("otakudesu_downloads");
+        downloads.setMinimumWidth(Ui.dp(this, Ui.TOUCH_DP));
+        downloads.setMinimumHeight(Ui.dp(this, Ui.TOUCH_DP));
+        downloads.setOnClickListener(v -> startActivity(
+                new android.content.Intent(this, AnimeDownloadsActivity.class)));
+        bar.addView(downloads, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         return bar;
     }
 

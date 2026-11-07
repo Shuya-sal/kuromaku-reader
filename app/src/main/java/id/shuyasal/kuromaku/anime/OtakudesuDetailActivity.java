@@ -416,12 +416,35 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
         watch.setContentDescription("Tonton " + episode.label + " di pemutar resmi sumber");
         watch.setOnClickListener(v -> watch(episode));
         row.addView(watch);
+
+        // Unduh episode: membuka pemutar yang sama, lalu langsung menawarkan
+        // server yang benar-benar bisa disimpan. Pemeriksaan berkas hanya bisa
+        // dilakukan di sana karena halaman episode harus dibuka lebih dulu.
+        Button download = Ui.chip(this, "Unduh", palette);
+        download.setTag("otakudesu_download_button");
+        download.setMinimumHeight(Ui.dp(this, Ui.TOUCH_DP));
+        download.setContentDescription("Unduh " + episode.label);
+        download.setOnClickListener(v -> download(episode));
+        LinearLayout.LayoutParams downloadParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        downloadParams.leftMargin = Ui.dp(this, 6);
+        row.addView(download, downloadParams);
         return row;
+    }
+
+    /** Buka pemutar episode lalu tawarkan unduhan untuk sumber yang mendukung. */
+    private void download(OtakudesuAnime.Episode episode) {
+        if (episode == null) return;
+        startActivity(intentFor(episode).putExtra(AnimePlayerActivity.EXTRA_OPEN_DOWNLOADS, true));
     }
 
     private void watch(OtakudesuAnime.Episode episode) {
         if (episode == null) return;
-        Intent intent = new Intent(this, AnimePlayerActivity.class)
+        startActivity(intentFor(episode));
+    }
+
+    private Intent intentFor(OtakudesuAnime.Episode episode) {
+        return new Intent(this, AnimePlayerActivity.class)
                 .putExtra(AnimePlayerActivity.EXTRA_ANIME_ID, animeId)
                 .putExtra(AnimePlayerActivity.EXTRA_ANIME_TITLE, animeTitle)
                 .putExtra(AnimePlayerActivity.EXTRA_ANIME_POSTER, animePoster)
@@ -432,7 +455,6 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
                 .putExtra(AnimePlayerActivity.EXTRA_EPISODE_TOTAL, parseTotal())
                 .putExtra(AnimePlayerActivity.EXTRA_EPISODES,
                         OtakudesuEpisodes.toJson(storyOrder()));
-        startActivity(intent);
     }
 
     /** Urutan cerita (nomor menaik) untuk navigasi episode di pemutar. */

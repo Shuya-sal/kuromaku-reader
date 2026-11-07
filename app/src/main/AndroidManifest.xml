@@ -57,6 +57,11 @@
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" />
 
         <activity
+            android:name=".anime.AnimeDownloadsActivity"
+            android:exported="false"
+            android:label="Unduhan Anime" />
+
+        <activity
             android:name=".shinigami.ShinigamiDetailActivity"
             android:exported="false" />
 
