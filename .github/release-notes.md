@@ -2,6 +2,13 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Header beranda Anime Streaming tidak lagi berkedip saat digulir.**
+  - Header tidak lagi mengubah tinggi layout per frame (itu yang membuat daftar berubah ukuran dan posisi gulir melompat). Sekarang header menjadi lapisan di atas daftar dan hanya bergeser + memudar; ukuran `RecyclerView` tetap.
+  - Satu pengendali keadaan menggantikan pemanggilan langsung per event gulir, dengan ambang berbeda untuk sembunyi (24 px) dan tampil (12 px), sehingga fling bolak-balik dan gerakan kecil tidak membuat header berosilasi.
+  - Animator lama dibatalkan sebelum transisi baru, jadi tidak ada dua animator yang berebut properti yang sama.
+  - Header selalu tampil ketika daftar kembali ke posisi paling atas.
+  - Bagian **Lanjutkan Menonton** kini hilang seluruhnya — judul, kartu, dan jaraknya — bila riwayat kosong; celah tinggi di bawah kolom pencarian tidak muncul lagi.
+  - Inset atas daftar mengikuti tinggi header yang sebenarnya, dan anchor gulir dijaga ketika tinggi itu berubah.
 * **@VERSION@ — Kestabilan pengujian: pemulihan unduhan tidak berjalan di lingkungan tes.**
   - Thread pemulihan di `Application` bisa hidup melewati sandbox pengujian dan menyentuh objek yang sudah dilepas. Di perangkat jalur ini tetap berjalan seperti biasa.
 * **@VERSION@ — Kestabilan pengujian: menunggu activity hasil recreate.**

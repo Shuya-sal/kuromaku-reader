@@ -118,8 +118,19 @@ public class OtakudesuActivity extends AppCompatActivity {
     private int activeResolvedTheme = -1;
     private View rootView;
     private LinearLayout topSection;
+    private FrameLayout content;
     private boolean topHidden;
     private int topSectionHeight;
+    /** Tinggi header yang benar-benar tertata; dasar inset atas daftar. */
+    private int headerHeight;
+    /** Satu-satunya pemutus kapan header tampil/sembunyi. */
+    private final HomeHeaderController headerController = new HomeHeaderController();
+    /**
+     * Animator header yang sedang berjalan. Disimpan supaya transisi baru bisa
+     * membatalkannya; tanpa ini beberapa animator berebut properti yang sama
+     * dan menyisakan nilai translate/alpha yang tidak konsisten.
+     */
+    private android.animation.ValueAnimator headerAnimator;
     private String genreSlug = "";
     private String genreName = "";
     private final List<OtakudesuSource.Genre> genres = new ArrayList<>();
@@ -145,6 +156,10 @@ public class OtakudesuActivity extends AppCompatActivity {
     // ------------------------------------------------------------------- UI
 
     private void buildUi() {
+        headerHeight = 0;
+        headerAnimator = null;
+        topHidden = false;
+        headerController.reset();
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(palette.background);
@@ -205,8 +220,6 @@ public class OtakudesuActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         topSection.addView(filterScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(topSection, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         statusLine = Ui.label(this, "", 13, palette.muted);
         statusLine.setTag("otakudesu_status");
@@ -217,18 +230,18 @@ public class OtakudesuActivity extends AppCompatActivity {
         list = new RecyclerView(this);
         list.setTag("otakudesu_grid");
         list.setBackgroundColor(palette.background);
+        // Item digambar melewati padding atas, jadi header bisa disingkirkan tanpa
+        // mengubah ukuran RecyclerView (tidak ada tata ulang, tidak ada lompatan).
+        list.setClipToPadding(false);
         list.setItemAnimator(null);
         adapter = new AnimeAdapter();
         list.setLayoutManager(new GridLayoutManager(this, gridSpan()));
         list.setAdapter(adapter);
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView view, int dx, int dy) {
-                if (dy > 6) {
-                    hideTopSection();
-                    loadMoreIfNeeded();
-                } else if (dy < -6) {
-                    showTopSection();
-                }
+                if (dy > 0) loadMoreIfNeeded();
+                headerController.onScrolled(dy, !view.canScrollVertically(-1),
+                        hidden -> applyHeaderHidden(hidden, true));
             }
         });
         body.addView(list, new FrameLayout.LayoutParams(
@@ -261,7 +274,19 @@ public class OtakudesuActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         this.errorBox = errorBox;
 
-        root.addView(body, new LinearLayout.LayoutParams(
+        content = new FrameLayout(this);
+        content.setTag("otakudesu_content");
+        content.addView(body, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        // Header butuh latar solid supaya daftar yang lewat di bawahnya tidak
+        // tembus pandang saat header bergerak.
+        topSection.setBackgroundColor(palette.background);
+        content.addView(topSection, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP));
+        topSection.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
+                syncHeaderMetrics());
+        root.addView(content, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         rootView = root;
@@ -376,7 +401,12 @@ public class OtakudesuActivity extends AppCompatActivity {
         history.clear();
         history.addAll(store.history());
         if (railAdapter != null) railAdapter.notifyDataSetChanged();
-        if (rail != null) rail.setVisibility(history.isEmpty() ? View.GONE : View.VISIBLE);
+        if (rail != null) {
+            // Tanpa entri, judul dan seluruh jaraknya ikut hilang; menyisakan
+            // wadah kosong hanya membuat celah tinggi di bawah pencarian.
+            rail.setVisibility(history.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        topSection.post(this::syncHeaderMetrics);
     }
 
     private void buildTabs() {
@@ -411,52 +441,88 @@ public class OtakudesuActivity extends AppCompatActivity {
      * <p>Tingginya dianimasikan, bukan disembunyikan sekaligus, supaya daftar
      * tidak melompat. Tinggi semula diingat agar pemulihannya tepat.
      */
+    /** Minta header disembunyikan (dipakai juga oleh tes). */
     private void hideTopSection() {
-        if (topHidden || topSection == null) return;
-        int height = topSection.getHeight();
-        if (height <= 0) height = topSection.getMeasuredHeight();
-        topHidden = true;
-        if (height <= 0) {
-            // Belum pernah ditata (layar belum terukur): sembunyikan langsung
-            // daripada gagal menyusut sama sekali.
-            topSection.setVisibility(View.GONE);
-            return;
-        }
-        topSectionHeight = height;
-        animateTopSection(height, 0, true);
+        applyHeaderHidden(true, false);
     }
 
     private void showTopSection() {
-        if (!topHidden || topSection == null) return;
-        topHidden = false;
-        topSection.setVisibility(View.VISIBLE);
-        int target = topSectionHeight > 0 ? topSectionHeight : Ui.dp(this, 150);
-        animateTopSection(0, target, false);
+        applyHeaderHidden(false, false);
     }
 
-    private void animateTopSection(int from, int to, final boolean collapseAtEnd) {
-        android.animation.ValueAnimator animator =
-                android.animation.ValueAnimator.ofInt(from, to);
-        animator.setDuration(180);
-        animator.addUpdateListener(animation -> {
+    /**
+     * Satu-satunya tempat yang menulis translate/alpha header dan memiliki
+     * animator.
+     *
+     * <p>Header tidak pernah diubah tingginya dan tidak pernah di-{@code GONE}.
+     * Ia hanya digeser ke atas lalu dipudarkan, sehingga RecyclerView di
+     * bawahnya tidak berubah ukuran — tidak ada tata ulang yang menggeser
+     * posisi gulir.
+     */
+    private void applyHeaderHidden(boolean hidden, boolean animate) {
+        if (topSection == null) return;
+        topHidden = hidden;
+        int height = headerHeight > 0 ? headerHeight : topSection.getHeight();
+        float targetY = hidden ? -Math.max(height, 0) : 0f;
+        float targetAlpha = hidden ? 0f : 1f;
+
+        if (headerAnimator != null) {
+            headerAnimator.cancel();
+            headerAnimator = null;
+        }
+        if (!animate || height <= 0) {
+            // Belum tertata (atau dipanggil programatis): pakai nilai akhir
+            // langsung supaya keadaan tidak pernah setengah jalan.
+            topSection.setTranslationY(targetY);
+            topSection.setAlpha(targetAlpha);
+            return;
+        }
+
+        headerAnimator = android.animation.ValueAnimator.ofFloat(
+                topSection.getTranslationY(), targetY);
+        headerAnimator.setDuration(180);
+        headerAnimator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        final int span = height;
+        headerAnimator.addUpdateListener(animation -> {
             if (topSection == null) return;
-            ViewGroup.LayoutParams params = topSection.getLayoutParams();
-            params.height = (int) animation.getAnimatedValue();
-            topSection.setLayoutParams(params);
+            float value = (float) animation.getAnimatedValue();
+            topSection.setTranslationY(value);
+            float progress = Math.min(1f, Math.abs(value) / span);
+            topSection.setAlpha(hidden ? 1f - progress : progress);
         });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+        headerAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
                 if (topSection == null) return;
-                if (collapseAtEnd) {
-                    if (topHidden) topSection.setVisibility(View.GONE);
-                } else {
-                    ViewGroup.LayoutParams params = topSection.getLayoutParams();
-                    params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
-                    topSection.setLayoutParams(params);
-                }
+                topSection.setTranslationY(targetY);
+                topSection.setAlpha(targetAlpha);
+                headerAnimator = null;
+            }
+            @Override public void onAnimationCancel(android.animation.Animator animation) {
+                headerAnimator = null;
             }
         });
-        animator.start();
+        headerAnimator.start();
+    }
+
+    /**
+     * Sinkronkan inset atas daftar dengan tinggi header yang benar-benar
+     * tertata. Dipanggil setiap kali header berubah ukuran (mis. kartu
+     * Lanjutkan Menonton muncul/hilang), bukan setiap frame gulir.
+     */
+    private void syncHeaderMetrics() {
+        if (topSection == null || list == null) return;
+        int height = topSection.getHeight();
+        if (height <= 0 || height == headerHeight) return;
+        int previous = headerHeight;
+        headerHeight = height;
+        topSectionHeight = height;
+        list.setPadding(list.getPaddingLeft(), height, list.getPaddingRight(),
+                list.getPaddingBottom());
+        if (previous > 0) {
+            // Jaga anchor: inset berubah berarti item bergeser sebesar selisihnya.
+            list.scrollBy(0, height - previous);
+        }
+        if (topHidden) topSection.setTranslationY(-height);
     }
 
     private void addTab(String text, boolean active, Runnable action) {
@@ -1340,6 +1406,10 @@ public class OtakudesuActivity extends AppCompatActivity {
     }
 
     @Override protected void onDestroy() {
+        if (headerAnimator != null) {
+            headerAnimator.cancel();
+            headerAnimator = null;
+        }
         main.removeCallbacks(searchRunnable);
         worker.shutdownNow();
         super.onDestroy();
