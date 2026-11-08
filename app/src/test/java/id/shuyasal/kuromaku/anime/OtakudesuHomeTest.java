@@ -97,10 +97,37 @@ public class OtakudesuHomeTest {
      * (tema) dari tes lain bisa memperlambat satu putaran. Menunggu secara
      * terbatas lebih jujur daripada menebak bahwa satu putaran selalu cukup.
      */
+    /**
+     * Tunggu katalog, termasuk bila activity dibuat ulang di tengah jalan.
+     *
+     * <p>Perubahan tema global bisa memicu {@code recreate()}; instance lama
+     * menjadi {@code finishing} dan tidak akan pernah terisi. Mengambil instance
+     * terbaru dari controller membuat pengujian tidak bergantung pada urutan
+     * kelas tes lain dalam suite.
+     */
+    private static Host settle(ActivityController<Host> controller) throws Exception {
+        Host activity = controller.get();
+        for (int i = 0; i < 3; i++) {
+            awaitLoaded(activity);
+            if (!items(activity).isEmpty()) return activity;
+            ShadowLooper.idleMainLooper();
+            Host terbaru = controller.get();
+            if (terbaru != null && !terbaru.isFinishing()) {
+                activity = terbaru;
+                awaitLoaded(activity);
+                if (!items(activity).isEmpty()) return activity;
+            }
+            Thread.sleep(120);
+        }
+        return activity;
+    }
+
     private static void awaitLoaded(Host activity) throws Exception {
-        for (int i = 0; i < 40 && items(activity).isEmpty(); i++) {
+        // Batas dibuat longgar: di suite panjang, executor bisa sedang sibuk
+        // menjalankan pekerjaan dari kelas tes lain.
+        for (int i = 0; i < 200 && items(activity).isEmpty(); i++) {
             await(activity);
-            Thread.sleep(10);
+            Thread.sleep(15);
         }
         await(activity);
     }
@@ -133,12 +160,12 @@ public class OtakudesuHomeTest {
 
     @Test public void memilihGenreMemuatDaftarSesuaiGenre() throws Exception {
         try (ActivityController<Host> controller = open()) {
-            Host activity = controller.get();
-            awaitLoaded(activity);
+            Host activity = settle(controller);
             int sebelum = items(activity).size();
             assertTrue("katalog awal terisi", sebelum > 0);
 
             activity.selectGenre(new OtakudesuSource.Genre("action", "Action"));
+            awaitLoaded(activity);
             await(activity);
 
             TextView chip = (TextView) tag(activity, "otakudesu_chip_Genre");

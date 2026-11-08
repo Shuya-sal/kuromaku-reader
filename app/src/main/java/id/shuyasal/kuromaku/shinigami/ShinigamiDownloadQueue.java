@@ -64,6 +64,11 @@ public final class ShinigamiDownloadQueue {
         List<String> missing = missing(context, chapterIds);
         if (missing.isEmpty()) return 0;
         for (String chapterId : missing) {
+            // Nama yang bisa dibaca pengguna, supaya unduhan berjalan tampil di
+            // layar Unduhan Manga Server 2.
+            ShinigamiDownloadStatus.describe(chapterId,
+                    mangaTitle == null || mangaTitle.isEmpty() ? "Manga" : mangaTitle,
+                    chapterId, mangaId);
             ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.QUEUED, 0, "");
         }
         WorkManager manager;

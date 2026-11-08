@@ -10,6 +10,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -58,6 +59,9 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
     private TextView emptyTitle;
     private TextView emptyBody;
     private LinearLayout emptyBox;
+    /** Bagian "Sedang diunduh"; diperbarui tanpa membangun ulang daftar berkas. */
+    private LinearLayout activeSection;
+    private final ShinigamiDownloadStatus.Listener activeListener = this::renderActive;
     private int generation;
     private int activeResolvedTheme = -1;
 
@@ -69,6 +73,16 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
         store = new ShinigamiStore(this);
         buildUi();
         scan();
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        ShinigamiDownloadStatus.addListener(activeListener);
+    }
+
+    @Override protected void onStop() {
+        ShinigamiDownloadStatus.removeListener(activeListener);
+        super.onStop();
     }
 
     @Override protected void onResume() {
@@ -136,6 +150,15 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
 
         content.addView(emptyBox, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Bagian unduhan berjalan tidak menunggu pemindaian berkas.
+        activeSection = new LinearLayout(this);
+        activeSection.setOrientation(LinearLayout.VERTICAL);
+        activeSection.setTag("downloads_manga_active");
+        content.addView(activeSection, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        renderActive();
+
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -168,8 +191,12 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
     }
 
     private void render(long bytes) {
-        while (content.getChildCount() > 1) content.removeViewAt(1);
-        emptyBox.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+        // Dua anak pertama tetap: kotak kosong dan bagian unduhan berjalan.
+        while (content.getChildCount() > 2) content.removeViewAt(2);
+        renderActive();
+
+        emptyBox.setVisibility(items.isEmpty() && ShinigamiDownloadStatus.active().isEmpty()
+                ? View.VISIBLE : View.GONE);
 
         int chapters = 0;
         for (ShinigamiDownloads.Manga manga : items) chapters += manga.chapters.size();
@@ -183,6 +210,93 @@ public class ShinigamiDownloadsActivity extends AppCompatActivity {
         for (ShinigamiDownloads.Manga manga : items) {
             content.addView(mangaCard(manga));
         }
+    }
+
+    /** Bangun ulang hanya bagian unduhan yang sedang berjalan. */
+    private void renderActive() {
+        if (activeSection == null) return;
+        activeSection.removeAllViews();
+        java.util.List<ShinigamiDownloadStatus.Active> aktif = ShinigamiDownloadStatus.active();
+        activeSection.setVisibility(aktif.isEmpty() ? View.GONE : View.VISIBLE);
+        if (aktif.isEmpty()) return;
+
+        TextView judul = Ui.label(this, "Sedang diunduh", 13, palette.muted);
+        judul.setPadding(Ui.dp(this, 4), Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 6));
+        activeSection.addView(judul);
+        for (ShinigamiDownloadStatus.Active item : aktif) {
+            activeSection.addView(activeRow(item));
+        }
+    }
+
+    private View activeRow(final ShinigamiDownloadStatus.Active item) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 10));
+        card.setBackground(Ui.rounded(palette.surface, palette.divider, 14, this));
+        card.setTag("downloads_manga_active_" + item.chapterId);
+
+        LinearLayout baris = new LinearLayout(this);
+        baris.setOrientation(LinearLayout.HORIZONTAL);
+        baris.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout teks = new LinearLayout(this);
+        teks.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams teksParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+
+        TextView judul = Ui.label(this, item.title.isEmpty() ? "Manga" : item.title,
+                14, palette.text);
+        judul.setTypeface(Typeface.DEFAULT_BOLD);
+        judul.setMaxLines(1);
+        judul.setEllipsize(TextUtils.TruncateAt.END);
+        teks.addView(judul);
+
+        TextView sub = Ui.label(this, item.label(), 12, palette.muted);
+        sub.setMaxLines(1);
+        sub.setEllipsize(TextUtils.TruncateAt.END);
+        sub.setPadding(0, Ui.dp(this, 2), 0, 0);
+        teks.addView(sub);
+        baris.addView(teks, teksParams);
+
+        TextView persen = Ui.label(this, statusTeks(item), 12, palette.text);
+        persen.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+        baris.addView(persen);
+
+        ImageButton batal = Ui.iconButton(this, R.drawable.ic_close,
+                "Batalkan unduhan chapter", palette);
+        batal.setTag("downloads_manga_cancel_" + item.chapterId);
+        batal.setOnClickListener(v -> {
+            ShinigamiDownloadQueue.cancelChapter(this, item.chapterId);
+            render(0L);
+        });
+        baris.addView(batal, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+        card.addView(baris);
+
+        android.widget.ProgressBar progress = new android.widget.ProgressBar(
+                this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+        boolean pasti = item.percent > 0;
+        progress.setIndeterminate(!pasti);
+        if (pasti) progress.setProgress(Math.max(0, Math.min(100, item.percent)));
+        progress.setTag("downloads_manga_progress_" + item.chapterId);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 6));
+        progressParams.topMargin = Ui.dp(this, 8);
+        card.addView(progress, progressParams);
+
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.bottomMargin = Ui.dp(this, 8);
+        card.setLayoutParams(cardParams);
+        return card;
+    }
+
+    private String statusTeks(ShinigamiDownloadStatus.Active item) {
+        if (item.state == ShinigamiDownloadStatus.FAILED) return "Gagal";
+        if (item.state == ShinigamiDownloadStatus.QUEUED) return "Menunggu";
+        if (item.percent <= 0) return "Menyiapkan…";
+        return Math.max(0, Math.min(100, item.percent)) + "%";
     }
 
     private View mangaCard(ShinigamiDownloads.Manga manga) {

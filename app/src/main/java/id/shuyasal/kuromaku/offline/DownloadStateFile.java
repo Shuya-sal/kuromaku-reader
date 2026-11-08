@@ -57,13 +57,32 @@ public final class DownloadStateFile {
         public final String message;
         public final String quality;
         public final long updatedAt;
+        /** Judul yang bisa dibaca pengguna, mis. nama anime. */
+        public final String title;
+        /** Keterangan baris, mis. "Episode 3 · 720p". */
+        public final String subtitle;
+        /** Pemilik entri (mis. id anime); dipakai untuk membatalkan unduhan. */
+        public final String owner;
 
         Row(int state, int percent, String message, String quality, long updatedAt) {
+            this(state, percent, message, quality, updatedAt, "", "");
+        }
+
+        Row(int state, int percent, String message, String quality, long updatedAt,
+            String title, String subtitle) {
+            this(state, percent, message, quality, updatedAt, title, subtitle, "");
+        }
+
+        Row(int state, int percent, String message, String quality, long updatedAt,
+            String title, String subtitle, String owner) {
             this.state = state;
             this.percent = percent;
             this.message = message == null ? "" : message;
             this.quality = quality == null ? "" : quality;
             this.updatedAt = updatedAt;
+            this.title = title == null ? "" : title;
+            this.subtitle = subtitle == null ? "" : subtitle;
+            this.owner = owner == null ? "" : owner;
         }
 
         JSONObject toJson() throws JSONException {
@@ -73,6 +92,9 @@ public final class DownloadStateFile {
             json.put("message", message);
             json.put("quality", quality);
             json.put("updatedAt", updatedAt);
+            if (!title.isEmpty()) json.put("title", title);
+            if (!subtitle.isEmpty()) json.put("subtitle", subtitle);
+            if (!owner.isEmpty()) json.put("owner", owner);
             return json;
         }
 
@@ -81,7 +103,10 @@ public final class DownloadStateFile {
                     Math.max(0, Math.min(100, json.optInt("percent"))),
                     json.optString("message"),
                     json.optString("quality"),
-                    json.optLong("updatedAt"));
+                    json.optLong("updatedAt"),
+                    json.optString("title"),
+                    json.optString("subtitle"),
+                    json.optString("owner"));
         }
     }
 
@@ -107,6 +132,33 @@ public final class DownloadStateFile {
         return appContext != null;
     }
 
+    /**
+     * Simpan keadaan beserta judul yang bisa dibaca pengguna.
+     *
+     * <p>Judul hanya perlu dikirim sekali saat unduhan dijadwalkan; pembaruan
+     * progres berikutnya tidak menghapusnya.
+     */
+    public static synchronized void put(String key, int state, int percent, String message,
+                                        String quality, String title, String subtitle) {
+        if (key == null || key.isEmpty()) return;
+        Row previous = CACHE.get(key);
+        String judul = title == null || title.isEmpty()
+                ? (previous == null ? "" : previous.title) : title;
+        String ket = subtitle == null || subtitle.isEmpty()
+                ? (previous == null ? "" : previous.subtitle) : subtitle;
+        String pemilik = previous == null ? "" : previous.owner;
+        Row row = new Row(state, percent, message, quality, System.currentTimeMillis(),
+                judul, ket, pemilik);
+        CACHE.put(key, row);
+        if (appContext == null) return;
+        boolean stateChanged = previous == null || previous.state != state;
+        long now = System.currentTimeMillis();
+        if (stateChanged || now - lastFlushAt >= FLUSH_INTERVAL_MS) {
+            lastFlushAt = now;
+            flush(stateChanged);
+        }
+    }
+
     public static synchronized void put(String key, int state, int percent, String message,
                                         String quality) {
         if (key == null || key.isEmpty()) return;
@@ -128,6 +180,16 @@ public final class DownloadStateFile {
         if (key == null || key.isEmpty()) return;
         CACHE.put(key, new Row(state, percent, message, quality, updatedAt));
         if (appContext != null) flush();
+    }
+
+    /** Simpan pemilik entri tanpa mengubah keadaan lain. */
+    public static synchronized void setOwner(String key, String owner) {
+        if (key == null || key.isEmpty() || owner == null || owner.isEmpty()) return;
+        Row previous = CACHE.get(key);
+        if (previous == null) return;
+        CACHE.put(key, new Row(previous.state, previous.percent, previous.message,
+                previous.quality, previous.updatedAt, previous.title, previous.subtitle, owner));
+        if (appContext != null) flush(false);
     }
 
     public static synchronized Row get(String key) {

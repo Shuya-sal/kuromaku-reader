@@ -2,6 +2,13 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Unduhan yang sedang berjalan kini tampil di layar Unduhan.**
+  - **Bagian "Sedang diunduh" di layar Unduhan Anime Streaming dan Manga Server 2.** Sebelumnya layar itu hanya menampilkan berkas yang sudah selesai, sehingga unduhan yang berjalan tidak terlihat di mana pun selain daftar episode/chapter.
+  - **Nama yang bisa dibaca, bukan kunci teknis.** Judul anime/manga dan keterangan episode (mis. "Episode 3 · 720p") disimpan sekali saat unduhan dijadwalkan, lalu dipertahankan saat progres berubah.
+  - **Persentase dan progress bar** dari byte yang benar-benar tersimpan; tanpa total yang diketahui, tampil "Menyiapkan…" alih-alih persen palsu.
+  - **Tombol batal per baris** (area sentuh 48dp) membatalkan hanya unduhan itu, memakai tag pekerjaan yang stabil.
+  - **Hanya yang benar-benar berjalan** yang masuk bagian ini; yang gagal tetap tampil di daftar episode dengan tombol Coba Lagi, jadi tidak menumpuk.
+  - Bagian ini diperbarui tanpa membangun ulang daftar berkas, sehingga posisi gulir tidak melompat.
 * **@VERSION@ — Perbaikan akar masalah force close saat unduhan di Android 16.**
   - **Penyebab sebenarnya, dari stack trace perangkat:** `android.app.InvalidForegroundServiceTypeException: Starting FGS with type none ... targetSDK=35 has been prohibited`, dilempar `Service.startForeground` lewat `SystemForegroundService$Api31Impl.startForeground`.
   - **Sebabnya:** `ForegroundInfo` dibuat dengan konstruktor 2 argumen, sehingga tipe foreground service = `FOREGROUND_SERVICE_TYPE_NONE`. Android 16 (API 36) melarang aplikasi `targetSdk >= 35` memulai foreground service bertipe `none`. Karena exception dilempar dari dalam service WorkManager, ia tidak bisa ditangkap dan langsung mematikan proses — di ketiga modul, karena semuanya memakai jalur notifikasi yang sama.

@@ -92,12 +92,16 @@ public final class DownloadQuarantine {
      */
     public static void run(Context context) {
         if (context == null) return;
+        // Jalan cepat: bila tidak ada unduhan anime yang menggantung, antrean tidak
+        // perlu dibaca sama sekali. Tanpa ini setiap pembukaan aplikasi menunggu
+        // WorkManager, padahal tidak ada yang perlu dikarantina.
+        if (!adaYangMenggantung()) return;
         Context app = context.getApplicationContext();
         List<WorkInfo> infos;
         try {
             infos = WorkManager.getInstance(app)
                     .getWorkInfosByTag(ANIME_TAG)
-                    .get(15, TimeUnit.SECONDS);
+                    .get(5, TimeUnit.SECONDS);
         } catch (Exception error) {
             // WorkManager belum siap: tidak ada yang perlu dilakukan, dan ini
             // tidak boleh menghalangi aplikasi dibuka.
@@ -134,6 +138,23 @@ public final class DownloadQuarantine {
         } catch (RuntimeException error) {
             Log.w(TAG, "pembatalan pekerjaan karantina gagal", error);
         }
+    }
+
+    /** Benar bila ada entri anime yang belum selesai di berkas status. */
+    static boolean adaYangMenggantung() {
+        for (java.util.Map.Entry<String, DownloadStateFile.Row> entry
+                : DownloadStateFile.all().entrySet()) {
+            if (!entry.getKey().startsWith(
+                    id.shuyasal.kuromaku.anime.AnimeDownloadStatus.PREFIX)) continue;
+            int state = entry.getValue().state;
+            if (state == id.shuyasal.kuromaku.anime.AnimeDownloadStatus.QUEUED
+                    || state == id.shuyasal.kuromaku.anime.AnimeDownloadStatus.DOWNLOADING
+                    || state == id.shuyasal.kuromaku.anime.AnimeDownloadStatus.VERIFYING
+                    || state == id.shuyasal.kuromaku.anime.AnimeDownloadStatus.PAUSED) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Benar bila versi aplikasi berubah sejak pemeriksaan terakhir. */

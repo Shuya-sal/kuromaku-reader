@@ -37,6 +37,41 @@ public final class ShinigamiDownloadStatus {
         int state = NOT_DOWNLOADED;
         int percent = 0;
         String message = "";
+        String title = "";
+        String subtitle = "";
+        String owner = "";
+    }
+
+    /**
+     * Satu chapter yang belum selesai, untuk layar Unduhan.
+     *
+     * <p>Layar Unduhan sebelumnya hanya menampilkan chapter yang sudah tersimpan;
+     * unduhan yang sedang berjalan tidak terlihat di sana.
+     */
+    public static final class Active {
+        public final String chapterId;
+        public final int state;
+        public final int percent;
+        public final String message;
+        public final String title;
+        public final String subtitle;
+        public final String owner;
+
+        Active(String chapterId, Entry entry) {
+            this.chapterId = chapterId;
+            this.state = entry.state;
+            this.percent = entry.percent;
+            this.message = entry.message;
+            this.title = entry.title;
+            this.subtitle = entry.subtitle;
+            this.owner = entry.owner;
+        }
+
+        public String label() {
+            if (!subtitle.isEmpty()) return subtitle;
+            if (!title.isEmpty()) return title;
+            return chapterId;
+        }
     }
 
     public static final String PREFIX = "shinigami|";
@@ -68,13 +103,19 @@ public final class ShinigamiDownloadStatus {
             entry.state = row.getValue().state;
             entry.percent = row.getValue().percent;
             entry.message = row.getValue().message;
+            entry.title = row.getValue().title;
+            entry.subtitle = row.getValue().subtitle;
+            entry.owner = row.getValue().owner;
             STATES.put(chapterKey, entry);
         }
     }
 
     private static void persist(String chapterId, Entry entry) {
         id.shuyasal.kuromaku.offline.DownloadStateFile.put(PREFIX + key(chapterId),
-                entry.state, entry.percent, entry.message, "");
+                entry.state, entry.percent, entry.message, "",
+                entry.title, entry.subtitle);
+        id.shuyasal.kuromaku.offline.DownloadStateFile.setOwner(PREFIX + key(chapterId),
+                entry.owner);
     }
 
     public static synchronized void set(String chapterId, int state, int percent, String message) {
@@ -90,6 +131,52 @@ public final class ShinigamiDownloadStatus {
         entry.message = message == null ? "" : message;
         persist(chapterId, entry);
         notifyListeners();
+    }
+
+    /** Simpan nama yang bisa dibaca pengguna; sekali saat chapter dijadwalkan. */
+    public static synchronized void describe(String chapterId, String title, String subtitle,
+                                             String owner) {
+        if (chapterId == null || chapterId.isEmpty()) return;
+        hydrate();
+        Entry entry = STATES.get(key(chapterId));
+        if (entry == null) {
+            entry = new Entry();
+            STATES.put(key(chapterId), entry);
+        }
+        if (title != null && !title.isEmpty()) entry.title = title;
+        if (subtitle != null && !subtitle.isEmpty()) entry.subtitle = subtitle;
+        if (owner != null && !owner.isEmpty()) entry.owner = owner;
+        persist(chapterId, entry);
+        notifyListeners();
+    }
+
+    /** Chapter yang belum selesai: antre, berjalan, atau gagal. */
+    public static synchronized java.util.List<Active> active() {
+        hydrate();
+        java.util.List<Active> hasil = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<String, Entry> item : STATES.entrySet()) {
+            Entry entry = item.getValue();
+            if (entry == null) continue;
+            // Hanya yang berjalan; yang gagal sudah tampil di daftar chapter.
+            if (entry.state != QUEUED && entry.state != DOWNLOADING
+                    && entry.state != VERIFYING && entry.state != PARTIAL) {
+                continue;
+            }
+            hasil.add(new Active(item.getKey(), entry));
+        }
+        return hasil;
+    }
+
+    public static synchronized String title(String chapterId) {
+        hydrate();
+        Entry entry = STATES.get(key(chapterId));
+        return entry == null ? "" : entry.title;
+    }
+
+    public static synchronized String subtitle(String chapterId) {
+        hydrate();
+        Entry entry = STATES.get(key(chapterId));
+        return entry == null ? "" : entry.subtitle;
     }
 
     public static synchronized int state(String chapterId) {

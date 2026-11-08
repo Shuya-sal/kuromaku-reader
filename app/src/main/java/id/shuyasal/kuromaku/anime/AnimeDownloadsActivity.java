@@ -63,6 +63,10 @@ public class AnimeDownloadsActivity extends AppCompatActivity {
     private LinearLayout content;
     private TextView summary;
     private LinearLayout emptyBox;
+    /** Bagian "Sedang diunduh" di atas daftar berkas; diperbarui tanpa rebuild. */
+    private LinearLayout activeSection;
+    /** Pendengar status: memperbarui bagian aktif saat persentase berubah. */
+    private final AnimeDownloadStatus.Listener activeListener = this::renderActive;
     private int generation;
     private int activeResolvedTheme = -1;
 
@@ -74,6 +78,16 @@ public class AnimeDownloadsActivity extends AppCompatActivity {
         store = new OtakudesuStore(this);
         buildUi();
         scan();
+    }
+
+    @Override protected void onStart() {
+        super.onStart();
+        AnimeDownloadStatus.addListener(activeListener);
+    }
+
+    @Override protected void onStop() {
+        AnimeDownloadStatus.removeListener(activeListener);
+        super.onStop();
     }
 
     @Override protected void onResume() {
@@ -152,6 +166,15 @@ public class AnimeDownloadsActivity extends AppCompatActivity {
 
         content.addView(emptyBox, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Bagian unduhan berjalan dibuat sekarang juga: ia tidak bergantung pada
+        // pemindaian berkas, jadi unduhan yang sedang berjalan langsung terlihat.
+        activeSection = new LinearLayout(this);
+        activeSection.setOrientation(LinearLayout.VERTICAL);
+        activeSection.setTag("anime_downloads_active");
+        content.addView(activeSection, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        renderActive();
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
@@ -182,8 +205,12 @@ public class AnimeDownloadsActivity extends AppCompatActivity {
     }
 
     private void render() {
-        while (content.getChildCount() > 1) content.removeViewAt(1);
-        emptyBox.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+        // Dua anak pertama tetap: kotak kosong dan bagian unduhan berjalan.
+        while (content.getChildCount() > 2) content.removeViewAt(2);
+        renderActive();
+
+        emptyBox.setVisibility(items.isEmpty() && AnimeDownloadStatus.active().isEmpty()
+                ? View.VISIBLE : View.GONE);
 
         int episodes = 0;
         long bytes = 0L;
@@ -191,14 +218,118 @@ public class AnimeDownloadsActivity extends AppCompatActivity {
             episodes += anime.count();
             bytes += anime.bytes();
         }
-        if (items.isEmpty()) {
+        int sedang = AnimeDownloadStatus.active().size();
+        if (items.isEmpty() && sedang == 0) {
             summary.setText("Belum ada episode yang diunduh");
+        } else if (items.isEmpty()) {
+            summary.setText(sedang + " unduhan sedang berjalan");
         } else {
             summary.setText(items.size() + " anime · " + episodes + " episode · "
-                    + AnimeDownload.size(bytes));
+                    + AnimeDownload.size(bytes) + (sedang == 0 ? ""
+                    : " · " + sedang + " berjalan"));
         }
 
         for (AnimeDownloads.Anime anime : items) content.addView(animeCard(anime));
+    }
+
+    /**
+     * Susun ulang bagian "Sedang diunduh".
+     *
+     * <p>Hanya bagian ini yang dibangun ulang saat status berubah; kartu anime
+     * yang sudah tersimpan tidak disentuh, jadi daftar tidak berkedip dan posisi
+     * gulir tidak melompat.
+     */
+    private void renderActive() {
+        if (activeSection == null) return;
+        activeSection.removeAllViews();
+        java.util.List<AnimeDownloadStatus.Active> aktif = AnimeDownloadStatus.active();
+        activeSection.setVisibility(aktif.isEmpty() ? View.GONE : View.VISIBLE);
+        if (aktif.isEmpty()) return;
+
+        TextView judul = Ui.label(this, "Sedang diunduh", 13, palette.muted);
+        judul.setPadding(Ui.dp(this, 4), Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 6));
+        activeSection.addView(judul);
+
+        for (AnimeDownloadStatus.Active item : aktif) {
+            activeSection.addView(activeRow(item));
+        }
+    }
+
+    /** Satu baris unduhan yang sedang berjalan, dengan persentase dan tombol Batal. */
+    private View activeRow(final AnimeDownloadStatus.Active item) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 10));
+        card.setBackground(Ui.rounded(palette.surface, palette.divider, 14, this));
+        card.setTag("anime_downloads_active_" + item.episodeKey);
+
+        LinearLayout baris = new LinearLayout(this);
+        baris.setOrientation(LinearLayout.HORIZONTAL);
+        baris.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout teks = new LinearLayout(this);
+        teks.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams teksParams = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1);
+
+        String nama = item.title.isEmpty() ? "Anime" : item.title;
+        TextView judul = Ui.label(this, nama, 14, palette.text);
+        judul.setTypeface(Typeface.DEFAULT_BOLD);
+        judul.setMaxLines(1);
+        judul.setEllipsize(TextUtils.TruncateAt.END);
+        teks.addView(judul);
+
+        String ket = item.label();
+        TextView sub = Ui.label(this, ket, 12, palette.muted);
+        sub.setMaxLines(1);
+        sub.setEllipsize(TextUtils.TruncateAt.END);
+        sub.setPadding(0, Ui.dp(this, 2), 0, 0);
+        teks.addView(sub);
+
+        baris.addView(teks, teksParams);
+
+        TextView persen = Ui.label(this, statusTeks(item), 12, palette.text);
+        persen.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+        baris.addView(persen);
+
+        ImageButton batal = Ui.iconButton(this, R.drawable.ic_close,
+                "Batalkan unduhan episode", palette);
+        batal.setTag("anime_downloads_cancel_" + item.episodeKey);
+        batal.setOnClickListener(v -> {
+            AnimeDownloadQueue.cancel(this, item.owner, item.episodeKey);
+            render();
+        });
+        baris.addView(batal, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
+        card.addView(baris);
+
+        android.widget.ProgressBar progress = new android.widget.ProgressBar(
+                this, null, android.R.attr.progressBarStyleHorizontal);
+        progress.setMax(100);
+        boolean pasti = item.total > 0 || item.percent > 0;
+        progress.setIndeterminate(!pasti);
+        if (pasti) progress.setProgress(Math.max(0, Math.min(100, item.percent)));
+        progress.setTag("anime_downloads_progress_" + item.episodeKey);
+        LinearLayout.LayoutParams progressParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 6));
+        progressParams.topMargin = Ui.dp(this, 8);
+        card.addView(progress, progressParams);
+
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.bottomMargin = Ui.dp(this, 8);
+        card.setLayoutParams(cardParams);
+        return card;
+    }
+
+    /** Persentase bila total diketahui; kalau tidak, pesan yang jujur. */
+    private String statusTeks(AnimeDownloadStatus.Active item) {
+        if (item.state == AnimeDownloadStatus.FAILED) return "Gagal";
+        if (item.state == AnimeDownloadStatus.PAUSED) return "Dijeda";
+        if (item.state == AnimeDownloadStatus.QUEUED) return "Menunggu";
+        if (item.total <= 0 && item.percent <= 0) return "Menyiapkan…";
+        return Math.max(0, Math.min(100, item.percent)) + "%";
     }
 
     private View animeCard(final AnimeDownloads.Anime anime) {

@@ -74,10 +74,23 @@ public final class AnimeDownloadQueue {
             Log.w(TAG, "Unduhan gagal dijadwalkan", error);
             return false;
         }
+        // Nama yang bisa dibaca pengguna, supaya unduhan yang sedang berjalan
+        // bisa ditampilkan di layar Unduhan — bukan hanya kunci episode.
+        AnimeDownloadStatus.describe(task.episodeKey,
+                task.animeTitle.isEmpty() ? "Anime" : task.animeTitle,
+                keterangan(task), task.animeId);
         int percent = AnimeDownloadStatus.percent(task.episodeKey);
         AnimeDownloadStatus.set(task.episodeKey, AnimeDownloadStatus.QUEUED, percent,
                 "Menunggu");
         return true;
+    }
+
+    /** "Episode 3 · 720p" untuk ditampilkan di layar Unduhan. */
+    private static String keterangan(AnimeDownloadTask task) {
+        String judul = task.episodeLabel == null || task.episodeLabel.isEmpty()
+                ? "Episode" : task.episodeLabel;
+        return task.quality == null || task.quality.isEmpty()
+                ? judul : judul + " \u00b7 " + task.quality;
     }
 
     /** Ulangi unduhan yang gagal; pekerjaan lama diganti bila masih ada. */
@@ -97,6 +110,8 @@ public final class AnimeDownloadQueue {
         } catch (RuntimeException error) {
             return false;
         }
+        AnimeDownloadStatus.describe(task.episodeKey,
+                task.animeTitle.isEmpty() ? "Anime" : task.animeTitle, keterangan(task));
         AnimeDownloadStatus.set(task.episodeKey, AnimeDownloadStatus.QUEUED,
                 AnimeDownloadStatus.percent(task.episodeKey), "Menunggu");
         return true;

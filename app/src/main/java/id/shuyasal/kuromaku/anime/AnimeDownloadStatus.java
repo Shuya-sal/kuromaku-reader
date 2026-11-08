@@ -42,6 +42,50 @@ public final class AnimeDownloadStatus {
         long total = 0L;
         String message = "";
         String quality = "";
+        String title = "";
+        String subtitle = "";
+        String owner = "";
+    }
+
+    /**
+     * Satu unduhan yang tidak (atau belum) selesai, untuk layar Unduhan.
+     *
+     * <p>Layar Unduhan sebelumnya hanya menampilkan berkas yang sudah ada di
+     * disk. Akibatnya unduhan yang sedang berjalan tidak terlihat di mana pun
+     * selain daftar episode anime masing-masing — padahal di situlah pengguna
+     * mencari "apa yang sedang diunduh".
+     */
+    public static final class Active {
+        public final String episodeKey;
+        public final int state;
+        public final int percent;
+        public final long bytes;
+        public final long total;
+        public final String message;
+        public final String quality;
+        public final String title;
+        public final String subtitle;
+        public final String owner;
+
+        Active(String episodeKey, Entry entry) {
+            this.episodeKey = episodeKey;
+            this.state = entry.state;
+            this.percent = entry.percent;
+            this.bytes = entry.bytes;
+            this.total = entry.total;
+            this.message = entry.message;
+            this.quality = entry.quality;
+            this.title = entry.title;
+            this.subtitle = entry.subtitle;
+            this.owner = entry.owner;
+        }
+
+        /** Nama yang layak ditampilkan; tidak pernah kosong. */
+        public String label() {
+            if (!subtitle.isEmpty()) return subtitle;
+            if (!title.isEmpty()) return title;
+            return episodeKey;
+        }
     }
 
     public static final String PREFIX = "anime|";
@@ -82,13 +126,19 @@ public final class AnimeDownloadStatus {
             entry.percent = row.getValue().percent;
             entry.message = row.getValue().message;
             entry.quality = row.getValue().quality;
+            entry.title = row.getValue().title;
+            entry.subtitle = row.getValue().subtitle;
+            entry.owner = row.getValue().owner;
             STATES.put(episodeKey, entry);
         }
     }
 
     private static void persist(String episodeKey, Entry entry) {
         id.shuyasal.kuromaku.offline.DownloadStateFile.put(PREFIX + key(episodeKey),
-                entry.state, entry.percent, entry.message, entry.quality);
+                entry.state, entry.percent, entry.message, entry.quality,
+                entry.title, entry.subtitle);
+        id.shuyasal.kuromaku.offline.DownloadStateFile.setOwner(PREFIX + key(episodeKey),
+                entry.owner);
     }
 
     public static synchronized void set(String episodeKey, int state, int percent, String message) {
@@ -125,6 +175,64 @@ public final class AnimeDownloadStatus {
                 : 0;
         persist(episodeKey, entry);
         notifyListeners();
+    }
+
+    /**
+     * Simpan nama yang bisa dibaca pengguna untuk episode ini.
+     *
+     * <p>Dikirim sekali saat unduhan dijadwalkan; pembaruan progres berikutnya
+     * mempertahankannya.
+     */
+    public static synchronized void describe(String episodeKey, String title, String subtitle) {
+        describe(episodeKey, title, subtitle, "");
+    }
+
+    public static synchronized void describe(String episodeKey, String title, String subtitle,
+                                             String owner) {
+        String kunci = key(episodeKey);
+        if (kunci.isEmpty()) return;
+        hydrate();
+        Entry entry = entry(kunci);
+        if (title != null && !title.isEmpty()) entry.title = title;
+        if (subtitle != null && !subtitle.isEmpty()) entry.subtitle = subtitle;
+        if (owner != null && !owner.isEmpty()) entry.owner = owner;
+        persist(kunci, entry);
+        notifyListeners();
+    }
+
+    /**
+     * Unduhan yang belum selesai: antre, berjalan, dijeda, atau gagal.
+     *
+     * <p>Yang sudah {@code SAVED} tidak dimasukkan — itu sudah tampil sebagai
+     * berkas di layar Unduhan.
+     */
+    public static synchronized java.util.List<Active> active() {
+        hydrate();
+        java.util.List<Active> hasil = new java.util.ArrayList<>();
+        for (Map.Entry<String, Entry> item : STATES.entrySet()) {
+            Entry entry = item.getValue();
+            if (entry == null) continue;
+            // Hanya yang benar-benar berjalan. Yang gagal tetap terlihat di daftar
+            // episode dengan tombol Coba Lagi, sehingga tidak menumpuk di sini.
+            if (entry.state != QUEUED && entry.state != DOWNLOADING
+                    && entry.state != VERIFYING && entry.state != PAUSED) {
+                continue;
+            }
+            hasil.add(new Active(item.getKey(), entry));
+        }
+        return hasil;
+    }
+
+    public static synchronized String title(String episodeKey) {
+        hydrate();
+        Entry entry = STATES.get(key(episodeKey));
+        return entry == null ? "" : entry.title;
+    }
+
+    public static synchronized String subtitle(String episodeKey) {
+        hydrate();
+        Entry entry = STATES.get(key(episodeKey));
+        return entry == null ? "" : entry.subtitle;
     }
 
     public static synchronized void clear(String episodeKey) {

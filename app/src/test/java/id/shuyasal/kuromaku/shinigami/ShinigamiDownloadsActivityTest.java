@@ -98,6 +98,8 @@ public class ShinigamiDownloadsActivityTest {
     }
 
     @Test public void emptyStateWhenNoFilesExist() throws Exception {
+        // Tanpa berkas DAN tanpa unduhan berjalan: keadaan kosong yang sebenarnya.
+        ShinigamiDownloadStatus.reset();
         downloader.deleteChapter(CHAPTER);
         ShinigamiDownloadsActivity activity = launch();
         assertEquals(View.VISIBLE, tagged(activity, "downloads_empty").getVisibility());
