@@ -150,6 +150,33 @@ public class OtakudesuHomeTest {
         }
     }
 
+    // ----------------------------------------------------------- toolbar
+
+    @Test public void toolbarBerandaTanpaPanahKembali() {
+        try (ActivityController<Host> controller = open()) {
+            Host activity = controller.get();
+            assertNull("panah kembali tidak boleh ada di beranda",
+                    tag(activity, "otakudesu_back"));
+            assertNotNull("hamburger tetap ada", tag(activity, "otakudesu_menu"));
+            assertNotNull("tombol Unduhan tetap ada", tag(activity, "otakudesu_downloads"));
+            assertNotNull("menu kanan tetap ada", tag(activity, "otakudesu_overflow"));
+        }
+    }
+
+    @Test public void backDariBerandaMenujuSourceHub() {
+        try (ActivityController<Host> controller = open()) {
+            Host activity = controller.get();
+            activity.onBackPressed();
+            android.content.Intent next =
+                    org.robolectric.Shadows.shadowOf(activity).getNextStartedActivity();
+            assertNotNull("harus membuka layar lain", next);
+            assertEquals("menuju Source Hub, bukan Novel",
+                    id.shuyasal.kuromaku.SourceHubActivity.class.getName(),
+                    next.getComponent().getClassName());
+            assertTrue("beranda ditutup", activity.isFinishing());
+        }
+    }
+
     // -------------------------------------------------------------- tema
 
     @Test public void menggantiTemaTidakMemuatUlangDaftar() throws Exception {

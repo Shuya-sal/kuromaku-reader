@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -29,6 +30,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.Ui;
 
 /**
  * Tombol Unduh pada daftar episode.
@@ -99,6 +101,20 @@ public class OtakudesuDetailDownloadTest {
         return activity.getWindow().getDecorView().findViewWithTag("otakudesu_download_bar");
     }
 
+    private static View cancelButton(OtakudesuDetailActivity activity) {
+        return activity.getWindow().getDecorView().findViewWithTag("otakudesu_download_cancel");
+    }
+
+    private static TextView percentLabel(OtakudesuDetailActivity activity) {
+        return (TextView) activity.getWindow().getDecorView()
+                .findViewWithTag("otakudesu_download_percent");
+    }
+
+    private static View progressLine(OtakudesuDetailActivity activity) {
+        return activity.getWindow().getDecorView()
+                .findViewWithTag("otakudesu_download_progress");
+    }
+
     /** Episode pertama pada fixture detail, dipakai sebagai sasaran unduhan. */
     private static OtakudesuAnime.Episode firstEpisode(OtakudesuDetailActivity activity)
             throws Exception {
@@ -127,7 +143,7 @@ public class OtakudesuDetailDownloadTest {
         }
     }
 
-    @Test public void labelTombolMengikutiStatusUnduhan() throws Exception {
+    @Test public void saatMengunduhMunculPersenBarDanTombolBatal() throws Exception {
         try (ActivityController<Host> controller = open()) {
             Host activity = controller.get();
             await(activity);
@@ -136,26 +152,78 @@ public class OtakudesuDetailDownloadTest {
             Button button = downloadButton(activity);
             assertNotNull(button);
 
-            AnimeDownloadStatus.set(key, AnimeDownloadStatus.QUEUED, 0, "Menyiapkan…");
+            AnimeDownloadStatus.set(key, AnimeDownloadStatus.QUEUED, 0, "Menyiapkan…", "720p");
             ShadowLooper.idleMainLooper();
             assertEquals("Menyiapkan…", button.getText().toString());
+            assertEquals("tombol batal tampil saat antre", View.VISIBLE,
+                    cancelButton(activity).getVisibility());
 
+            // 12 dari 100 byte: persen berasal dari byte nyata, bukan timer.
             AnimeDownloadStatus.progress(key, 12, 100);
             ShadowLooper.idleMainLooper();
-            assertEquals("12%", button.getText().toString());
-            View bar = downloadBar(activity);
-            assertNotNull("bar progres muncul saat mengunduh", bar);
-            assertEquals(View.VISIBLE, bar.getVisibility());
-            assertEquals(12, ((ProgressBar) bar).getProgress());
+            assertEquals("12%", percentLabel(activity).getText().toString());
+            assertEquals("bar progres tampil", View.VISIBLE,
+                    downloadBar(activity).getVisibility());
+            assertEquals(12, ((ProgressBar) downloadBar(activity)).getProgress());
+            assertEquals("tombol Unduh diganti baris kemajuan", View.GONE,
+                    button.getVisibility());
+            assertEquals("X tetap 48dp", Ui.dp(activity, Ui.TOUCH_DP),
+                    cancelButton(activity).getLayoutParams().width);
+            assertEquals("Batalkan unduhan episode",
+                    cancelButton(activity).getContentDescription().toString());
 
-            AnimeDownloadStatus.set(key, AnimeDownloadStatus.SAVED, 100, "Tersimpan offline");
+            AnimeDownloadStatus.set(key, AnimeDownloadStatus.SAVED, 100,
+                    "Tersimpan · 720p", "720p");
             ShadowLooper.idleMainLooper();
-            assertEquals("Tersimpan", button.getText().toString());
+            assertEquals("Tersimpan · 720p", button.getText().toString());
+            assertEquals("tombol Unduh kembali tampil", View.VISIBLE, button.getVisibility());
+            assertEquals("baris kemajuan disembunyikan", View.GONE,
+                    progressLine(activity).getVisibility());
 
             AnimeDownloadStatus.set(key, AnimeDownloadStatus.FAILED, 0,
                     "Server menolak unduhan (kode 403).");
             ShadowLooper.idleMainLooper();
             assertEquals("Coba Lagi", button.getText().toString());
+        }
+    }
+
+    @Test public void menekanUnduhMembukaLembarKualitasTanpaPemutar() throws Exception {
+        try (ActivityController<Host> controller = open()) {
+            Host activity = controller.get();
+            await(activity);
+            Button button = downloadButton(activity);
+            assertNotNull(button);
+            button.performClick();
+            await(activity);
+
+            android.app.Dialog sheet = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            assertNotNull("lembar pemilihan kualitas harus terbuka", sheet);
+            assertTrue("lembar benar-benar ditampilkan", sheet.isShowing());
+            View panel = sheet.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_quality_sheet");
+            assertNotNull("panel kualitas ada", panel);
+            assertNull("pemutar tidak boleh terbuka",
+                    Shadows.shadowOf(activity).getNextStartedActivity());
+        }
+    }
+
+    @Test public void kualitasTidakTersediaDijelaskanBukanDitawarkan() throws Exception {
+        try (ActivityController<Host> controller = open()) {
+            Host activity = controller.get();
+            await(activity);
+            downloadButton(activity).performClick();
+            await(activity);
+
+            android.app.Dialog sheet = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            assertNotNull(sheet);
+            View rows = sheet.findViewById(android.R.id.content)
+                    .findViewWithTag("anime_quality_rows");
+            assertNotNull(rows);
+            assertEquals("dua kualitas diperiksa", 2, ((android.view.ViewGroup) rows).getChildCount());
+            for (int i = 0; i < ((android.view.ViewGroup) rows).getChildCount(); i++) {
+                View row = ((android.view.ViewGroup) rows).getChildAt(i);
+                assertFalse("baris tidak bisa ditekan bila tidak tersedia", row.isEnabled());
+            }
         }
     }
 

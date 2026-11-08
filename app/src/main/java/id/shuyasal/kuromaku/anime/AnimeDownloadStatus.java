@@ -41,6 +41,7 @@ public final class AnimeDownloadStatus {
         long bytes = 0L;
         long total = 0L;
         String message = "";
+        String quality = "";
     }
 
     private static final Map<String, Entry> STATES = new LinkedHashMap<>();
@@ -56,8 +57,19 @@ public final class AnimeDownloadStatus {
     }
 
     public static synchronized void set(String episodeKey, int state, int percent, String message) {
+        set(episodeKey, state, percent, message, "");
+    }
+
+    /**
+     * Seperti {@link #set(String, int, int, String)} sekaligus mencatat kualitas
+     * yang dipilih, sehingga pembatalan bisa menunjuk pekerjaan yang tepat dan
+     * label "Tersimpan · 720p" tidak menebak.
+     */
+    public static synchronized void set(String episodeKey, int state, int percent, String message,
+                                       String quality) {
         if (episodeKey == null || episodeKey.isEmpty()) return;
         Entry entry = entry(episodeKey);
+        if (quality != null && !quality.isEmpty()) entry.quality = quality.trim();
         entry.state = state;
         entry.percent = Math.max(0, Math.min(100, percent));
         entry.message = message == null ? "" : message;
@@ -100,6 +112,12 @@ public final class AnimeDownloadStatus {
     public static synchronized long total(String episodeKey) {
         Entry entry = STATES.get(key(episodeKey));
         return entry == null ? 0L : entry.total;
+    }
+
+    /** Kualitas yang sedang/terakhir diunduh untuk episode ini ("" bila belum). */
+    public static synchronized String quality(String episodeKey) {
+        Entry entry = STATES.get(key(episodeKey));
+        return entry == null ? "" : entry.quality;
     }
 
     public static synchronized String message(String episodeKey) {

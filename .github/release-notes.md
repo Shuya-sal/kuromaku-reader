@@ -33,6 +33,15 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Area atas menyusut saat scroll.** Kolom cari, "Lanjutkan Menonton", dan baris filter menyusut bersama (animasi tinggi 180 ms) ketika daftar digulir ke bawah, dan muncul kembali saat digulir ke atas atau saat daftar baru dimuat.
   - **Pembersihan setelah layar ditutup.** Callback UI dan tugas latar tidak lagi berjalan setelah Activity dihancurkan, sehingga tidak ada `RejectedExecutionException` ketika layar ditutup di tengah pemuatan.
 
+* **@VERSION@ — Batalkan unduhan dari daftar episode, pilih kualitas 720p/480p, toolbar beranda dirapikan.**
+  - **Tombol X pada baris episode.** Saat episode antre atau sedang diunduh, baris itu menampilkan persen, bar progres, dan tombol **X** 48dp (`contentDescription="Batalkan unduhan episode"`). X membatalkan **hanya episode itu**, lewat tag pekerjaan yang stabil — bukan posisi baris, bukan semua unduhan. Berkas sementara dibuang; berkas yang sudah lengkap tidak pernah dihapus, termasuk bila pembatalan datang berbarengan dengan selesainya unduhan.
+  - **Pembatalan tidak menghidupkan ulang unduhan.** Pengunduh membedakan "dibatalkan" dari "koneksi terputus": pembatalan berhenti dan tidak dijadwalkan ulang, sedangkan koneksi terputus tetap bisa dilanjutkan.
+  - **Lembar Pilih Kualitas Unduhan.** Menekan **Unduh** membuka lembar kualitas (bukan pemutar). Hanya kualitas yang benar-benar punya berkas yang bisa dipilih; sisanya tampil nonaktif dengan alasan. Nama server dan ukuran berkas berasal dari pemeriksaan nyata (permintaan satu byte ke server), bukan perkiraan.
+  - **Label kualitas mengikuti berkas, bukan label mirror.** Bila grup "480p" ternyata menyajikan berkas bernama `..._720p.mp4`, yang ditampilkan adalah **720p** — aplikasi tidak menyebut 480p untuk berkas 720p, dan tidak menawarkan berkas yang sama dua kali.
+  - **Status tersimpan menyebut kualitas**: `Tersimpan · 720p`, dibaca dari keterangan berkas di perangkat.
+  - **Toolbar beranda anime tanpa panah kembali.** Susunannya `☰ · Anime Otakudesu · Unduhan · ⋮`. Tombol Back Android dari beranda menuju **Source Hub**, bukan layar sebelumnya yang kebetulan ada di tumpukan. Detail anime dan pemutar tetap punya tepat satu tombol Kembali.
+  - **Persen dari byte nyata.** Angka berasal dari byte yang benar-benar tersimpan; saat halaman ditinggal dan dibuka lagi, status dibaca ulang dari berkas dan WorkManager, bukan dari state Activity.
+
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
 * **@VERSION@ — Pemutar video native Media3 menggantikan WebView.**

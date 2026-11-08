@@ -293,19 +293,23 @@ public class OtakudesuActivity extends AppCompatActivity {
                 .show();
     }
 
+    /**
+     * Kembali dari beranda anime menuju Source Hub, bukan ke layar sebelumnya
+     * yang kebetulan ada di tumpukan (mis. Novel). Toolbar sendiri tidak punya
+     * panah kembali: beranda ini adalah pintu masuk cabang Anime.
+     */
+    @Override public void onBackPressed() {
+        startActivity(new android.content.Intent(this, id.shuyasal.kuromaku.SourceHubActivity.class)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+        finish();
+    }
+
     private LinearLayout buildToolbar() {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8), Ui.dp(this, 8));
         bar.setBackgroundColor(palette.surface);
-
-        android.widget.ImageButton back = Ui.iconButton(this,
-                R.drawable.ic_arrow_back, "Kembali", palette);
-        back.setTag("otakudesu_back");
-        back.setOnClickListener(v -> finish());
-        bar.addView(back, new LinearLayout.LayoutParams(
-                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
         android.widget.ImageButton menu = Ui.iconButton(this,
                 R.drawable.ic_menu, "Menu", palette);

@@ -50,6 +50,10 @@ public class AnimeDownloadWorker extends Worker {
             Log.w(TAG, "unduhan tanpa penanda episode dilewati");
             return Result.failure();
         }
+        if (isStopped()) {
+            AnimeDownloadStatus.clear(params.episodeKey);
+            return Result.failure();
+        }
         if (!AnimeDownloadPolicy.allowed(context)) {
             AnimeDownloadStatus.set(params.episodeKey, AnimeDownloadStatus.FAILED, 0,
                     "Unduhan offline belum diizinkan.");
@@ -68,8 +72,15 @@ public class AnimeDownloadWorker extends Worker {
         switch (result.outcome) {
             case SAVED:
                 AnimeDownloadStatus.set(params.episodeKey, AnimeDownloadStatus.SAVED, 100,
-                        "Tersimpan offline");
+                        params.quality.isEmpty() ? "Tersimpan offline"
+                                : "Tersimpan \u00b7 " + params.quality, params.quality);
                 return Result.success();
+            case CANCELLED:
+                // Pembatalan bukan kegagalan jaringan: mengulang di sini akan
+                // menghidupkan kembali unduhan yang baru saja dibatalkan.
+                AnimeDownloads.discardPart(context, params.animeId, params.episodeKey);
+                AnimeDownloadStatus.clear(params.episodeKey);
+                return Result.failure();
             case INCOMPLETE:
                 AnimeDownloadStatus.set(params.episodeKey, AnimeDownloadStatus.PAUSED,
                         percent(result), result.message);

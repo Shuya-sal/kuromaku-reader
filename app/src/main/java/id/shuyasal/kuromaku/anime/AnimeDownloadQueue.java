@@ -30,8 +30,21 @@ public final class AnimeDownloadQueue {
     private AnimeDownloadQueue() {
     }
 
-    public static String workName(String episodeKey) {
-        return PREFIX + (episodeKey == null ? "" : episodeKey.trim());
+    public static String workName(String episodeKey, String quality) {
+        String base = episodeKey == null ? "" : episodeKey.trim();
+        String q = quality == null ? "" : quality.trim().replaceAll("[^A-Za-z0-9]", "");
+        return PREFIX + base + "-" + (q.isEmpty() ? "auto" : q);
+    }
+
+    /**
+     * Penanda per episode, dipasang pada setiap pekerjaan unduhan episode itu.
+     *
+     * <p>Pembatalan memakai tag ini, bukan posisi adapter dan bukan nama kerja:
+     * nama kerja memuat kualitas, sedangkan pembatalan harus tetap bekerja walau
+     * kualitas tidak diketahui lagi.
+     */
+    public static String episodeTag(String episodeKey) {
+        return PREFIX + "tag-" + (episodeKey == null ? "" : episodeKey.trim());
     }
 
     /**
@@ -54,7 +67,8 @@ public final class AnimeDownloadQueue {
             return false;
         }
         try {
-            manager.enqueueUniqueWork(workName(task.episodeKey), ExistingWorkPolicy.KEEP,
+            manager.enqueueUniqueWork(workName(task.episodeKey, task.quality),
+                    ExistingWorkPolicy.KEEP,
                     request(task));
         } catch (RuntimeException error) {
             Log.w(TAG, "Unduhan gagal dijadwalkan", error);
@@ -77,7 +91,8 @@ public final class AnimeDownloadQueue {
             return false;
         }
         try {
-            manager.enqueueUniqueWork(workName(task.episodeKey), ExistingWorkPolicy.REPLACE,
+            manager.enqueueUniqueWork(workName(task.episodeKey, task.quality),
+                    ExistingWorkPolicy.REPLACE,
                     request(task));
         } catch (RuntimeException error) {
             return false;
@@ -87,28 +102,73 @@ public final class AnimeDownloadQueue {
         return true;
     }
 
+    /** Hasil pembatalan, supaya layar bisa melaporkan keadaan yang sebenarnya. */
+    public static final class CancelResult {
+        /** Unduhan dihentikan dan sisa berkas sementara dibuang. */
+        public static final int CANCELLED = 0;
+        /** Terlambat: berkas sudah lengkap, jadi tidak ada yang dibatalkan. */
+        public static final int ALREADY_SAVED = 1;
+        /** Tidak ada unduhan berjalan untuk episode ini. */
+        public static final int NOT_RUNNING = 2;
+
+        public final int outcome;
+
+        CancelResult(int outcome) {
+            this.outcome = outcome;
+        }
+
+        public String message() {
+            switch (outcome) {
+                case ALREADY_SAVED:
+                    return "Episode ini sudah tersimpan lengkap; berkasnya tidak dihapus.";
+                case NOT_RUNNING:
+                    return "Tidak ada unduhan berjalan untuk episode ini.";
+                default:
+                    return "Unduhan dibatalkan.";
+            }
+        }
+    }
+
     /**
-     * Hentikan unduhan berjalan.
+     * Hentikan unduhan satu episode.
      *
-     * <p>Berkas sementara tidak dibuang, jadi unduhan bisa dilanjutkan. Status
-     * menjadi {@code Terjeda} bila sudah ada byte tersimpan, atau hilang bila
-     * belum ada apa pun.
+     * <p>Pembatalan menunjuk episode lewat tag stabil ({@link #episodeTag}), bukan
+     * posisi baris, sehingga daftar yang bergeser atau kualitas yang berubah tidak
+     * pernah membatalkan episode lain. Bila unduhan ternyata sudah selesai tepat
+     * sebelum pembatalan, berkas lengkap dipertahankan dan hasilnya dilaporkan
+     * sebagai {@link CancelResult#ALREADY_SAVED} — bukan dihapus.
      */
-    public static void cancel(Context context, String animeId, String episodeKey) {
-        if (context == null || episodeKey == null || episodeKey.isEmpty()) return;
+    public static CancelResult cancel(Context context, String animeId, String episodeKey) {
+        if (context == null || episodeKey == null || episodeKey.isEmpty()) {
+            return new CancelResult(CancelResult.NOT_RUNNING);
+        }
+        // Berkas lengkap lebih dulu: pembatalan yang datang berbarengan dengan
+        // selesainya unduhan tidak boleh merusak hasil yang sah.
+        if (AnimeDownloads.isSaved(context, animeId, episodeKey)) {
+            AnimeDownloadStatus.set(episodeKey, AnimeDownloadStatus.SAVED, 100,
+                    "Tersimpan offline", AnimeDownloadStatus.quality(episodeKey));
+            return new CancelResult(CancelResult.ALREADY_SAVED);
+        }
+
+        int before = AnimeDownloadStatus.state(episodeKey);
+        boolean running = before == AnimeDownloadStatus.QUEUED
+                || before == AnimeDownloadStatus.DOWNLOADING
+                || before == AnimeDownloadStatus.VERIFYING
+                || before == AnimeDownloadStatus.PAUSED;
+
         try {
-            WorkManager.getInstance(context.getApplicationContext())
-                    .cancelUniqueWork(workName(episodeKey));
+            WorkManager manager = WorkManager.getInstance(context.getApplicationContext());
+            manager.cancelAllWorkByTag(episodeTag(episodeKey));
+            manager.cancelUniqueWork(workName(episodeKey, AnimeDownloadStatus.quality(episodeKey)));
         } catch (RuntimeException error) {
             Log.w(TAG, "Unduhan tidak bisa dihentikan", error);
         }
-        long saved = AnimeDownloads.savedBytes(context, animeId, episodeKey);
-        if (saved > 0) {
-            AnimeDownloadStatus.set(episodeKey, AnimeDownloadStatus.PAUSED,
-                    AnimeDownloadStatus.percent(episodeKey), "Terjeda");
-        } else {
+
+        AnimeDownloads.discardPart(context, animeId, episodeKey);
+        if (!AnimeDownloads.isSaved(context, animeId, episodeKey)) {
             AnimeDownloadStatus.clear(episodeKey);
         }
+        return new CancelResult(running ? CancelResult.CANCELLED : CancelResult.NOT_RUNNING);
     }
 
     static OneTimeWorkRequest request(AnimeDownloadTask task) {
@@ -127,6 +187,7 @@ public final class AnimeDownloadQueue {
         return new OneTimeWorkRequest.Builder(AnimeDownloadWorker.class)
                 .setInputData(data)
                 .addTag("anime-download")
+                .addTag(episodeTag(task.episodeKey))
                 .setBackoffCriteria(androidx.work.BackoffPolicy.EXPONENTIAL,
                         10, TimeUnit.SECONDS)
                 .build();

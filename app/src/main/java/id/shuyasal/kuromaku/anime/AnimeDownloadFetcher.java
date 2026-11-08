@@ -31,8 +31,10 @@ public final class AnimeDownloadFetcher {
     public enum Outcome {
         /** Berkas lengkap, tervalidasi, dan tercatat. */
         SAVED,
-        /** Belum lengkap karena pembatalan atau koneksi terputus; bisa dilanjutkan. */
+        /** Belum lengkap karena koneksi terputus; bisa dilanjutkan. */
         INCOMPLETE,
+        /** Dihentikan karena pengguna membatalkan; sisa berkas dibuang. */
+        CANCELLED,
         /** Gagal dan tidak akan berhasil bila diulang tanpa perubahan. */
         FAILED
     }
@@ -183,7 +185,7 @@ public final class AnimeDownloadFetcher {
                 while (true) {
                     if (cancelled != null && cancelled.isCancelled()) {
                         out.flush();
-                        return new Result(Outcome.INCOMPLETE, "Terjeda", written, total);
+                        return new Result(Outcome.CANCELLED, "Dibatalkan", written, total);
                     }
                     int read = in.read(buffer);
                     if (read < 0) break;

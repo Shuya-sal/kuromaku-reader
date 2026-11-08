@@ -118,9 +118,13 @@ public class AnimeDownloadFetcherTest {
     }
 
     private AnimeDownloadFetcher.Params params() {
+        return paramsFor(url());
+    }
+
+    private AnimeDownloadFetcher.Params paramsFor(String mediaUrl) {
         return new AnimeDownloadFetcher.Params("fxskc", "FX Senshi Kurumi-chan", "",
                 "Episode 1", "https://otakudesu.blog/episode/fxskc-episode-1-sub-indo/",
-                "kunci1", "720p", "odcdn", url(), "PROGRESSIVE");
+                "kunci1", "720p", "odcdn", mediaUrl, "PROGRESSIVE");
     }
 
     // ------------------------------------------------------------- alur utama
@@ -241,12 +245,34 @@ public class AnimeDownloadFetcherTest {
                 AnimeDownloads.partFile(context, "fxskc", "kunci1").isFile());
     }
 
-    @Test public void pembatalanMenjedaDanMenyimpanSisa() throws Exception {
+    @Test public void pembatalanBerhentiSebelumSatuBytePun() throws Exception {
         AnimeDownloadFetcher.Result result = AnimeDownloadFetcher.run(context, params(), client,
                 () -> true);
 
-        assertEquals(AnimeDownloadFetcher.Outcome.INCOMPLETE, result.outcome);
+        // Pembatalan bukan "koneksi terputus": hasilnya CANCELLED, sehingga
+        // worker berhenti alih-alih menjadwalkan ulang unduhan yang dibatalkan.
+        assertEquals(AnimeDownloadFetcher.Outcome.CANCELLED, result.outcome);
+        assertEquals(0L, AnimeDownloads.savedBytes(context, "fxskc", "kunci1"));
         assertFalse(AnimeDownloads.isSaved(context, "fxskc", "kunci1"));
+    }
+
+    @Test public void koneksiTerputusMasihBisaDilanjutkan() throws Exception {
+        // Sinyal batal tidak pernah aktif: kegagalan jaringan tetap INCOMPLETE
+        // (bisa dilanjutkan), bukan CANCELLED (dibuang).
+        int port;
+        try (TinyServer server = new TinyServer(range -> TinyServer.Reply.of(200,
+                java.util.Collections.singletonMap("Content-Type", "video/mp4"),
+                new byte[]{0, 0, 0, 0}))) {
+            port = server.port();
+        }
+        OkHttpClient putus = new OkHttpClient.Builder()
+                .connectTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                .build();
+        AnimeDownloadFetcher.Result result = AnimeDownloadFetcher.run(context,
+                paramsFor("http://127.0.0.1:" + port + "/video.mp4"), putus, () -> false);
+        assertEquals("kegagalan jaringan bukan pembatalan",
+                AnimeDownloadFetcher.Outcome.INCOMPLETE, result.outcome);
     }
 
     @Test public void unduhUlangEpisodeYangSudahAdaTidakMenimpaDenganRusak() {

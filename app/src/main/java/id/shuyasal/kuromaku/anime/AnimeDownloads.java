@@ -1,6 +1,7 @@
 package id.shuyasal.kuromaku.anime;
 
 import android.content.Context;
+import android.util.Log;
 
 import org.json.JSONObject;
 
@@ -130,6 +131,23 @@ public final class AnimeDownloads {
 
     public static File videoFile(Context context, String animeId, String episodeKey) {
         return new File(animeDir(context, animeId), safe(episodeKey) + VIDEO_EXT);
+    }
+
+    /**
+     * Buang berkas sementara unduhan ini saja.
+     *
+     * <p>Hanya {@code .part} yang dihapus: berkas yang sudah lengkap
+     * ({@code .mp4} + keterangannya) tidak pernah disentuh, sehingga pembatalan
+     * yang datang berbarengan dengan selesainya unduhan tidak merusak hasil yang
+     * sudah sah.
+     */
+    public static void discardPart(Context context, String animeId, String episodeKey) {
+        if (context == null || episodeKey == null || episodeKey.isEmpty()) return;
+        if (isSaved(context, animeId, episodeKey)) return;
+        File part = partFile(context, animeId, episodeKey);
+        if (part.exists() && !part.delete()) {
+            Log.w("AnimeDownload", "berkas sementara tidak bisa dihapus: " + part.getName());
+        }
     }
 
     public static File metaFile(Context context, String animeId, String episodeKey) {
