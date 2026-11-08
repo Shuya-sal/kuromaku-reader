@@ -2,6 +2,10 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Laporan crash kini juga menangkap crash native, ANR, dan pembunuhan oleh sistem.**
+  - **Riwayat kematian proses dibaca dari Android** (`ApplicationExitInfo`, API 30+): jenis kejadian, waktu, keterangan, dan potongan tombstone untuk crash native. Sebelumnya hanya exception Java yang tercatat, sehingga aplikasi yang ditutup sistem atau crash di kode native tidak meninggalkan jejak apa pun.
+  - **Dialog laporan muncul dari dua sumber** — exception tertangkap dan riwayat sistem — dengan tombol **Salin laporan**.
+  - Tidak ada perubahan pada data pengguna, unduhan, atau progres.
 * **@VERSION@ — Unduhan: ForegroundInfo untuk pekerjaan yang dijalankan ulang, antrean rusak diperbaiki, laporan crash muncul sendiri.**
   - **`getForegroundInfoAsync()` di-override di ketiga worker.** Bawaan `Worker` melempar `IllegalStateException("Not implemented")`; WorkManager memanggilnya saat pekerjaan perlu dipromosikan menjadi foreground di luar `doWork()` — misalnya setelah proses dibunuh sistem. Tanpa override, unduhan yang dijalankan ulang gagal dengan exception.
   - **Antrean WorkManager yang rusak diperbaiki otomatis.** Bila basis data antrean tidak bisa dibuka, berkas `androidx.work.workdb*` dihapus dan dibuat ulang. Yang hilang hanya daftar pekerjaan lama; novel, manga, anime, progres, dan berkas unduhan tidak disentuh.

@@ -222,9 +222,13 @@ public class SourceHubActivity extends AppCompatActivity {
      * Source Hub tetap bisa dipakai setelah ditutup.
      */
     private void tampilkanLaporanCrash() {
-        if (!id.shuyasal.kuromaku.offline.CrashLog.exists(this)) return;
-        String laporan = id.shuyasal.kuromaku.offline.CrashLog.read(this);
-        if (laporan.isEmpty()) return;
+        // Dua sumber: exception Java yang tertangkap saat crash, dan riwayat
+        // kematian proses dari Android (crash native, ANR, dibunuh sistem).
+        String tertangkap = id.shuyasal.kuromaku.offline.CrashLog.read(this);
+        String riwayat = id.shuyasal.kuromaku.offline.ExitReports.summary(this);
+        if (tertangkap.isEmpty() && riwayat.isEmpty()) return;
+        final String laporan = tertangkap.isEmpty() ? riwayat
+                : riwayat.isEmpty() ? tertangkap : tertangkap + "\n\n" + riwayat;
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(this);
         android.widget.TextView isi = new android.widget.TextView(this);
