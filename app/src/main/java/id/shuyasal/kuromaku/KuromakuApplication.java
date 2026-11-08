@@ -3,6 +3,10 @@ package id.shuyasal.kuromaku;
 import android.app.Application;
 import android.util.Log;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import id.shuyasal.kuromaku.offline.DownloadQuarantine;
 import id.shuyasal.kuromaku.offline.DownloadReconciler;
 import id.shuyasal.kuromaku.offline.DownloadStateFile;
 import id.shuyasal.kuromaku.ui.ThemeManager;
@@ -10,6 +14,16 @@ import id.shuyasal.kuromaku.ui.ThemeManager;
 public class KuromakuApplication extends Application {
 
     private static final String TAG = "KuromakuDownloads";
+
+    /**
+     * Pekerjaan pemulihan unduhan.
+     *
+     * <p>Satu thread, bukan main thread: membaca antrean WorkManager dan memeriksa
+     * berkas unduhan bisa memakan waktu pada pustaka yang besar, dan startup
+     * aplikasi tidak boleh menunggunya. Semua kegagalan ditelan di sini — aplikasi
+     * harus tetap bisa dibuka walau pemulihan gagal.
+     */
+    private static final ExecutorService RECOVERY = Executors.newSingleThreadExecutor();
 
     @Override
     public void onCreate() {
@@ -19,13 +33,24 @@ public class KuromakuApplication extends Application {
         // Status unduhan dipasang lebih dulu supaya layar mana pun yang dibuka
         // pertama sudah membaca keadaan yang benar, bukan keadaan kosong.
         DownloadStateFile.install(this);
-        // Rekonsiliasi berjalan langsung: berkas statusnya kecil dan pemeriksaan
-        // berkas hanya dilakukan untuk entri yang mengklaim tersimpan. Ini
-        // menghindari thread latar yang bisa hidup melewati siklus hidup proses.
-        try {
-            DownloadReconciler.reconcile(this);
-        } catch (RuntimeException error) {
-            Log.w(TAG, "rekonsiliasi status unduhan dilewati", error);
-        }
+        RECOVERY.execute(() -> {
+            try {
+                // Paling awal: kalau proses sebelumnya mati di tengah unduhan,
+                // pekerjaan itu dibatalkan sebelum WorkManager menjalankannya lagi.
+                id.shuyasal.kuromaku.offline.DownloadCrashGuard.recover(this);
+            } catch (Throwable error) {
+                Log.w(TAG, "pemulihan penanda unduhan dilewati", error);
+            }
+            try {
+                DownloadReconciler.reconcile(this);
+            } catch (Throwable error) {
+                Log.w(TAG, "rekonsiliasi status unduhan dilewati", error);
+            }
+            try {
+                DownloadQuarantine.run(this);
+            } catch (Throwable error) {
+                Log.w(TAG, "karantina unduhan dilewati", error);
+            }
+        });
     }
 }

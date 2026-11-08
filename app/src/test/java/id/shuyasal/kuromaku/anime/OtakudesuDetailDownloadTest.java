@@ -207,6 +207,32 @@ public class OtakudesuDetailDownloadTest {
         }
     }
 
+    @Test public void pemeriksaanKualitasGagalTidakMematikanLayar() throws Exception {
+        // Sumber yang melempar RuntimeException: dulu exception ini lolos dari
+        // executor dan mematikan proses. Sekarang harus jadi pesan di lembar.
+        // Halaman detail tetap normal; hanya pemeriksaan kualitas yang meledak.
+        final java.util.concurrent.atomic.AtomicInteger panggilan =
+                new java.util.concurrent.atomic.AtomicInteger();
+        nextSource = new OtakudesuSource(url -> {
+            if (panggilan.getAndIncrement() == 0) return fixture("detail.html");
+            throw new IllegalStateException("server mengirim halaman rusak");
+        });
+        try (ActivityController<Host> controller = open()) {
+            Host activity = controller.get();
+            await(activity);
+            Button button = downloadButton(activity);
+            assertNotNull(button);
+            button.performClick();
+            await(activity);
+
+            android.app.Dialog sheet = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            assertNotNull("lembar tetap terbuka", sheet);
+            assertTrue("activity masih hidup", !activity.isFinishing());
+            assertNull("pemutar tidak dibuka",
+                    Shadows.shadowOf(activity).getNextStartedActivity());
+        }
+    }
+
     @Test public void kualitasTidakTersediaDijelaskanBukanDitawarkan() throws Exception {
         try (ActivityController<Host> controller = open()) {
             Host activity = controller.get();

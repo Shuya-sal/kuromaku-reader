@@ -129,7 +129,14 @@ public final class AnimeDownloadFetcher {
         long offset = part.isFile() ? part.length() : 0L;
         AnimeDownloadStatus.progress(params.episodeKey, offset, 0);
 
-        Request.Builder builder = new Request.Builder().url(params.url).get();
+        // Alamat yang tidak bisa diurai OkHttp akan melempar IllegalArgumentException.
+        // Itu bukan kegagalan jaringan, dan tidak boleh lolos ke thread pekerja.
+        okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(params.url);
+        if (parsed == null) {
+            return new Result(Outcome.FAILED,
+                    "Alamat berkas dari server tidak sah, jadi tidak bisa diunduh.", 0, 0);
+        }
+        Request.Builder builder = new Request.Builder().url(parsed).get();
         if (offset > 0) builder.header("Range", "bytes=" + offset + "-");
 
         long total = 0L;

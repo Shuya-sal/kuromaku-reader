@@ -256,6 +256,16 @@ public class AnimeDownloadFetcherTest {
         assertFalse(AnimeDownloads.isSaved(context, "fxskc", "kunci1"));
     }
 
+    @Test public void alamatTidakSahGagalTanpaMelempar() throws Exception {
+        // Alamat dari server bisa berubah bentuk (bukan http/https). OkHttp akan
+        // melempar IllegalArgumentException; itu harus jadi status gagal, bukan
+        // exception yang lolos ke thread pekerja.
+        AnimeDownloadFetcher.Result result = AnimeDownloadFetcher.run(context,
+                paramsFor("bukan-alamat-berkas"), client, () -> false);
+        assertEquals(AnimeDownloadFetcher.Outcome.FAILED, result.outcome);
+        assertTrue("pesan harus menjelaskan", result.message.contains("tidak sah"));
+    }
+
     @Test public void koneksiTerputusMasihBisaDilanjutkan() throws Exception {
         // Sinyal batal tidak pernah aktif: kegagalan jaringan tetap INCOMPLETE
         // (bisa dilanjutkan), bukan CANCELLED (dibuang).

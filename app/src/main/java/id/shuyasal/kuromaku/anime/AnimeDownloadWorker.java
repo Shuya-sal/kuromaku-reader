@@ -40,6 +40,38 @@ public class AnimeDownloadWorker extends Worker {
 
     @NonNull
     @Override public Result doWork() {
+        final String key = getInputData().getString(KEY_EPISODE_KEY);
+        if (key != null && !key.isEmpty()
+                && id.shuyasal.kuromaku.offline.DownloadCrashGuard
+                        .isSuspect(getApplicationContext(), key)) {
+            // Episode ini pernah membuat proses mati saat diunduh. Menjalankannya
+            // otomatis lagi akan mengulang crash yang sama; pengguna memulainya
+            // sendiri lewat tombol Unduh setelah aplikasi terbuka.
+            AnimeDownloadStatus.set(key, AnimeDownloadStatus.FAILED, 0,
+                    "Unduhan sebelumnya terhenti. Silakan coba lagi.");
+            return Result.failure();
+        }
+        if (key != null && !key.isEmpty()) {
+            id.shuyasal.kuromaku.offline.DownloadCrashGuard
+                    .begin(getApplicationContext(), key);
+        }
+        try {
+            return runDownload();
+        } catch (Throwable error) {
+            // Satu episode yang gagal tidak boleh mematikan proses, apalagi
+            // membuat aplikasi tidak bisa dibuka lagi.
+            Log.e(TAG, "unduhan episode gagal tak terduga", error);
+            if (key != null && !key.isEmpty()) {
+                AnimeDownloadStatus.set(key, AnimeDownloadStatus.FAILED, 0,
+                        "Unduhan gagal. Silakan coba lagi.");
+            }
+            return Result.failure();
+        } finally {
+            id.shuyasal.kuromaku.offline.DownloadCrashGuard.end(getApplicationContext());
+        }
+    }
+
+    private Result runDownload() {
         Context context = getApplicationContext();
         AnimeDownloadFetcher.Params params = new AnimeDownloadFetcher.Params(
                 text(KEY_ANIME_ID), text(KEY_ANIME_TITLE), text(KEY_POSTER),
@@ -110,6 +142,15 @@ public class AnimeDownloadWorker extends Worker {
                 AnimeDownloadStatus.clear(params.episodeKey);
                 return Result.failure();
             case INCOMPLETE:
+                // Percobaan dibatasi: pekerjaan yang selalu gagal tidak boleh
+                // diulang selamanya, karena itulah yang membuat aplikasi
+                // tampak "tidak bisa dibuka" setiap kali dijalankan.
+                if (getRunAttemptCount() + 1 >= id.shuyasal.kuromaku.offline
+                        .DownloadQuarantine.MAX_ATTEMPTS) {
+                    AnimeDownloadStatus.set(params.episodeKey, AnimeDownloadStatus.FAILED,
+                            percent(result), "Unduhan gagal. Silakan coba lagi.");
+                    return Result.failure();
+                }
                 AnimeDownloadStatus.set(params.episodeKey, AnimeDownloadStatus.PAUSED,
                         percent(result), result.message);
                 // Dilanjutkan otomatis bila sistem mengizinkan.

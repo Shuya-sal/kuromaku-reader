@@ -2,6 +2,15 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Perbaikan darurat: unduhan anime tidak lagi mematikan aplikasi.**
+  - **Tidak ada exception yang lolos dari pekerjaan unduhan.** Seluruh `doWork()` dibungkus; apa pun yang terjadi, hasilnya status *Gagal* di episode itu, bukan kematian proses.
+  - **Alamat berkas yang tidak sah ditolak lebih awal.** OkHttp melempar `IllegalArgumentException` untuk alamat non-http(s); sekarang diperiksa dulu dan dilaporkan sebagai "alamat berkas tidak sah".
+  - **Pemeriksaan kualitas aman.** Kegagalan tak terduga saat membaca halaman sumber menjadi pesan di lembar kualitas, bukan force close.
+  - **Startup tidak lagi menunggu pemulihan unduhan.** Rekonsiliasi status dan karantina berjalan di thread latar dengan semua kegagalan ditelan; Source Hub selalu bisa terbuka.
+  - **Penjaga crash-loop.** Kalau proses mati saat sebuah episode diunduh, episode itu ditandai dan pekerjaannya **dibatalkan sebelum dijalankan lagi** pada pembukaan berikutnya — aplikasi bisa dibuka kembali tanpa menghapus data.
+  - **Karantina setelah pembaruan.** Pekerjaan unduhan anime lama yang sudah pernah dicoba tidak dilanjutkan otomatis pada versi baru; statusnya "Perlu dicoba ulang". Unduhan Novel dan Manga Server 2 tidak disentuh.
+  - **Percobaan dibatasi 3×.** Kegagalan permanen menjadi *Gagal*, bukan retry tanpa akhir.
+
 * **@VERSION@ — Crash pilih server, landscape yang menetap, dan kontrol auto-hide.**
   - **Crash saat memilih server diperbaiki dari akarnya.** Pilihan pengguna dulu dicari dengan `mirrors.indexOf(mirror)`. Panel yang masih terbuka bisa memegang mirror dari daftar episode sebelumnya, sehingga hasilnya `-1`; indeks itu dipakai membaca dan menulis daftar, dan penjaganya (`index < mirrors.size()`) justru **lolos** untuk `-1`. Hasilnya `IndexOutOfBoundsException: Index -1 out of bounds for length 2` — aplikasi tertutup. Sekarang setiap mirror punya **identitas kanonis** (`quality|provider|serverId|posisi`) dan tidak ada indeks mentah yang dipakai untuk menulis.
   - **Dua server pada resolusi sama tidak lagi saling menimpa.** Dulu hasil pemeriksaan disimpan per posisi di daftar, jadi 480p ODCDN dan 480p Vidhide berbagi satu kunci. Sekarang per identitas, sehingga setiap server dapat dipilih sendiri dan statusnya benar.

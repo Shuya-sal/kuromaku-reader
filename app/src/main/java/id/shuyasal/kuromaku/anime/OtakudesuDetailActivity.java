@@ -616,6 +616,13 @@ public class OtakudesuDetailActivity extends AppCompatActivity {
             } catch (OtakudesuSource.SourceException error) {
                 options = null;
                 failure = error.getMessage();
+            } catch (RuntimeException error) {
+                // Pemeriksaan kualitas menyentuh jaringan dan HTML pihak ketiga.
+                // Kegagalan tak terduga di sini harus jadi pesan, bukan force close:
+                // exception yang lolos dari executor akan mematikan proses.
+                options = null;
+                failure = "Kualitas tidak bisa diperiksa sekarang. Coba lagi nanti.";
+                android.util.Log.w("AnimeDownload", "pemeriksaan kualitas gagal", error);
             }
             final List<AnimeDownloadOptions.Option> result = options;
             final String message = failure;
