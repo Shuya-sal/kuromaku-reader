@@ -42,6 +42,14 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Toolbar beranda anime tanpa panah kembali.** Susunannya `☰ · Anime Otakudesu · Unduhan · ⋮`. Tombol Back Android dari beranda menuju **Source Hub**, bukan layar sebelumnya yang kebetulan ada di tumpukan. Detail anime dan pemutar tetap punya tepat satu tombol Kembali.
   - **Persen dari byte nyata.** Angka berasal dari byte yang benar-benar tersimpan; saat halaman ditinggal dan dibuka lagi, status dibaca ulang dari berkas dan WorkManager, bukan dari state Activity.
 
+* **@VERSION@ — Unduhan bertahan di latar belakang, menu ⋮ seragam, nama sumber baru.**
+  - **Status unduhan tidak lagi hilang saat proses mati.** Novel, Manga Server 2, dan Anime Streaming menulis keadaannya ke satu berkas JSON di penyimpanan aplikasi (penulisan atomik). Setelah aplikasi dibuka ulang, layar membaca keadaan itu — bukan mulai dari "belum diunduh".
+  - **Rekonsiliasi saat aplikasi dibuka.** Entri yang tercatat "antre/mengunduh" tetapi tidak bergerak lagi ditandai **Dijeda** (bukan berputar selamanya, bukan dianggap selesai), dan klaim "tersimpan" yang berkasnya sudah tidak ada diturunkan menjadi gagal. Tidak ada berkas unduhan yang dihapus.
+  - **Foreground worker + notifikasi progres.** Unduhan episode video, chapter manga, dan volume novel berjalan sebagai foreground worker dengan notifikasi progres dan aksi **Batal** yang membatalkan pekerjaan itu saja. Bila izin notifikasi ditolak, unduhan tetap berjalan.
+  - **Menu titik tiga seragam.** Beranda Novel dan Manga Server 2 kini memakai **⋮** seperti Anime Streaming. Novel: Tema tampilan, Muat ulang katalog, Unduhan offline. Manga Server 2: Pengaturan, Unduhan, Muat ulang. Ikon Unduhan tetap sebagai aksi cepat.
+  - **Pengaturan Manga Server 2 hanya dua:** Tema dan Indikator Progres Membaca. Entri Domain Sumber dihapus dari UI; resolver domain internal tidak diubah.
+  - **Nama sumber baru:** Novel, **Manga Server 1** (Voratoon), **Manga Server 2** (Shinigami), **Anime Streaming** (Otakudesu). Hanya label yang berubah — id sumber, database, lokasi unduhan, dan nama pekerjaan tetap.
+
 * Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
 * **@VERSION@ — Pemutar video native Media3 menggantikan WebView.**

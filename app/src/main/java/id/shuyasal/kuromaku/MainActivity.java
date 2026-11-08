@@ -1,5 +1,6 @@
 package id.shuyasal.kuromaku;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -278,23 +279,17 @@ public class MainActivity extends AppCompatActivity {
         toolbarRow.addView(downloadsButton, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
-        refreshButton = Ui.iconButton(this, R.drawable.ic_refresh, "Muat ulang katalog", palette);
-        refreshButton.setTag("refresh");
-        refreshButton.setOnClickListener(v -> loadLibraries(true));
-        toolbarRow.addView(refreshButton, new LinearLayout.LayoutParams(
-                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
-
-        themeButton = Ui.iconButton(this, palette.themeIcon(), themeDescription(), palette);
-        themeButton.setTag("theme");
-        themeButton.setOnClickListener(v -> {
-            prefs.setTheme((prefs.theme() + 1) % 3);
-            palette = Palette.of(prefs.resolvedTheme());
-            rebuildShell();
-        });
-        LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(
+        // Tema dan muat ulang dipindah ke menu titik tiga: toolbar beranda tidak
+        // lagi memadati empat ikon, dan polanya sama dengan beranda lain.
+        ImageButton overflow = Ui.iconButton(this, R.drawable.ic_more,
+                "Menu Novel", palette);
+        overflow.setTag("novel_overflow");
+        overflow.setContentDescription("Menu Novel");
+        overflow.setOnClickListener(v -> showNovelOverflow());
+        LinearLayout.LayoutParams overflowParams = new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP));
-        themeParams.setMargins(Ui.dp(this, 2), 0, 0, 0);
-        toolbarRow.addView(themeButton, themeParams);
+        overflowParams.setMargins(Ui.dp(this, 2), 0, 0, 0);
+        toolbarRow.addView(overflow, overflowParams);
 
         toolbar.addView(toolbarRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, TOOLBAR_DP)));
@@ -776,6 +771,47 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /** Opens the offline library. Reads local storage only, so it works offline. */
+    /**
+     * Menu titik tiga beranda Novel: tema, muat ulang, unduhan.
+     *
+     * <p>Isinya hanya aksi yang dulu tersebar sebagai ikon di toolbar; tidak ada
+     * fungsi yang hilang. Membuka menu tidak menyentuh tab, katalog, posisi
+     * gulir, atau unduhan yang sedang berjalan.
+     */
+    private void showNovelOverflow() {
+        String[] options = {"Tema tampilan", "Muat ulang katalog", "Unduhan offline"};
+        new AlertDialog.Builder(this)
+                .setTitle("Menu Novel")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) showNovelThemeDialog();
+                    else if (which == 1) loadLibraries(true);
+                    else showDownloads();
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
+    }
+
+    /** Terapkan tema pilihan pengguna tanpa memuat ulang katalog. */
+    void applyThemeChoice(int which) {
+        prefs.setTheme(which);
+        palette = Palette.of(prefs.resolvedTheme());
+        rebuildShell();
+    }
+
+    /** Tema terang, gelap, atau mengikuti sistem. */
+    private void showNovelThemeDialog() {
+        String[] names = {"Terang", "Gelap", "Ikuti sistem"};
+        int current = Math.max(0, Math.min(2, prefs.theme()));
+        new AlertDialog.Builder(this)
+                .setTitle("Tema tampilan")
+                .setSingleChoiceItems(names, current, (dialog, which) -> {
+                    applyThemeChoice(which);
+                    dialog.dismiss();
+                })
+                .setNegativeButton("Batal", null)
+                .show();
+    }
+
     private void showDownloads() {
         if (showingDownloads) return;
         keepScrollHere();

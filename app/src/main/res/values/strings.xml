@@ -13,12 +13,12 @@
 
     <string name="source_novel">Novel</string>
     <string name="source_novel_note">Katalog novel Kaori Translation dengan progres per volume.</string>
-    <string name="source_voratoon">Manga Voratoon</string>
-    <string name="source_voratoon_note">Baca manga Voratoon langsung di dalam aplikasi.</string>
-    <string name="source_shinigami">Manga Shinigami</string>
-    <string name="source_shinigami_note">Baca manga Shinigami, lengkap dengan unduhan offline.</string>
-    <string name="source_otakudesu">Anime Otakudesu</string>
-    <string name="source_otakudesu_note">Streaming anime subtitle Indonesia dari Otakudesu.</string>
+    <string name="source_voratoon">Manga Server 1</string>
+    <string name="source_voratoon_note">Baca manga dari server pertama langsung di dalam aplikasi.</string>
+    <string name="source_shinigami">Manga Server 2</string>
+    <string name="source_shinigami_note">Baca manga dari server kedua, lengkap dengan unduhan offline.</string>
+    <string name="source_otakudesu">Anime Streaming</string>
+    <string name="source_otakudesu_note">Streaming anime subtitle Indonesia, dengan unduhan episode.</string>
 
     <string name="home">Beranda</string>
 

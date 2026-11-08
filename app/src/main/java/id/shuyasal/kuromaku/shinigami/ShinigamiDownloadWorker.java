@@ -44,6 +44,18 @@ public class ShinigamiDownloadWorker extends Worker {
         }
         List<String> chapters = chapters();
         if (chapters.isEmpty()) return Result.failure(failData("Chapter tidak dikenal."));
+
+        // Chapter berisi puluhan gambar: jadikan foreground supaya tidak
+        // dimatikan sistem saat pengguna menekan Home atau pindah aplikasi.
+        foregroundId = 5300 + Math.abs(chapters.get(0).hashCode() % 400);
+        foregroundTag = ShinigamiDownloadQueue.workName(chapters.get(0));
+        try {
+            setForegroundAsync(id.shuyasal.kuromaku.offline.ForegroundDownloads.info(
+                    getApplicationContext(), foregroundId, "Mengunduh chapter manga",
+                    "Menyiapkan halaman", -1, foregroundTag));
+        } catch (RuntimeException error) {
+            Log.w(TAG, "notifikasi progres tidak bisa ditampilkan", error);
+        }
         boolean anyRetry = false;
         for (String chapterId : chapters) {
             if (isStopped()) {
@@ -116,6 +128,7 @@ public class ShinigamiDownloadWorker extends Worker {
             ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.DOWNLOADING,
                     percentDone(local, chapterId, total), "");
             setProgressAsync(progress(chapterId, local, total));
+            notifyProgress(chapterId, index + 1, total);
         }
         ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.VERIFYING, 100, "");
         if (local.isDownloaded(chapterId, total)) {
@@ -149,6 +162,27 @@ public class ShinigamiDownloadWorker extends Worker {
             throw new Exception("Unduhan dibatalkan.");
         }
     }
+
+    /** Perbarui notifikasi foreground untuk halaman yang baru selesai. */
+    private void notifyProgress(String chapterId, int halaman, int total) {
+        if (foregroundId <= 0) return;
+        int persen = total <= 0 ? -1 : Math.max(0, Math.min(100, halaman * 100 / total));
+        id.shuyasal.kuromaku.offline.ForegroundDownloads.update(getApplicationContext(),
+                foregroundId, "Mengunduh chapter manga",
+                halaman + " dari " + total + " halaman", persen, foregroundTag);
+    }
+
+    @Override public void onStopped() {
+        super.onStopped();
+        if (foregroundId > 0) {
+            id.shuyasal.kuromaku.offline.ForegroundDownloads.clear(getApplicationContext(),
+                    foregroundId);
+        }
+    }
+
+    /** Id notifikasi foreground dan tag pembatalannya, dipasang di doWork. */
+    private int foregroundId;
+    private String foregroundTag = "";
 
     private List<String> chapters() {
         String raw = getInputData().getString(ShinigamiDownloadQueue.KEY_CHAPTERS);

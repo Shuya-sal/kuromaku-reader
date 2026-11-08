@@ -58,7 +58,10 @@ public final class DownloadStatusStore {
         void onDownloadStateChanged();
     }
 
+    public static final String PREFIX = "novel|";
+
     private static final Map<String, Integer> STATE = new LinkedHashMap<>();
+    private static boolean hydrated;
     private static final Map<String, String> MESSAGES = new LinkedHashMap<>();
     private static final Map<String, Bytes> BYTES = new LinkedHashMap<>();
     private static final List<Listener> LISTENERS = new ArrayList<>();
@@ -74,26 +77,57 @@ public final class DownloadStatusStore {
     private DownloadStatusStore() {
     }
 
+    /** Pulihkan keadaan dari berkas persisten sekali per proses. */
+    private static synchronized void hydrate() {
+        if (hydrated) return;
+        hydrated = true;
+        if (!DownloadStateFile.installed()) return;
+        for (Map.Entry<String, DownloadStateFile.Row> row : DownloadStateFile.all().entrySet()) {
+            if (!row.getKey().startsWith(PREFIX)) continue;
+            String key = row.getKey().substring(PREFIX.length());
+            if (STATE.containsKey(key)) continue;
+            STATE.put(key, row.getValue().state);
+            if (!row.getValue().message.isEmpty()) MESSAGES.put(key, row.getValue().message);
+            if (row.getValue().percent > 0) {
+                BYTES.put(key, new Bytes(row.getValue().percent, -1, 0));
+            }
+        }
+    }
+
+    private static void persist(String key) {
+        Integer state = STATE.get(key);
+        String message = MESSAGES.get(key);
+        Bytes bytes = BYTES.get(key);
+        DownloadStateFile.put(PREFIX + key,
+                state == null ? NOT_DOWNLOADED : state,
+                bytes == null ? 0 : Math.max(0, bytes.percent),
+                message == null ? "" : message, "");
+    }
+
     public static String key(String novelId, String url) {
         return (novelId == null ? "" : novelId) + "|" + (url == null ? "" : url.trim());
     }
 
     public static synchronized void set(String key, int state, String message) {
+        hydrate();
         STATE.put(key, state);
         if (message == null || message.isEmpty()) {
             MESSAGES.remove(key);
         } else {
             MESSAGES.put(key, message);
         }
+        persist(key);
         notifyListeners();
     }
 
     public static synchronized int state(String key) {
+        hydrate();
         Integer state = STATE.get(key);
         return state == null ? NOT_DOWNLOADED : state;
     }
 
     public static synchronized String message(String key) {
+        hydrate();
         String message = MESSAGES.get(key);
         return message == null ? "" : message;
     }
@@ -111,11 +145,13 @@ public final class DownloadStatusStore {
             return;
         }
         BYTES.put(key, new Bytes(percent, imageIndex, imageCount));
+        persist(key);
         notifyListeners();
     }
 
     /** Byte progress for a chapter, or null when nothing is known. */
     public static synchronized Bytes bytes(String key) {
+        hydrate();
         return BYTES.get(key);
     }
 
@@ -123,6 +159,7 @@ public final class DownloadStatusStore {
         STATE.remove(key);
         MESSAGES.remove(key);
         BYTES.remove(key);
+        DownloadStateFile.remove(PREFIX + key);
         notifyListeners();
     }
 
@@ -197,10 +234,21 @@ public final class DownloadStatusStore {
     }
 
     /** Drops every transient state; used by tests and on a full reset. */
+    /** Lupakan keadaan di memori tanpa menyentuh berkas (meniru proses mati). */
+    public static synchronized void resetMemoryForTesting() {
+        STATE.clear();
+        MESSAGES.clear();
+        BYTES.clear();
+        hydrated = false;
+    }
+
     public static synchronized void reset() {
         STATE.clear();
         MESSAGES.clear();
+        BYTES.clear();
         PROGRESS.clear();
         LISTENERS.clear();
+        hydrated = false;
+        DownloadStateFile.clearPrefix(PREFIX);
     }
 }

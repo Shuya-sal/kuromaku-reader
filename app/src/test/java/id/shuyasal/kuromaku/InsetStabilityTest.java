@@ -141,12 +141,27 @@ public class InsetStabilityTest {
         return (View) title.getParent().getParent();
     }
 
+    private int themeIndex(MainActivity host) {
+        try {
+            java.lang.reflect.Field field = MainActivity.class.getDeclaredField("prefs");
+            field.setAccessible(true);
+            Object prefs = field.get(host);
+            java.lang.reflect.Method theme = prefs.getClass().getMethod("theme");
+            return (Integer) theme.invoke(prefs);
+        } catch (ReflectiveOperationException error) {
+            throw new AssertionError("tidak bisa membaca tema", error);
+        }
+    }
+
     private int topInsetPx(MainActivity host) {
         return Ui.dp(host, TOP_INSET_DP);
     }
 
     private void clickTheme(MainActivity host) {
-        byTag(host.getWindow().getDecorView(), "theme").performClick();
+        // Tema kini ada di menu titik tiga; tes memanggil jalur yang sama dengan
+        // dialognya supaya perilaku yang diuji tetap perilaku aplikasi.
+        int current = themeIndex(host);
+        host.applyThemeChoice((current + 1) % 3);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         // The platform re-delivers insets when the new tree is attached.
         deliverInsets(host);
@@ -195,7 +210,7 @@ public class InsetStabilityTest {
 
         // Theme switch only. No deliverInsets(): the rebuilt tree must carry the
         // inset itself.
-        byTag(host.getWindow().getDecorView(), "theme").performClick();
+        clickTheme(host);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         layout(host);
 

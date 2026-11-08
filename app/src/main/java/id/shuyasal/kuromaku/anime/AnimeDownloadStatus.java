@@ -44,7 +44,10 @@ public final class AnimeDownloadStatus {
         String quality = "";
     }
 
+    public static final String PREFIX = "anime|";
+
     private static final Map<String, Entry> STATES = new LinkedHashMap<>();
+    private static boolean hydrated;
     private static final List<Listener> LISTENERS = new ArrayList<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final String TAG = "AnimeDownload";
@@ -54,6 +57,38 @@ public final class AnimeDownloadStatus {
 
     private static String key(String episodeKey) {
         return episodeKey == null ? "" : episodeKey.trim();
+    }
+
+    /**
+     * Muat sekali keadaan dari berkas persisten.
+     *
+     * <p>Dijalankan malas pada akses pertama, setelah {@code Application}
+     * memasang penyimpanan. Tanpa ini, status kembali "belum diunduh" setiap
+     * proses aplikasi dibunuh, padahal pekerjaan dan berkasnya masih ada.
+     */
+    private static synchronized void hydrate() {
+        if (hydrated) return;
+        hydrated = true;
+        if (!id.shuyasal.kuromaku.offline.DownloadStateFile.installed()) return;
+        for (Map.Entry<String, id.shuyasal.kuromaku.offline.DownloadStateFile.Row> row
+                : id.shuyasal.kuromaku.offline.DownloadStateFile.all().entrySet()) {
+            if (!row.getKey().startsWith(PREFIX)) continue;
+            String episodeKey = row.getKey().substring(PREFIX.length());
+            // Keadaan di memori selalu lebih baru daripada berkas: jangan
+            // menimpanya dengan salinan lama saat hidrasi.
+            if (STATES.containsKey(episodeKey)) continue;
+            Entry entry = new Entry();
+            entry.state = row.getValue().state;
+            entry.percent = row.getValue().percent;
+            entry.message = row.getValue().message;
+            entry.quality = row.getValue().quality;
+            STATES.put(episodeKey, entry);
+        }
+    }
+
+    private static void persist(String episodeKey, Entry entry) {
+        id.shuyasal.kuromaku.offline.DownloadStateFile.put(PREFIX + key(episodeKey),
+                entry.state, entry.percent, entry.message, entry.quality);
     }
 
     public static synchronized void set(String episodeKey, int state, int percent, String message) {
@@ -69,10 +104,12 @@ public final class AnimeDownloadStatus {
                                        String quality) {
         if (episodeKey == null || episodeKey.isEmpty()) return;
         Entry entry = entry(episodeKey);
+        hydrate();
         if (quality != null && !quality.isEmpty()) entry.quality = quality.trim();
         entry.state = state;
         entry.percent = Math.max(0, Math.min(100, percent));
         entry.message = message == null ? "" : message;
+        persist(episodeKey, entry);
         notifyListeners();
     }
 
@@ -86,25 +123,30 @@ public final class AnimeDownloadStatus {
         entry.percent = total > 0
                 ? (int) Math.max(0L, Math.min(100L, bytes * 100L / total))
                 : 0;
+        persist(episodeKey, entry);
         notifyListeners();
     }
 
     public static synchronized void clear(String episodeKey) {
         STATES.remove(key(episodeKey));
+        id.shuyasal.kuromaku.offline.DownloadStateFile.remove(PREFIX + key(episodeKey));
         notifyListeners();
     }
 
     public static synchronized int state(String episodeKey) {
+        hydrate();
         Entry entry = STATES.get(key(episodeKey));
         return entry == null ? NOT_DOWNLOADED : entry.state;
     }
 
     public static synchronized int percent(String episodeKey) {
+        hydrate();
         Entry entry = STATES.get(key(episodeKey));
         return entry == null ? 0 : entry.percent;
     }
 
     public static synchronized long bytes(String episodeKey) {
+        hydrate();
         Entry entry = STATES.get(key(episodeKey));
         return entry == null ? 0L : entry.bytes;
     }
@@ -116,11 +158,13 @@ public final class AnimeDownloadStatus {
 
     /** Kualitas yang sedang/terakhir diunduh untuk episode ini ("" bila belum). */
     public static synchronized String quality(String episodeKey) {
+        hydrate();
         Entry entry = STATES.get(key(episodeKey));
         return entry == null ? "" : entry.quality;
     }
 
     public static synchronized String message(String episodeKey) {
+        hydrate();
         Entry entry = STATES.get(key(episodeKey));
         return entry == null ? "" : entry.message;
     }
@@ -146,9 +190,22 @@ public final class AnimeDownloadStatus {
         LISTENERS.remove(listener);
     }
 
+    /**
+     * Lupakan keadaan di memori tanpa menyentuh berkas.
+     *
+     * <p>Meniru proses aplikasi yang mati: dipakai pengujian untuk membuktikan
+     * status benar-benar dibaca ulang dari penyimpanan.
+     */
+    public static synchronized void forgetForTesting() {
+        STATES.clear();
+        hydrated = false;
+    }
+
     public static synchronized void reset() {
         STATES.clear();
         LISTENERS.clear();
+        hydrated = false;
+        id.shuyasal.kuromaku.offline.DownloadStateFile.clearPrefix(PREFIX);
     }
 
     private static Entry entry(String episodeKey) {

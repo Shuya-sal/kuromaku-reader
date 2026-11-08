@@ -39,7 +39,10 @@ public final class ShinigamiDownloadStatus {
         String message = "";
     }
 
+    public static final String PREFIX = "shinigami|";
+
     private static final Map<String, Entry> STATES = new LinkedHashMap<>();
+    private static boolean hydrated;
     private static final List<Listener> LISTENERS = new ArrayList<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final String TAG = "ShinigamiDownload";
@@ -51,8 +54,32 @@ public final class ShinigamiDownloadStatus {
         return chapterId == null ? "" : chapterId.trim();
     }
 
+    /** Pulihkan keadaan dari berkas persisten sekali per proses. */
+    private static synchronized void hydrate() {
+        if (hydrated) return;
+        hydrated = true;
+        if (!id.shuyasal.kuromaku.offline.DownloadStateFile.installed()) return;
+        for (java.util.Map.Entry<String, id.shuyasal.kuromaku.offline.DownloadStateFile.Row> row
+                : id.shuyasal.kuromaku.offline.DownloadStateFile.all().entrySet()) {
+            if (!row.getKey().startsWith(PREFIX)) continue;
+            String chapterKey = row.getKey().substring(PREFIX.length());
+            if (STATES.containsKey(chapterKey)) continue;
+            Entry entry = new Entry();
+            entry.state = row.getValue().state;
+            entry.percent = row.getValue().percent;
+            entry.message = row.getValue().message;
+            STATES.put(chapterKey, entry);
+        }
+    }
+
+    private static void persist(String chapterId, Entry entry) {
+        id.shuyasal.kuromaku.offline.DownloadStateFile.put(PREFIX + key(chapterId),
+                entry.state, entry.percent, entry.message, "");
+    }
+
     public static synchronized void set(String chapterId, int state, int percent, String message) {
         if (chapterId == null || chapterId.isEmpty()) return;
+        hydrate();
         Entry entry = STATES.get(key(chapterId));
         if (entry == null) {
             entry = new Entry();
@@ -61,26 +88,31 @@ public final class ShinigamiDownloadStatus {
         entry.state = state;
         entry.percent = Math.max(0, Math.min(100, percent));
         entry.message = message == null ? "" : message;
+        persist(chapterId, entry);
         notifyListeners();
     }
 
     public static synchronized int state(String chapterId) {
+        hydrate();
         Entry entry = STATES.get(key(chapterId));
         return entry == null ? NOT_DOWNLOADED : entry.state;
     }
 
     public static synchronized int percent(String chapterId) {
+        hydrate();
         Entry entry = STATES.get(key(chapterId));
         return entry == null ? 0 : entry.percent;
     }
 
     public static synchronized String message(String chapterId) {
+        hydrate();
         Entry entry = STATES.get(key(chapterId));
         return entry == null ? "" : entry.message;
     }
 
     public static synchronized void clear(String chapterId) {
         STATES.remove(key(chapterId));
+        id.shuyasal.kuromaku.offline.DownloadStateFile.remove(PREFIX + key(chapterId));
         notifyListeners();
     }
 
@@ -92,9 +124,17 @@ public final class ShinigamiDownloadStatus {
         LISTENERS.remove(listener);
     }
 
+    /** Lupakan keadaan di memori tanpa menyentuh berkas (meniru proses mati). */
+    public static synchronized void forgetForTesting() {
+        STATES.clear();
+        hydrated = false;
+    }
+
     public static synchronized void reset() {
         STATES.clear();
         LISTENERS.clear();
+        hydrated = false;
+        id.shuyasal.kuromaku.offline.DownloadStateFile.clearPrefix(PREFIX);
     }
 
     private static void notifyListeners() {

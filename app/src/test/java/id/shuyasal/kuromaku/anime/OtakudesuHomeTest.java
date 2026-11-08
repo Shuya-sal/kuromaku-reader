@@ -90,6 +90,21 @@ public class OtakudesuHomeTest {
         return Robolectric.buildActivity(Host.class).setup();
     }
 
+    /**
+     * Tunggu sampai katalog termuat.
+     *
+     * <p>Pemuatan berjalan di executor activity; di suite panjang, keadaan global
+     * (tema) dari tes lain bisa memperlambat satu putaran. Menunggu secara
+     * terbatas lebih jujur daripada menebak bahwa satu putaran selalu cukup.
+     */
+    private static void awaitLoaded(Host activity) throws Exception {
+        for (int i = 0; i < 40 && items(activity).isEmpty(); i++) {
+            await(activity);
+            Thread.sleep(10);
+        }
+        await(activity);
+    }
+
     /** Tunggu pekerjaan latar belakang activity selesai, lalu jalankan main looper. */
     private static void await(OtakudesuActivity activity) throws Exception {
         java.util.concurrent.ExecutorService worker =
@@ -119,7 +134,7 @@ public class OtakudesuHomeTest {
     @Test public void memilihGenreMemuatDaftarSesuaiGenre() throws Exception {
         try (ActivityController<Host> controller = open()) {
             Host activity = controller.get();
-            await(activity);
+            awaitLoaded(activity);
             int sebelum = items(activity).size();
             assertTrue("katalog awal terisi", sebelum > 0);
 
@@ -196,7 +211,7 @@ public class OtakudesuHomeTest {
     @Test public void menggantiTemaTidakMemuatUlangDaftar() throws Exception {
         try (ActivityController<Host> controller = open()) {
             Host activity = controller.get();
-            await(activity);
+            awaitLoaded(activity);
             List<String> sebelumId = new ArrayList<>();
             for (OtakudesuAnime anime : items(activity)) sebelumId.add(anime.animeId);
             assertTrue("katalog terisi lebih dulu", !sebelumId.isEmpty());

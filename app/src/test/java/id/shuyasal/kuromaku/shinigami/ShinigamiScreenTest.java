@@ -60,7 +60,7 @@ public class ShinigamiScreenTest {
         assertNotNull("kolom pencarian harus ada", tagged(host, "shinigami_search"));
         assertNotNull("daftar manga harus ada", tagged(host, "shinigami_grid"));
         assertNotNull("tombol cari harus ada", tagged(host, "shinigami_search_button"));
-        assertNotNull("tombol pengaturan domain harus ada", tagged(host, "shinigami_settings"));
+        assertNotNull("menu titik tiga harus ada", tagged(host, "shinigami_overflow"));
 
         View search = tagged(host, "shinigami_search");
         assertTrue("kolom pencarian harus bisa diketik", search instanceof EditText);
@@ -98,8 +98,8 @@ public class ShinigamiScreenTest {
         assertNotNull(restore);
 
         assertEquals("Novel", novel.getText().toString());
-        assertEquals("Manga Voratoon", voratoon.getText().toString());
-        assertEquals("Manga Shinigami  ✓", shinigami.getText().toString());
+        assertEquals("Manga Server 1", voratoon.getText().toString());
+        assertEquals("Manga Server 2  ✓", shinigami.getText().toString());
         assertEquals("Backup progres membaca", backup.getText().toString());
         assertEquals("Restore progres membaca", restore.getText().toString());
     }

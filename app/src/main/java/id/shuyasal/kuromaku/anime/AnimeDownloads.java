@@ -165,6 +165,25 @@ public final class AnimeDownloads {
      * kepalanya berformat media. Berkas setengah jadi dari unduhan yang gagal
      * tidak pernah dianggap tersimpan.
      */
+    /**
+     * Apakah episode ini tersimpan pada salah satu anime.
+     *
+     * <p>Dipakai rekonsiliasi saat aplikasi dibuka: status tersimpan hanya boleh
+     * dipertahankan bila berkasnya benar-benar ada, dan status itu tidak
+     * menyimpan id anime.
+     */
+    public static boolean isSavedAnywhere(Context context, String episodeKey) {
+        if (context == null || episodeKey == null || episodeKey.isEmpty()) return false;
+        File root = new File(context.getFilesDir(), "anime-downloads");
+        File[] dirs = root.listFiles();
+        if (dirs == null) return false;
+        for (File dir : dirs) {
+            if (!dir.isDirectory()) continue;
+            if (isSaved(context, dir.getName(), episodeKey)) return true;
+        }
+        return false;
+    }
+
     public static boolean isSaved(Context context, String animeId, String episodeKey) {
         if (episodeKey == null || episodeKey.isEmpty()) return false;
         File video = videoFile(context, animeId, episodeKey);

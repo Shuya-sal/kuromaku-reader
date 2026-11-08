@@ -60,14 +60,42 @@ public class AnimeDownloadWorker extends Worker {
             return Result.failure();
         }
 
+        // Unduhan episode bisa berukuran ratusan MB: jalankan sebagai foreground
+        // worker supaya sistem tidak mematikannya saat pengguna pindah aplikasi.
+        final int notificationId = 5100 + Math.abs(params.episodeKey.hashCode() % 400);
+        final String cancelTag = AnimeDownloadQueue.episodeTag(params.episodeKey);
+        final String judul = params.episodeLabel.isEmpty() ? "Episode" : params.episodeLabel;
+        try {
+            setForegroundAsync(id.shuyasal.kuromaku.offline.ForegroundDownloads.info(
+                    context, notificationId, "Mengunduh " + judul,
+                    params.quality.isEmpty() ? "Menyiapkan berkas" : params.quality,
+                    -1, cancelTag));
+        } catch (RuntimeException error) {
+            Log.w(TAG, "notifikasi progres tidak bisa ditampilkan", error);
+        }
+        final AnimeDownloadStatus.Listener progres = () -> {
+            int persen = AnimeDownloadStatus.total(params.episodeKey) > 0
+                    ? AnimeDownloadStatus.percent(params.episodeKey) : -1;
+            id.shuyasal.kuromaku.offline.ForegroundDownloads.update(context, notificationId,
+                    "Mengunduh " + judul,
+                    persen < 0 ? "Mengunduh\u2026" : persen + "%",
+                    persen, cancelTag);
+        };
+        AnimeDownloadStatus.addListener(progres);
+
         OkHttpClient client = new OkHttpClient.Builder()
                 .connectTimeout(20, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .followRedirects(true)
                 .build();
 
-        AnimeDownloadFetcher.Result result = AnimeDownloadFetcher.run(context, params, client,
-                this::isStopped);
+        AnimeDownloadFetcher.Result result;
+        try {
+            result = AnimeDownloadFetcher.run(context, params, client, this::isStopped);
+        } finally {
+            AnimeDownloadStatus.removeListener(progres);
+            id.shuyasal.kuromaku.offline.ForegroundDownloads.clear(context, notificationId);
+        }
 
         switch (result.outcome) {
             case SAVED:

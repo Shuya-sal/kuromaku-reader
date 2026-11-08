@@ -317,8 +317,8 @@ public class MangaScreenTest {
         assertNotNull(restore);
 
         assertEquals("Novel", novel.getText().toString());
-        assertEquals("Manga Voratoon  ✓", voratoon.getText().toString());
-        assertEquals("Manga Shinigami", shinigami.getText().toString());
+        assertEquals("Manga Server 1  ✓", voratoon.getText().toString());
+        assertEquals("Manga Server 2", shinigami.getText().toString());
         assertEquals("Backup progres membaca", backup.getText().toString());
         assertEquals("Restore progres membaca", restore.getText().toString());
 

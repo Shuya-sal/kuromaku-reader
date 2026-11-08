@@ -164,9 +164,9 @@ public class ShinigamiCatalogTest {
             int settingsIndex = -1;
             for (int i = 0; i < header.getChildCount(); i++) {
                 CharSequence description = header.getChildAt(i).getContentDescription();
-                if (description != null && description.toString().contains("Pengaturan")) settingsIndex = i;
+                if (description != null && description.toString().contains("Menu")) settingsIndex = i;
             }
-            assertTrue("ikon settings harus ada", settingsIndex >= 0);
+            assertTrue("menu titik tiga harus ada", settingsIndex >= 0);
             assertTrue("unduhan harus di kiri settings", downloadIndex < settingsIndex);
             int minTouch = id.shuyasal.kuromaku.ui.Ui.dp(host, id.shuyasal.kuromaku.ui.Ui.TOUCH_DP);
             assertTrue("touch target minimal 48dp",

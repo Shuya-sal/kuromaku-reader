@@ -105,7 +105,7 @@ public final class SectionDrawer {
             if (listener != null) listener.onNovel();
         });
 
-        String mangaLabel = currentSection == Section.MANGA_VORATON ? "Manga Voratoon  ✓" : "Manga Voratoon";
+        String mangaLabel = currentSection == Section.MANGA_VORATON ? "Manga Server 1  ✓" : "Manga Server 1";
         addDrawerItem(activity, panel, mangaLabel, "drawer_manga_voratoon",
                 currentSection == Section.MANGA_VORATON, palette, () -> {
             drawer.dismiss();
@@ -113,7 +113,7 @@ public final class SectionDrawer {
         });
 
         String shinigamiLabel = currentSection == Section.MANGA_SHINIGAMI
-                ? "Manga Shinigami  ✓" : "Manga Shinigami";
+                ? "Manga Server 2  ✓" : "Manga Server 2";
         addDrawerItem(activity, panel, shinigamiLabel, "drawer_manga_shinigami",
                 currentSection == Section.MANGA_SHINIGAMI, palette, () -> {
             drawer.dismiss();
@@ -121,7 +121,7 @@ public final class SectionDrawer {
         });
 
         String animeLabel = currentSection == Section.ANIME_OTAKUDESU
-                ? "Anime Otakudesu  ✓" : "Anime Otakudesu";
+                ? "Anime Streaming  ✓" : "Anime Streaming";
         addDrawerItem(activity, panel, animeLabel, "drawer_anime_otakudesu",
                 currentSection == Section.ANIME_OTAKUDESU, palette, () -> {
                     drawer.dismiss();

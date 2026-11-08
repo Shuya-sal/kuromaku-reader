@@ -64,6 +64,15 @@ public class DownloadWorker extends Worker {
         id.shuyasal.kuromaku.data.Novel known =
                 id.shuyasal.kuromaku.data.Library.get(getApplicationContext()).byId(novelId);
         final String title = known == null ? "Novel" : known.shortTitle();
+        // Foreground: satu volume bisa berisi puluhan chapter dan berjalan lama.
+        final int notificationId = 5500 + Math.abs(novelId.hashCode() % 300);
+        try {
+            setForegroundAsync(ForegroundDownloads.info(getApplicationContext(), notificationId,
+                    "Mengunduh " + title, "Menyiapkan chapter", -1, "novel-" + novelId));
+        } catch (RuntimeException error) {
+            Log.w(TAG, "notifikasi progres tidak bisa ditampilkan", error);
+        }
+
         VolumeJob.Result result = VolumeJob.run(getApplicationContext(), novelId, volume, chapters,
                 this::isStopped, (finished, total) -> {
                     setProgressAsync(new Data.Builder()
@@ -74,6 +83,11 @@ public class DownloadWorker extends Worker {
                     // Android requires a visible signal for work that outlives
                     // the screen.
                     DownloadNotifier.progress(getApplicationContext(), title, finished, total);
+                    ForegroundDownloads.update(getApplicationContext(), notificationId,
+                            "Mengunduh " + title,
+                            finished + " dari " + total + " chapter",
+                            total <= 0 ? -1 : finished * 100 / total,
+                            "novel-" + novelId);
                 });
 
         if (result.cancelled) {

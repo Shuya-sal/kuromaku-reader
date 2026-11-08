@@ -231,7 +231,7 @@ public class HeaderAndMotionTest {
         View decor = host.getWindow().getDecorView();
 
         int min = Ui.dp(host, Ui.TOUCH_DP);
-        for (String tag : new String[]{"back_to_library", "refresh", "theme"}) {
+        for (String tag : new String[]{"back_to_library", "novel_overflow", "open_downloads"}) {
             View control = byTag(decor, tag);
             assertTrue(tag + " harus minimal 48dp lebar, dapat " + control.getMeasuredWidth(),
                     control.getMeasuredWidth() >= min);
@@ -264,14 +264,14 @@ public class HeaderAndMotionTest {
         MainActivity host = launch();
         View decor = host.getWindow().getDecorView();
 
-        View refresh = byTag(decor, "refresh");
-        View theme = byTag(decor, "theme");
-        assertTrue("Muat ulang harus berupa ikon", refresh instanceof ImageButton);
-        assertTrue("Gelap/Terang harus berupa ikon", theme instanceof ImageButton);
-        assertNotNull("ikon refresh butuh contentDescription", refresh.getContentDescription());
-        assertNotNull("ikon tema butuh contentDescription", theme.getContentDescription());
+        View overflow = byTag(decor, "novel_overflow");
+        View downloads = byTag(decor, "open_downloads");
+        assertTrue("Menu titik tiga harus berupa ikon", overflow instanceof ImageButton);
+        assertTrue("Unduhan harus berupa ikon", downloads instanceof ImageButton);
+        assertNotNull("ikon menu butuh contentDescription", overflow.getContentDescription());
+        assertNotNull("ikon unduhan butuh contentDescription", downloads.getContentDescription());
         assertFalse("tombol ikon tidak boleh membawa teks",
-                refresh instanceof TextView && ((TextView) refresh).getText().length() > 0);
+                overflow instanceof TextView && ((TextView) overflow).getText().length() > 0);
     }
 
     /** Android hardware/gesture Back returns to the list, not out of the app. */

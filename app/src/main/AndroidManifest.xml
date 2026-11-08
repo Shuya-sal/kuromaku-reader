@@ -1,10 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Progress notification for volume downloads (Android 13+ asks the user). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Unduhan besar berjalan sebagai foreground worker dengan progres. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".KuromakuApplication"
@@ -83,5 +87,15 @@
             android:exported="false"
             android:parentActivityName=".ReaderActivity"
             android:configChanges="orientation|screenSize|keyboardHidden" />
+        <!-- WorkManager menjalankan pekerjaan unduhan sebagai foreground service. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <receiver
+            android:name=".offline.DownloadCancelReceiver"
+            android:exported="false"
+            android:enabled="true" />
     </application>
 </manifest>

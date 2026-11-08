@@ -152,8 +152,8 @@ public class SectionDrawerTest {
         View restore = item(panel, "drawer_restore");
 
         assertEquals("Novel  ✓", ((TextView) novel).getText().toString());
-        assertEquals("Manga Voratoon", ((TextView) voratoon).getText().toString());
-        assertEquals("Manga Shinigami", ((TextView) shinigami).getText().toString());
+        assertEquals("Manga Server 1", ((TextView) voratoon).getText().toString());
+        assertEquals("Manga Server 2", ((TextView) shinigami).getText().toString());
         assertEquals("Backup progres membaca", ((TextView) backup).getText().toString());
         assertEquals("Restore progres membaca", ((TextView) restore).getText().toString());
     }

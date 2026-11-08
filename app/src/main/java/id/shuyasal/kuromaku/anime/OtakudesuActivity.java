@@ -284,7 +284,7 @@ public class OtakudesuActivity extends AppCompatActivity {
     private void showOverflow() {
         String[] items = {"Tema tampilan", "Genre", "Muat ulang"};
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Anime Otakudesu")
+                .setTitle("Anime Streaming")
                 .setItems(items, (dialog, which) -> {
                     if (which == 0) showThemeDialog();
                     else if (which == 1) showGenreSheet();
@@ -320,7 +320,7 @@ public class OtakudesuActivity extends AppCompatActivity {
         menuParams.leftMargin = Ui.dp(this, 4);
         bar.addView(menu, menuParams);
 
-        TextView title = Ui.label(this, "Anime Otakudesu", 20, palette.text);
+        TextView title = Ui.label(this, "Anime Streaming", 20, palette.text);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
@@ -598,7 +598,7 @@ public class OtakudesuActivity extends AppCompatActivity {
         final String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti sistem (System)"};
         int checked = new Prefs(this).theme();
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Tema Anime Otakudesu")
+                .setTitle("Tema Anime Streaming")
                 .setSingleChoiceItems(options, checked, (dialog, which) -> {
                     dialog.dismiss();
                     Prefs prefs = new Prefs(this);

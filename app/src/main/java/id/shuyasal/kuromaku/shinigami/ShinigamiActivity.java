@@ -769,7 +769,7 @@ public class ShinigamiActivity extends AppCompatActivity {
         header.addView(menu, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
-        TextView heading = Ui.label(this, "Manga Shinigami", 20, palette.text);
+        TextView heading = Ui.label(this, "Manga Server 2", 20, palette.text);
         heading.setSingleLine(true);
         heading.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0,
@@ -786,11 +786,13 @@ public class ShinigamiActivity extends AppCompatActivity {
         header.addView(downloads, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
 
-        android.widget.ImageButton settings = Ui.iconButton(this,
-                id.shuyasal.kuromaku.R.drawable.ic_settings, "Pengaturan Manga Shinigami", palette);
-        settings.setTag("shinigami_settings");
-        settings.setOnClickListener(v -> showSettingsMenu());
-        header.addView(settings, new LinearLayout.LayoutParams(
+        // Menu seragam: titik tiga, sama seperti beranda Anime dan Novel.
+        android.widget.ImageButton more = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_more, "Menu Manga Server 2", palette);
+        more.setTag("shinigami_overflow");
+        more.setContentDescription("Menu Manga Server 2");
+        more.setOnClickListener(v -> showOverflowMenu());
+        header.addView(more, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         return header;
     }
@@ -1439,14 +1441,34 @@ public class ShinigamiActivity extends AppCompatActivity {
         finish();
     }
 
-    /** Menu Pengaturan: tema (Light/Dark/System) dan domain sumber. */
-    private void showSettingsMenu() {
-        String[] options = {"Tema tampilan", "Domain sumber", "Indikator progres membaca"};
+    /**
+     * Menu titik tiga: jalan masuk ke pengaturan dan unduhan.
+     *
+     * <p>Pola ini sama dengan beranda Anime dan Novel. Pengaturan sendiri hanya
+     * memuat dua hal yang benar-benar diatur pengguna; alamat server tidak lagi
+     * tampil di sini karena itu urusan internal sumber, bukan pilihan pembaca.
+     */
+    private void showOverflowMenu() {
+        String[] options = {"Pengaturan", "Unduhan", "Muat ulang"};
         new AlertDialog.Builder(this)
-                .setTitle("Pengaturan Manga Shinigami")
+                .setTitle("Menu Manga Server 2")
+                .setItems(options, (dialog, which) -> {
+                    if (which == 0) showPreferences();
+                    else if (which == 1) startActivity(new android.content.Intent(
+                            ShinigamiActivity.this, ShinigamiDownloadsActivity.class));
+                    else reload();
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
+    }
+
+    /** Pengaturan: tema dan indikator progres membaca. Tidak ada yang lain. */
+    private void showPreferences() {
+        String[] options = {"Tema tampilan", "Indikator progres membaca"};
+        new AlertDialog.Builder(this)
+                .setTitle("Pengaturan Manga Server 2")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) showThemeDialog();
-                    else if (which == 1) showDomainDialog();
                     else showReadingProgressDialog();
                 })
                 .setNegativeButton("Tutup", null)
@@ -1482,66 +1504,13 @@ public class ShinigamiActivity extends AppCompatActivity {
         int checked = new Prefs(this).theme();
         if (checked < Prefs.THEME_LIGHT || checked > Prefs.THEME_SYSTEM) checked = Prefs.THEME_SYSTEM;
         new AlertDialog.Builder(this)
-                .setTitle("Tema Manga Shinigami")
+                .setTitle("Tema Manga Server 2")
                 .setSingleChoiceItems(options, checked, (dialog, which) -> {
                     Prefs prefs = new Prefs(this);
                     prefs.setTheme(which);
                     dialog.dismiss();
                     Toast.makeText(this, "Tema disimpan: " + options[which], Toast.LENGTH_SHORT).show();
                     applyThemeSelection();
-                })
-                .setNegativeButton("Batal", null)
-                .show();
-    }
-
-    private void showDomainDialog() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(Ui.dp(this, 20), Ui.dp(this, 12), Ui.dp(this, 20), Ui.dp(this, 4));
-
-        EditText api = new EditText(this);
-        api.setHint("Alamat API (https://...)");
-        api.setText(source.config().apiBase());
-        api.setTextColor(palette.text);
-        api.setHintTextColor(palette.muted);
-        api.setSingleLine(true);
-        api.setTag("shinigami_api_field");
-        box.addView(api);
-
-        EditText site = new EditText(this);
-        site.setHint("Alamat situs (https://...)");
-        site.setText(source.config().siteBase());
-        site.setTextColor(palette.text);
-        site.setHintTextColor(palette.muted);
-        site.setSingleLine(true);
-        site.setTag("shinigami_site_field");
-        box.addView(site);
-
-        TextView note = Ui.label(this,
-                "Alamat harus memakai HTTPS dan berada di domain sumber yang dikenal.",
-                12, palette.muted);
-        note.setTag("shinigami_domain_note");
-        box.addView(note);
-
-        TextView problem = Ui.label(this, "", 13, Color.rgb(190, 60, 60));
-        problem.setTag("shinigami_domain_problem");
-        problem.setVisibility(View.GONE);
-        box.addView(problem);
-
-        new AlertDialog.Builder(this)
-                .setTitle("Domain sumber")
-                .setView(box)
-                .setPositiveButton("Simpan", (d, which) -> {
-                    if (source.config().setBases(api.getText().toString(), site.getText().toString())) {
-                        Toast.makeText(this, "Domain sumber disimpan.", Toast.LENGTH_SHORT).show();
-                        loadPage(1, false);
-                    } else {
-                        problem.setText("Alamat ditolak: harus HTTPS dan host yang valid.");
-                        problem.setVisibility(View.VISIBLE);
-                        Toast.makeText(this,
-                                "Alamat ditolak: harus HTTPS dan host yang valid.",
-                                Toast.LENGTH_LONG).show();
-                    }
                 })
                 .setNegativeButton("Batal", null)
                 .show();
