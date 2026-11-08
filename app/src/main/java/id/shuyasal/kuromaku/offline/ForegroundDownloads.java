@@ -35,10 +35,33 @@ public final class ForegroundDownloads {
     private ForegroundDownloads() {
     }
 
-    /** ForegroundInfo siap pakai untuk WorkManager. */
+    /**
+     * Tipe foreground service untuk unduhan.
+     *
+     * <p><b>Wajib eksplisit.</b> Konstruktor {@code ForegroundInfo(id, notifikasi)}
+     * memberi tipe {@code FOREGROUND_SERVICE_TYPE_NONE}. Android 16 (API 36)
+     * melarang memulai foreground service bertipe {@code none} untuk aplikasi
+     * dengan {@code targetSdk >= 35}:
+     *
+     * <pre>
+     * android.app.InvalidForegroundServiceTypeException:
+     *   Starting FGS with type none ... targetSDK=35 has been prohibited
+     *     at android.app.Service.startForeground
+     *     at SystemForegroundService$Api31Impl.startForeground
+     * </pre>
+     *
+     * <p>Akibatnya proses mati seketika, tepat saat unduhan mulai — di ketiga
+     * modul, karena semuanya memakai jalur notifikasi ini. Tipe harus sama
+     * dengan yang dideklarasikan di manifest ({@code dataSync}).
+     */
+    public static final int SERVICE_TYPE =
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+
+    /** ForegroundInfo siap pakai untuk WorkManager, dengan tipe yang sah. */
     public static ForegroundInfo info(Context context, int id, String title, String text,
                                       int percent, String cancelTag) {
-        return new ForegroundInfo(id, build(context, id, title, text, percent, cancelTag));
+        return new ForegroundInfo(id, build(context, id, title, text, percent, cancelTag),
+                SERVICE_TYPE);
     }
 
     /** Perbarui notifikasi yang sama tanpa membuat yang baru. */

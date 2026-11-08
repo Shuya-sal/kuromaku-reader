@@ -2,6 +2,11 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Perbaikan akar masalah force close saat unduhan di Android 16.**
+  - **Penyebab sebenarnya, dari stack trace perangkat:** `android.app.InvalidForegroundServiceTypeException: Starting FGS with type none ... targetSDK=35 has been prohibited`, dilempar `Service.startForeground` lewat `SystemForegroundService$Api31Impl.startForeground`.
+  - **Sebabnya:** `ForegroundInfo` dibuat dengan konstruktor 2 argumen, sehingga tipe foreground service = `FOREGROUND_SERVICE_TYPE_NONE`. Android 16 (API 36) melarang aplikasi `targetSdk >= 35` memulai foreground service bertipe `none`. Karena exception dilempar dari dalam service WorkManager, ia tidak bisa ditangkap dan langsung mematikan proses — di ketiga modul, karena semuanya memakai jalur notifikasi yang sama.
+  - **Perbaikannya:** `ForegroundInfo` kini selalu memakai tipe eksplisit `dataSync`, sama dengan yang dideklarasikan di manifest dan izin `FOREGROUND_SERVICE_DATA_SYNC`.
+  - Tes baru menjaga tipe ini tidak pernah kembali menjadi `none`.
 * **@VERSION@ — Laporan crash kini juga menangkap crash native, ANR, dan pembunuhan oleh sistem.**
   - **Riwayat kematian proses dibaca dari Android** (`ApplicationExitInfo`, API 30+): jenis kejadian, waktu, keterangan, dan potongan tombstone untuk crash native. Sebelumnya hanya exception Java yang tercatat, sehingga aplikasi yang ditutup sistem atau crash di kode native tidak meninggalkan jejak apa pun.
   - **Dialog laporan muncul dari dua sumber** — exception tertangkap dan riwayat sistem — dengan tombol **Salin laporan**.

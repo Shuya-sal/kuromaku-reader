@@ -47,7 +47,7 @@ public class WorkManagerRepairTest {
             }
         }
 
-        int dihapus = WorkManagerRepair.deleteDatabase(context);
+        int dihapus = WorkManagerRepair.deleteDatabase(databases);
 
         assertEquals("dua berkas antrean dihapus", 2, dihapus);
         assertFalse("workdb hilang", workdb.exists());
@@ -63,7 +63,7 @@ public class WorkManagerRepairTest {
             out.write("video".getBytes());
         }
 
-        WorkManagerRepair.deleteDatabase(context);
+        WorkManagerRepair.deleteDatabase(databases);
 
         assertTrue("berkas unduhan tetap ada", unduhan.isFile());
         assertEquals("ukuran tidak berubah", 5, unduhan.length());

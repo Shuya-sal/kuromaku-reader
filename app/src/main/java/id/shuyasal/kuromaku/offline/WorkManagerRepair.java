@@ -66,7 +66,11 @@ public final class WorkManagerRepair {
 
     /** Hapus berkas basis data antrean; tidak menyentuh data pengguna. */
     static int deleteDatabase(Context app) {
-        File dir = new File(app.getApplicationInfo().dataDir, "databases");
+        return deleteDatabase(new File(app.getApplicationInfo().dataDir, "databases"));
+    }
+
+    /** Varian yang menerima folder langsung, supaya bisa diuji tanpa data asli. */
+    static int deleteDatabase(File dir) {
         int dihapus = 0;
         for (String name : DATABASE_FILES) {
             File file = new File(dir, name);
