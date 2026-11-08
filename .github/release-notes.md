@@ -2,6 +2,11 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Layar tidak lagi meredup saat menonton, dan daftar server tidak menawarkan putar palsu.**
+  - Akar layar gelap: aplikasi tidak pernah memakai `FLAG_KEEP_SCREEN_ON`, sehingga Android menjalankan peredupan dan screen timeout normal begitu layar tidak disentuh — bertepatan dengan kontrol yang hilang di detik ke-5. Sekarang flag ditahan selama video berjalan atau buffering di depan pengguna, dan dilepas saat jeda, selesai, atau keluar layar. Kecerahan pilihan pengguna tidak pernah ditimpa (`BRIGHTNESS_OVERRIDE_NONE`).
+  - Mirror yang gagal diperiksa kini disimpan statusnya, bukan dibuang. Panel menampilkan server terverifikasi lebih dulu dengan tombol **Putar**; mirror lain ada di balik **Lihat semua server (N)** dengan status `Tidak kompatibel — hanya pemutar penyedia` / `Tidak tersedia — <alasan>`.
+  - Tombol pada server yang belum terverifikasi berbunyi **Periksa**, bukan **Putar**. Bila belum ada server siap, daftar langsung terbuka dengan penjelasan.
+  - Satu ketukan pada baris server tidak lagi memicu aksi dua kali (listener ganda dihapus).
 * **@VERSION@ — Header beranda Anime Streaming tidak lagi berkedip saat digulir.**
   - Header tidak lagi mengubah tinggi layout per frame (itu yang membuat daftar berubah ukuran dan posisi gulir melompat). Sekarang header menjadi lapisan di atas daftar dan hanya bergeser + memudar; ukuran `RecyclerView` tetap.
   - Satu pengendali keadaan menggantikan pemanggilan langsung per event gulir, dengan ambang berbeda untuk sembunyi (24 px) dan tampil (12 px), sehingga fling bolak-balik dan gerakan kecil tidak membuat header berosilasi.

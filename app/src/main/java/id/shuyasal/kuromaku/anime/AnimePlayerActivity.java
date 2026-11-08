@@ -178,6 +178,16 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private final java.util.LinkedHashMap<String, OtakudesuPlayback.Source> probedServers =
             new java.util.LinkedHashMap<>();
     private final List<String> probingServers = new ArrayList<>();
+    /**
+     * Hasil pemeriksaan yang tidak bisa diputar: status + alasan.
+     *
+     * <p>Tanpa ini, server yang gagal tampil seolah "belum diperiksa", dan
+     * pengguna ditawari tombol putar untuk mirror yang sudah diketahui gagal.
+     */
+    private final java.util.LinkedHashMap<String, OtakudesuServerPicker.Probed> failedServers =
+            new java.util.LinkedHashMap<>();
+    /** Benar antara onStart dan onStop: player sedang di depan pengguna. */
+    private boolean playerForeground;
     private PopupWindow serverPanel;
     private Document episodeDoc;
     private String activeServerLabel = "";
@@ -610,11 +620,13 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 // Saat buffering video belum berjalan: kontrol penting tetap
                 // terlihat supaya pengguna tidak kehilangan jalan memulihkan.
                 if (state == Player.STATE_BUFFERING) showControls();
+                applyKeepScreenOn();
             }
 
             @Override public void onIsPlayingChanged(boolean playing) {
                 updatePlayButton();
                 // Selama tidak diputar, kontrol ditahan terlihat.
+                applyKeepScreenOn();
                 if (!playing) showControls();
                 else scheduleHideControls();
             }
@@ -688,6 +700,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 mirrors.clear();
                 mirrors.addAll(result.mirrors);
                 probedServers.clear();
+                failedServers.clear();
                 activePlayback = result;
 
                 // Sumber media yang sudah dipublikasikan halaman episode dipakai
@@ -735,7 +748,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
         OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
 
-        popupPanel(panel.build(mirrors, probedServers, probingServers,
+        popupPanel(panel.build(mirrors, probedServers, failedServers, probingServers,
                 panelListener()));
 
         // Pemeriksaan latar belakang dibatasi: hanya dua server yang paling
@@ -884,6 +897,11 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 if (probeGeneration != serverGeneration) return;
                 if (outcome.playable() && outcome.source != null) {
                     probedServers.put(id, outcome.source);
+                    failedServers.remove(id);
+                } else {
+                    // Status dan alasan disimpan supaya panel bisa menyebut
+                    // "Tidak kompatibel"/"Tidak tersedia" dengan jujur.
+                    failedServers.put(id, outcome);
                 }
                 markMirrorPlayerUrl(id, outcome.playerUrl);
                 refreshServerPanel();
@@ -932,7 +950,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
         OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
-        serverPanel.setContentView(panel.build(mirrors, probedServers, probingServers,
+        serverPanel.setContentView(panel.build(mirrors, probedServers, failedServers, probingServers,
                 panelListener()));
     }
 
@@ -1703,8 +1721,48 @@ public class AnimePlayerActivity extends AppCompatActivity {
         out.putBoolean("immersive_fullscreen", fullscreen);
     }
 
+    /**
+     * Layar tetap menyala selama video berjalan atau sedang menyiapkan gambar.
+     *
+     * <p>Akar keluhan "video makin gelap saat tidak disentuh" bukan animasi
+     * kontrol: aplikasi sama sekali tidak pernah memakai
+     * {@code FLAG_KEEP_SCREEN_ON}, sehingga Android menjalankan peredupan dan
+     * screen timeout normal tepat saat pengguna berhenti menyentuh layar.
+     *
+     * <p>Yang dinyalakan hanya flag sistem. Kecerahan pengguna tidak diubah:
+     * {@code screenBrightness} dibiarkan {@code BRIGHTNESS_OVERRIDE_NONE}.
+     */
+    private void applyKeepScreenOn() {
+        if (getWindow() == null) return;
+        boolean needed = keepScreenOnNeeded(playerForeground, player);
+        if (needed) {
+            getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            // Dilepas saat jeda/berhenti/keluar supaya tidak menguras baterai
+            // dan tidak terbawa ke halaman lain.
+            getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
+    }
+
+    /**
+     * Keputusan murni: perlukah layar ditahan menyala?
+     *
+     * <p>Dipisah supaya bisa diuji tanpa perangkat: yang menentukan hanya
+     * "player di depan pengguna" dan "video sedang berjalan atau menyiapkan
+     * gambar". Saat dijeda, selesai, atau Activity tidak terlihat, layar
+     * kembali mengikuti pengaturan sistem.
+     */
+    static boolean keepScreenOnNeeded(boolean foreground, Player player) {
+        if (!foreground || player == null) return false;
+        if (player.getPlaybackState() == Player.STATE_ENDED) return false;
+        return player.getPlayWhenReady()
+                || player.getPlaybackState() == Player.STATE_BUFFERING;
+    }
+
     @Override protected void onStart() {
         super.onStart();
+        playerForeground = true;
+        applyKeepScreenOn();
         // Lanjutkan hanya bila sebelumnya memang sedang diputar; jangan
         // memaksa play setelah pengguna menjeda sendiri.
         if (player != null && resumeOnStart) {
@@ -1714,6 +1772,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
     }
 
     @Override protected void onPause() {
+        applyKeepScreenOn();
         resumeOnStart = player != null && player.isPlaying();
         saveProgress(false);
         if (player != null) player.pause();
@@ -1721,6 +1780,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
     }
 
     @Override protected void onStop() {
+        playerForeground = false;
+        applyKeepScreenOn();
         saveProgress(false);
         super.onStop();
     }
@@ -1733,6 +1794,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
      * {@code RejectedExecutionException} yang muncul setelah layar ditutup.
      */
     @Override protected void onDestroy() {
+        playerForeground = false;
+        applyKeepScreenOn();
         main.removeCallbacksAndMessages(null);
         main.removeCallbacks(saveTick);
         main.removeCallbacks(clockTick);
