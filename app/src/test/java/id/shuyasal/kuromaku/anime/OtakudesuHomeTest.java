@@ -119,6 +119,12 @@ public class OtakudesuHomeTest {
             }
             Thread.sleep(120);
         }
+        // Putaran pertama bisa kalah cepat dengan pekerjaan lain di suite panjang.
+        // Memuat ulang sekali lagi membuat pengujian tidak bergantung pada waktu.
+        if (items(activity).isEmpty()) {
+            invoke(activity, "reload");
+            awaitLoaded(activity);
+        }
         return activity;
     }
 

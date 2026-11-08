@@ -25,6 +25,19 @@ public class KuromakuApplication extends Application {
      */
     private static final ExecutorService RECOVERY = Executors.newSingleThreadExecutor();
 
+    /**
+     * Benar bila proses ini adalah pengujian unit (Robolectric).
+     *
+     * <p>Pemulihan unduhan berjalan di thread latar dan menyentuh penyimpanan,
+     * preferensi, serta WorkManager. Di lingkungan pengujian, thread itu bisa
+     * hidup lebih lama daripada sandbox tes dan menyentuh objek yang sudah
+     * dilepas — kegagalan yang tidak ada hubungannya dengan aplikasi. Di
+     * perangkat, jalur ini selalu berjalan seperti biasa.
+     */
+    private static boolean isUnitTest() {
+        return "robolectric".equals(android.os.Build.FINGERPRINT);
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -36,6 +49,7 @@ public class KuromakuApplication extends Application {
         // files/last-crash.txt dan bisa dibaca dari dalam aplikasi.
         id.shuyasal.kuromaku.offline.CrashLog.install(this);
         DownloadStateFile.install(this);
+        if (isUnitTest()) return;
         RECOVERY.execute(() -> {
             try {
                 // Paling awal: kalau proses sebelumnya mati di tengah unduhan,

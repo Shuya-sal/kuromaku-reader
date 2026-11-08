@@ -2,6 +2,8 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Kestabilan pengujian: pemulihan unduhan tidak berjalan di lingkungan tes.**
+  - Thread pemulihan di `Application` bisa hidup melewati sandbox pengujian dan menyentuh objek yang sudah dilepas. Di perangkat jalur ini tetap berjalan seperti biasa.
 * **@VERSION@ — Kestabilan pengujian: menunggu activity hasil recreate.**
   - Tes area atas anime membaca instance Activity yang mungkin sudah diganti `recreate()`; sekarang selalu memakai instance terbaru. Tidak ada perubahan perilaku aplikasi.
 * **@VERSION@ — Unduhan yang sedang berjalan kini tampil di layar Unduhan.**
