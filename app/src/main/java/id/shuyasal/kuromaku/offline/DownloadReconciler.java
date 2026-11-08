@@ -68,10 +68,17 @@ public final class DownloadReconciler {
         }
     }
 
+    /** Keadaan yang lebih muda dari ini tidak direkonsiliasi. */
+    private static final long GRACE_MS = 30_000L;
+
     private static void reconcileAnime(Context context, String key,
                                        DownloadStateFile.Row row, long now) {
         String episodeKey = key.substring(AnimeDownloadStatus.PREFIX.length());
         if (row.state == AnimeDownloadStatus.SAVED) {
+            // Entri yang baru saja ditulis belum tentu sudah punya berkas: unduhan
+            // bisa sedang berjalan di proses lain. Rekonsiliasi hanya menyentuh
+            // keadaan yang sudah lama, bukan yang baru berubah.
+            if (now - row.updatedAt <= GRACE_MS) return;
             if (!AnimeDownloads.isSavedAnywhere(context, episodeKey)) {
                 AnimeDownloadStatus.set(episodeKey, AnimeDownloadStatus.FAILED, 0,
                         "Berkas unduhan tidak ditemukan lagi.", row.quality);

@@ -31,11 +31,18 @@ public final class DownloadQueue {
 
         List<Chapter> one = new ArrayList<>();
         one.add(chapter);
-        WorkManager manager = DownloadWorker.manager(context);
-        manager.enqueueUniqueWork(
-                DownloadWorker.chapterWorkName(novel.id, chapter.url),
-                androidx.work.ExistingWorkPolicy.KEEP,
-                DownloadWorker.request(DownloadWorker.input(novel.id, chapter.volume, one)));
+        try {
+            WorkManager manager = DownloadWorker.manager(context);
+            manager.enqueueUniqueWork(
+                    DownloadWorker.chapterWorkName(novel.id, chapter.url),
+                    androidx.work.ExistingWorkPolicy.KEEP,
+                    DownloadWorker.request(DownloadWorker.input(novel.id, chapter.volume, one)));
+        } catch (RuntimeException error) {
+            // WorkManager belum siap atau antrean menolak: status jujur, tanpa crash.
+            android.util.Log.w("KuromakuDownloads", "chapter tidak bisa dijadwalkan", error);
+            DownloadStatusStore.set(key, DownloadStatusStore.FAILED,
+                    "Unduhan gagal dijadwalkan. Silakan coba lagi.");
+        }
     }
 
     /**

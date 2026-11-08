@@ -2,6 +2,15 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Unduhan tiga modul tidak lagi mematikan aplikasi, plus penangkap crash di dalam aplikasi.**
+  - **Laporan crash bisa dibaca tanpa adb.** Menu ⋮ beranda Novel kini punya **Laporan crash terakhir** (muncul bila ada). Isinya versi aplikasi, versi Android, thread, `FATAL EXCEPTION`, dan `Caused by` — bisa disalin langsung dari aplikasi.
+  - **Tidak ada exception yang lolos dari pekerja unduhan.** Novel, Manga Server 2, dan Anime Streaming semuanya membungkus `doWork()`; kegagalan berakhir sebagai status *Gagal*, bukan kematian proses.
+  - **Antrean novel tidak lagi melempar ke thread UI.** Kegagalan menjadwalkan WorkManager menjadi status gagal yang jujur.
+  - **Satu transfer besar dalam satu waktu.** Novel, manga, dan anime berbagi satu slot global (`DownloadGate`), jadi tiga unduhan tidak lagi berjalan serentak dan saling menekan memori.
+  - **Penanda crash untuk semua modul.** Episode/chapter/volume yang membuat proses mati tidak dijalankan otomatis lagi; statusnya "Unduhan sebelumnya terhenti. Silakan coba lagi."
+  - **Status tidak lagi menulis disk setiap blok byte.** Penulisan dibatasi 500 ms dan `fsync` hanya untuk perubahan status, sehingga thread UI tidak ikut menunggu penyimpanan.
+  - **Rekonsiliasi punya masa tenggang 30 detik.** Klaim "tersimpan" yang baru ditulis tidak langsung diturunkan menjadi gagal.
+  - **Penangkap crash idempoten.** Dipasang sekali per proses; pemasangan berulang tidak lagi membuat rantai handler yang menghabiskan memori.
 * **@VERSION@ — Perbaikan darurat: unduhan anime tidak lagi mematikan aplikasi.**
   - **Tidak ada exception yang lolos dari pekerjaan unduhan.** Seluruh `doWork()` dibungkus; apa pun yang terjadi, hasilnya status *Gagal* di episode itu, bukan kematian proses.
   - **Alamat berkas yang tidak sah ditolak lebih awal.** OkHttp melempar `IllegalArgumentException` untuk alamat non-http(s); sekarang diperiksa dulu dan dilaporkan sebagai "alamat berkas tidak sah".

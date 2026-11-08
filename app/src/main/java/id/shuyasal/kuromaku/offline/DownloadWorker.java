@@ -49,11 +49,31 @@ public class DownloadWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        try {
+            return runJob();
+        } catch (Throwable error) {
+            // Kegagalan apa pun di sini harus berakhir sebagai status pekerjaan,
+            // bukan sebagai kematian proses: satu chapter yang rusak tidak boleh
+            // membuat aplikasi tidak bisa dibuka.
+            Log.e(TAG, "unduhan novel gagal tak terduga", error);
+            return Result.failure();
+        }
+    }
+
+    private Result runJob() {
         String novelId = getInputData().getString(KEY_NOVEL);
         int volume = getInputData().getInt(KEY_VOLUME, 0);
         List<String> urls = readList(KEY_URLS);
         List<String> labels = readList(KEY_LABELS);
         if (novelId == null || urls.isEmpty()) return Result.failure();
+
+        final String guardKey = "novel|" + novelId + "|" + volume;
+        if (id.shuyasal.kuromaku.offline.DownloadCrashGuard
+                .isSuspect(getApplicationContext(), guardKey)) {
+            return Result.failure();
+        }
+        id.shuyasal.kuromaku.offline.DownloadCrashGuard
+                .begin(getApplicationContext(), guardKey);
 
         List<Chapter> chapters = new ArrayList<>();
         for (int i = 0; i < urls.size(); i++) {
@@ -73,7 +93,12 @@ public class DownloadWorker extends Worker {
             Log.w(TAG, "notifikasi progres tidak bisa ditampilkan", error);
         }
 
-        VolumeJob.Result result = VolumeJob.run(getApplicationContext(), novelId, volume, chapters,
+        if (!id.shuyasal.kuromaku.offline.DownloadGate.acquire()) {
+            return Result.retry();
+        }
+        VolumeJob.Result result;
+        try {
+            result = VolumeJob.run(getApplicationContext(), novelId, volume, chapters,
                 this::isStopped, (finished, total) -> {
                     setProgressAsync(new Data.Builder()
                             .putInt("finished", finished)
@@ -89,6 +114,10 @@ public class DownloadWorker extends Worker {
                             total <= 0 ? -1 : finished * 100 / total,
                             "novel-" + novelId);
                 });
+        } finally {
+            id.shuyasal.kuromaku.offline.DownloadGate.release();
+            id.shuyasal.kuromaku.offline.DownloadCrashGuard.end(getApplicationContext());
+        }
 
         if (result.cancelled) {
             DownloadStatusStore.clearProgress(novelId, volume);

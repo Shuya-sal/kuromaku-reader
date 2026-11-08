@@ -38,6 +38,16 @@ public class ShinigamiDownloadWorker extends Worker {
     @NonNull
     @Override
     public Result doWork() {
+        try {
+            return runJob();
+        } catch (Throwable error) {
+            // Satu chapter manga yang gagal tidak boleh mematikan proses.
+            Log.e(TAG, "unduhan manga gagal tak terduga", error);
+            return Result.failure(failData("Unduhan gagal. Silakan coba lagi."));
+        }
+    }
+
+    private Result runJob() {
         if (!ShinigamiDownloadPolicy.allowed(getApplicationContext())) {
             return Result.failure(failData("Unduhan menunggu persetujuan pengguna. "
                     + "Buka halaman manga lalu tekan Unduh untuk menyetujui."));
@@ -56,7 +66,19 @@ public class ShinigamiDownloadWorker extends Worker {
         } catch (RuntimeException error) {
             Log.w(TAG, "notifikasi progres tidak bisa ditampilkan", error);
         }
+        final String guardKey = "shinigami|" + chapters.get(0);
+        if (id.shuyasal.kuromaku.offline.DownloadCrashGuard
+                .isSuspect(getApplicationContext(), guardKey)) {
+            return Result.failure(failData("Unduhan sebelumnya terhenti. Silakan coba lagi."));
+        }
+        id.shuyasal.kuromaku.offline.DownloadCrashGuard
+                .begin(getApplicationContext(), guardKey);
+        if (!id.shuyasal.kuromaku.offline.DownloadGate.acquire()) {
+            id.shuyasal.kuromaku.offline.DownloadCrashGuard.end(getApplicationContext());
+            return Result.retry();
+        }
         boolean anyRetry = false;
+        try {
         for (String chapterId : chapters) {
             if (isStopped()) {
                 ShinigamiDownloadStatus.set(chapterId, ShinigamiDownloadStatus.CANCELLED,
@@ -68,6 +90,10 @@ public class ShinigamiDownloadWorker extends Worker {
             if (outcome == Result.failure()) {
                 // Lanjut ke chapter berikutnya; status gagal sudah tercatat per chapter.
             }
+        }
+        } finally {
+            id.shuyasal.kuromaku.offline.DownloadGate.release();
+            id.shuyasal.kuromaku.offline.DownloadCrashGuard.end(getApplicationContext());
         }
         return anyRetry ? Result.retry() : Result.success();
     }

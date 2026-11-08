@@ -38,6 +38,18 @@ public final class DownloadStateFile {
     private static final String TAG = "KuromakuDownloads";
     private static final String FILE_NAME = "download-state.json";
 
+    /**
+     * Jeda minimum antar penulisan berkas status.
+     *
+     * <p>Progres datang per blok byte. Menulis dan melakukan fsync setiap blok
+     * membuat penyimpanan menjadi hambatan utama — dan karena penulisan ini
+     * memegang kunci kelas, thread UI ikut menunggu. 500 ms cukup untuk tampilan
+     * yang terasa langsung, tanpa membanjiri disk.
+     */
+    private static final long FLUSH_INTERVAL_MS = 500;
+
+    private static long lastFlushAt = 0L;
+
     /** Satu baris keadaan unduhan. */
     public static final class Row {
         public final int state;
@@ -98,10 +110,16 @@ public final class DownloadStateFile {
     public static synchronized void put(String key, int state, int percent, String message,
                                         String quality) {
         if (key == null || key.isEmpty()) return;
+        Row previous = CACHE.get(key);
         Row row = new Row(state, percent, message, quality, System.currentTimeMillis());
         CACHE.put(key, row);
         if (appContext == null) return;
-        flush();
+        boolean stateChanged = previous == null || previous.state != state;
+        long now = System.currentTimeMillis();
+        if (stateChanged || now - lastFlushAt >= FLUSH_INTERVAL_MS) {
+            lastFlushAt = now;
+            flush(stateChanged);
+        }
     }
 
     /** Tulis keadaan dengan waktu lampau; dipakai pengujian rekonsiliasi. */
@@ -135,6 +153,14 @@ public final class DownloadStateFile {
     // ------------------------------------------------------------ berkas
 
     private static void flush() {
+        flush(true);
+    }
+
+    /**
+     * @param durable true untuk perubahan status (fsync), false untuk progres
+     *                biasa yang cukup di-rename atomik.
+     */
+    private static void flush(boolean durable) {
         File file = file(appContext);
         File dir = file.getParentFile();
         if (dir != null && !dir.exists() && !dir.mkdirs()) {
@@ -150,7 +176,7 @@ public final class DownloadStateFile {
             byte[] bytes = json.toString().getBytes(StandardCharsets.UTF_8);
             try (FileOutputStream out = new FileOutputStream(temp)) {
                 out.write(bytes);
-                out.getFD().sync();
+                if (durable) out.getFD().sync();
             }
             if (!temp.renameTo(file)) {
                 Log.w(TAG, "status unduhan gagal dipindahkan ke tempat akhir");

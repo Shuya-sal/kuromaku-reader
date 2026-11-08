@@ -32,6 +32,9 @@ public class KuromakuApplication extends Application {
 
         // Status unduhan dipasang lebih dulu supaya layar mana pun yang dibuka
         // pertama sudah membaca keadaan yang benar, bukan keadaan kosong.
+        // Paling awal: kalau proses ini mati, penyebabnya tercatat di
+        // files/last-crash.txt dan bisa dibaca dari dalam aplikasi.
+        id.shuyasal.kuromaku.offline.CrashLog.install(this);
         DownloadStateFile.install(this);
         RECOVERY.execute(() -> {
             try {

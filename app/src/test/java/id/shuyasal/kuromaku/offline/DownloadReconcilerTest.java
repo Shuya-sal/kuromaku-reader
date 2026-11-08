@@ -71,12 +71,25 @@ public class DownloadReconcilerTest {
     @Test public void klaimTersimpanTanpaBerkasDiturunkan() {
         DownloadStateFile.putAged(AnimeDownloadStatus.PREFIX + "ep-hilang",
                 AnimeDownloadStatus.SAVED, 100, "Tersimpan", "720p",
-                System.currentTimeMillis());
+                System.currentTimeMillis() - 120_000L);
 
         DownloadReconciler.reconcile(context);
 
         assertEquals("tidak boleh tetap tersimpan", AnimeDownloadStatus.FAILED,
                 AnimeDownloadStatus.state("ep-hilang"));
+    }
+
+    @Test public void klaimBaruBelumDirekonsiliasi() {
+        // Unduhan yang baru ditulis bisa masih berjalan di proses lain; rekonsiliasi
+        // tidak boleh menurunkannya menjadi gagal hanya karena berkas belum terlihat.
+        DownloadStateFile.putAged(AnimeDownloadStatus.PREFIX + "ep-baru",
+                AnimeDownloadStatus.SAVED, 100, "Tersimpan", "720p",
+                System.currentTimeMillis());
+
+        DownloadReconciler.reconcile(context);
+
+        assertEquals("klaim baru dibiarkan", AnimeDownloadStatus.SAVED,
+                AnimeDownloadStatus.state("ep-baru"));
     }
 
     @Test public void statusNovelMenggantungMenjadiDijeda() {

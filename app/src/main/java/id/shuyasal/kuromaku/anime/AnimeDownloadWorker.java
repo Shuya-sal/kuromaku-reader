@@ -121,10 +121,18 @@ public class AnimeDownloadWorker extends Worker {
                 .followRedirects(true)
                 .build();
 
+        // Satu transfer besar dalam satu waktu di seluruh aplikasi: novel, manga,
+        // dan anime berbagi slot yang sama supaya tidak saling menekan memori.
+        if (!id.shuyasal.kuromaku.offline.DownloadGate.acquire()) {
+            AnimeDownloadStatus.removeListener(progres);
+            id.shuyasal.kuromaku.offline.ForegroundDownloads.clear(context, notificationId);
+            return Result.retry();
+        }
         AnimeDownloadFetcher.Result result;
         try {
             result = AnimeDownloadFetcher.run(context, params, client, this::isStopped);
         } finally {
+            id.shuyasal.kuromaku.offline.DownloadGate.release();
             AnimeDownloadStatus.removeListener(progres);
             id.shuyasal.kuromaku.offline.ForegroundDownloads.clear(context, notificationId);
         }

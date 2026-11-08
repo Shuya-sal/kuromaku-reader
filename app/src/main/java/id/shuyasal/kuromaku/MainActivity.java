@@ -779,13 +779,59 @@ public class MainActivity extends AppCompatActivity {
      * gulir, atau unduhan yang sedang berjalan.
      */
     private void showNovelOverflow() {
-        String[] options = {"Tema tampilan", "Muat ulang katalog", "Unduhan offline"};
+        boolean adaLaporan = id.shuyasal.kuromaku.offline.CrashLog.exists(this);
+        String[] options = adaLaporan
+                ? new String[]{"Tema tampilan", "Muat ulang katalog", "Unduhan offline",
+                        "Laporan crash terakhir"}
+                : new String[]{"Tema tampilan", "Muat ulang katalog", "Unduhan offline"};
         new AlertDialog.Builder(this)
                 .setTitle("Menu Novel")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) showNovelThemeDialog();
                     else if (which == 1) loadLibraries(true);
-                    else showDownloads();
+                    else if (which == 2) showDownloads();
+                    else showCrashReport();
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
+    }
+
+    /**
+     * Tampilkan laporan crash terakhir.
+     *
+     * <p>Ada di dalam aplikasi supaya pengguna bisa mengirim penyebab force close
+     * tanpa perlu adb atau komputer.
+     */
+    private void showCrashReport() {
+        String laporan = id.shuyasal.kuromaku.offline.CrashLog.read(this);
+        if (laporan.isEmpty()) {
+            Toast.makeText(this, "Tidak ada laporan crash.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        android.widget.TextView text = new android.widget.TextView(this);
+        text.setText(laporan);
+        text.setTextSize(11f);
+        text.setTypeface(android.graphics.Typeface.MONOSPACE);
+        text.setTextIsSelectable(true);
+        int pad = Ui.dp(this, 16);
+        text.setPadding(pad, pad, pad, pad);
+        scroll.addView(text);
+        new AlertDialog.Builder(this)
+                .setTitle("Laporan crash terakhir")
+                .setView(scroll)
+                .setPositiveButton("Salin", (dialog, which) -> {
+                    android.content.ClipboardManager clipboard =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(
+                                android.content.ClipData.newPlainText("crash", laporan));
+                        Toast.makeText(this, "Laporan disalin.", Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNeutralButton("Hapus", (dialog, which) -> {
+                    id.shuyasal.kuromaku.offline.CrashLog.clear(this);
+                    Toast.makeText(this, "Laporan dihapus.", Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("Tutup", null)
                 .show();
