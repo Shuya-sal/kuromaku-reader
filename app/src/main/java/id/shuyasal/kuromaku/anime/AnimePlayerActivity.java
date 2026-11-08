@@ -71,6 +71,12 @@ import id.shuyasal.kuromaku.ui.Ui;
 @UnstableApi
 public class AnimePlayerActivity extends AppCompatActivity {
 
+    /** Sumber halaman episode; bisa diganti pengujian dengan data offline. */
+    protected OtakudesuSource createSource() {
+        return new OtakudesuSource();
+    }
+
+
     public static final String EXTRA_ANIME_ID = "anime_id";
     public static final String EXTRA_ANIME_TITLE = "anime_title";
     public static final String EXTRA_ANIME_POSTER = "anime_poster";
@@ -657,7 +663,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
             String failure = null;
             String html = null;
             try {
-                OtakudesuSource source = new OtakudesuSource();
+                OtakudesuSource source = createSource();
                 html = source.html(url);
                 playback = OtakudesuMediaResolver.resolveHtml(html, null, url);
             } catch (OtakudesuSource.SourceException error) {

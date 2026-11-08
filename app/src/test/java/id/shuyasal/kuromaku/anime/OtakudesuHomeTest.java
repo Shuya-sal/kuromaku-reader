@@ -58,6 +58,20 @@ public class OtakudesuHomeTest {
         });
     }
 
+    /**
+     * Kembalikan tema global ke "ikut sistem".
+     *
+     * <p>{@code Prefs.setTheme} menulis preferensi bersama dan memanggil
+     * {@code AppCompatDelegate.setDefaultNightMode} yang berlaku untuk seluruh
+     * proses. Tanpa pemulihan, tes lain di suite yang sama bisa berjalan dalam
+     * tema gelap dan gagal pada pemeriksaan warna.
+     */
+    @org.junit.After public void tearDown() {
+        new Prefs(ApplicationProvider.getApplicationContext()).setTheme(Prefs.THEME_SYSTEM);
+        androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(
+                androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+    }
+
     private static String fixture(String name) {
         try (java.io.InputStream in = OtakudesuHomeTest.class.getResourceAsStream(
                 "/otakudesu/" + name)) {
