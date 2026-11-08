@@ -45,6 +45,13 @@ public class KuromakuApplication extends Application {
                 Log.w(TAG, "pemulihan penanda unduhan dilewati", error);
             }
             try {
+                // Antrean yang rusak membuat setiap tombol Unduh gagal; perbaiki
+                // lebih dulu supaya pekerjaan baru bisa dijadwalkan.
+                id.shuyasal.kuromaku.offline.WorkManagerRepair.ensure(this);
+            } catch (Throwable error) {
+                Log.w(TAG, "perbaikan antrean dilewati", error);
+            }
+            try {
                 DownloadReconciler.reconcile(this);
             } catch (Throwable error) {
                 Log.w(TAG, "rekonsiliasi status unduhan dilewati", error);

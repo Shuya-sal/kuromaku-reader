@@ -48,6 +48,17 @@ public final class ShinigamiDownloadQueue {
     /** Antre beberapa chapter sekaligus; yang sudah tersimpan dilewati. */
     public static int enqueueChapters(Context context, String mangaId, String mangaTitle,
                                       List<String> chapterIds) {
+        try {
+            return enqueueChaptersUnsafe(context, mangaId, mangaTitle, chapterIds);
+        } catch (Throwable error) {
+            // Satu chapter yang gagal dijadwalkan tidak boleh mematikan aplikasi.
+            Log.e(TAG, "chapter manga gagal dijadwalkan", error);
+            return 0;
+        }
+    }
+
+    private static int enqueueChaptersUnsafe(Context context, String mangaId, String mangaTitle,
+                                             List<String> chapterIds) {
         if (context == null || chapterIds == null || chapterIds.isEmpty()) return 0;
         if (!ShinigamiDownloadPolicy.allowed(context)) return 0;
         List<String> missing = missing(context, chapterIds);

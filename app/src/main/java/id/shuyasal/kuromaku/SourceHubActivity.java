@@ -45,6 +45,7 @@ public class SourceHubActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ThemeManager.applyTheme(this);
+        tampilkanLaporanCrash();
         activeResolvedTheme = new Prefs(this).resolvedTheme();
         palette = Palette.of(activeResolvedTheme);
 
@@ -211,5 +212,49 @@ public class SourceHubActivity extends AppCompatActivity {
         if (activeResolvedTheme != -1 && currentResolved != activeResolvedTheme) {
             recreate();
         }
+    }
+
+    /**
+     * Tampilkan laporan crash terakhir saat aplikasi dibuka.
+     *
+     * <p>Dengan ini penyebab force close bisa disalin pengguna tanpa adb: cukup
+     * buka aplikasi, salin laporan, kirim. Dialog tidak menghalangi pemakaian —
+     * Source Hub tetap bisa dipakai setelah ditutup.
+     */
+    private void tampilkanLaporanCrash() {
+        if (!id.shuyasal.kuromaku.offline.CrashLog.exists(this)) return;
+        String laporan = id.shuyasal.kuromaku.offline.CrashLog.read(this);
+        if (laporan.isEmpty()) return;
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        android.widget.TextView isi = new android.widget.TextView(this);
+        isi.setText(laporan);
+        isi.setTextSize(11f);
+        isi.setTypeface(Typeface.MONOSPACE);
+        isi.setTextIsSelectable(true);
+        int pad = id.shuyasal.kuromaku.ui.Ui.dp(this, 14);
+        isi.setPadding(pad, pad, pad, pad);
+        scroll.addView(isi);
+
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Aplikasi terakhir berhenti tak terduga")
+                .setMessage("Salin laporan ini dan kirimkan supaya penyebabnya bisa "
+                        + "diperbaiki. Data dan unduhan Master tidak terpengaruh.")
+                .setView(scroll)
+                .setPositiveButton("Salin laporan", (dialog, which) -> {
+                    android.content.ClipboardManager clipboard =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (clipboard != null) {
+                        clipboard.setPrimaryClip(android.content.ClipData
+                                .newPlainText("crash", laporan));
+                        android.widget.Toast.makeText(this, "Laporan crash disalin.",
+                                android.widget.Toast.LENGTH_LONG).show();
+                    }
+                })
+                .setNeutralButton("Hapus", (dialog, which) -> {
+                    id.shuyasal.kuromaku.offline.CrashLog.clear(this);
+                })
+                .setNegativeButton("Tutup", null)
+                .show();
     }
 }

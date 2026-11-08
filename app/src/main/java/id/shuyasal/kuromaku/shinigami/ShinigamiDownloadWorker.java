@@ -35,6 +35,28 @@ public class ShinigamiDownloadWorker extends Worker {
         super(context, params);
     }
 
+    /**
+     * ForegroundInfo untuk WorkManager.
+     *
+     * <p>Bawaan {@code Worker} melempar {@code IllegalStateException} bila
+     * WorkManager perlu mempromosikan pekerjaan ini di luar {@code doWork()},
+     * misalnya saat pekerjaan dijalankan ulang setelah proses dibunuh sistem.
+     */
+    @NonNull
+    @Override
+    public com.google.common.util.concurrent.ListenableFuture<androidx.work.ForegroundInfo>
+            getForegroundInfoAsync() {
+        List<String> chapters = chapters();
+        String kunci = chapters.isEmpty() ? "" : chapters.get(0);
+        int notificationId = 5300 + Math.abs(kunci.hashCode() % 400);
+        androidx.work.impl.utils.futures.SettableFuture<androidx.work.ForegroundInfo> future =
+                androidx.work.impl.utils.futures.SettableFuture.create();
+        future.set(id.shuyasal.kuromaku.offline.ForegroundDownloads.info(
+                getApplicationContext(), notificationId, "Mengunduh chapter manga",
+                "Melanjutkan unduhan", -1, ShinigamiDownloadQueue.workName(kunci)));
+        return future;
+    }
+
     @NonNull
     @Override
     public Result doWork() {

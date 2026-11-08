@@ -54,6 +54,17 @@ public final class DownloadQueue {
      */
     public static int enqueueVolume(Context context, Novel novel, int volume,
                                     List<Chapter> chapters) {
+        try {
+            return enqueueVolumeUnsafe(context, novel, volume, chapters);
+        } catch (Throwable error) {
+            // Menekan "Download Semua" tidak boleh mematikan aplikasi.
+            android.util.Log.e("KuromakuDownloads", "volume gagal dijadwalkan", error);
+            return 0;
+        }
+    }
+
+    private static int enqueueVolumeUnsafe(Context context, Novel novel, int volume,
+                                           List<Chapter> chapters) {
         if (context == null || novel == null || chapters == null) return 0;
         OfflineStore store = OfflineStore.get(context);
 

@@ -8,7 +8,11 @@ import androidx.work.BackoffPolicy;
 import androidx.work.Data;
 import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
+import androidx.work.ForegroundInfo;
 import androidx.work.Worker;
+import androidx.work.impl.utils.futures.SettableFuture;
+
+import com.google.common.util.concurrent.ListenableFuture;
 import androidx.work.WorkerParameters;
 
 import org.json.JSONArray;
@@ -44,6 +48,33 @@ public class DownloadWorker extends Worker {
 
     public DownloadWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
+    }
+
+    /**
+     * ForegroundInfo untuk WorkManager.
+     *
+     * <p>Wajib di-override: bawaan {@code Worker} melempar
+     * {@code IllegalStateException("Not implemented")} bila WorkManager perlu
+     * mempromosikan pekerjaan ini menjadi foreground di luar {@code doWork()}
+     * — misalnya saat pekerjaan dijalankan ulang setelah proses dibunuh sistem.
+     */
+    @NonNull
+    @Override
+    public ListenableFuture<ForegroundInfo> getForegroundInfoAsync() {
+        String novelId = getInputData().getString(KEY_NOVEL);
+        String judul = "Novel";
+        try {
+            id.shuyasal.kuromaku.data.Novel known = id.shuyasal.kuromaku.data.Library
+                    .get(getApplicationContext()).byId(novelId == null ? "" : novelId);
+            if (known != null) judul = known.shortTitle();
+        } catch (RuntimeException ignored) {
+            // judul bawaan sudah cukup
+        }
+        int notificationId = 5500 + Math.abs((novelId == null ? "" : novelId).hashCode() % 300);
+        SettableFuture<ForegroundInfo> future = SettableFuture.create();
+        future.set(ForegroundDownloads.info(getApplicationContext(), notificationId,
+                "Mengunduh " + judul, "Melanjutkan unduhan", -1, "novel-" + novelId));
+        return future;
     }
 
     @NonNull

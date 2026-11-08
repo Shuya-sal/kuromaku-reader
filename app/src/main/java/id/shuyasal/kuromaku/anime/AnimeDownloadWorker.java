@@ -38,6 +38,30 @@ public class AnimeDownloadWorker extends Worker {
         super(context, params);
     }
 
+    /**
+     * ForegroundInfo untuk WorkManager.
+     *
+     * <p>Bawaan {@code Worker} melempar {@code IllegalStateException} bila
+     * WorkManager perlu mempromosikan pekerjaan ini di luar {@code doWork()},
+     * misalnya saat pekerjaan dijalankan ulang setelah proses dibunuh sistem.
+     */
+    @NonNull
+    @Override
+    public com.google.common.util.concurrent.ListenableFuture<androidx.work.ForegroundInfo>
+            getForegroundInfoAsync() {
+        String episodeKey = text(KEY_EPISODE_KEY);
+        String label = text(KEY_EPISODE_LABEL);
+        int notificationId = 5100 + Math.abs(episodeKey.hashCode() % 400);
+        androidx.work.impl.utils.futures.SettableFuture<androidx.work.ForegroundInfo> future =
+                androidx.work.impl.utils.futures.SettableFuture.create();
+        future.set(id.shuyasal.kuromaku.offline.ForegroundDownloads.info(
+                getApplicationContext(), notificationId,
+                "Mengunduh " + (label.isEmpty() ? "Episode" : label),
+                "Melanjutkan unduhan", -1,
+                AnimeDownloadQueue.episodeTag(episodeKey)));
+        return future;
+    }
+
     @NonNull
     @Override public Result doWork() {
         final String key = getInputData().getString(KEY_EPISODE_KEY);
