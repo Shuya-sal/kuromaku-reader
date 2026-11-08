@@ -273,7 +273,9 @@ public class OtakudesuHomeTest {
 
     @Test public void areaAtasMenyusutDanMunculLagi() throws Exception {
         try (ActivityController<Host> controller = open()) {
-            Host activity = controller.get();
+            // Instance bisa diganti bila tema memicu recreate(); selalu pakai yang
+            // terbaru supaya asersi tidak membaca activity yang sudah mati.
+            Host activity = settle(controller);
             View top = tag(activity, "otakudesu_top_section");
             assertNotNull("wadah area atas harus ada", top);
             assertEquals("area atas tampil saat pertama dibuka", View.VISIBLE,
@@ -281,14 +283,16 @@ public class OtakudesuHomeTest {
 
             invoke(activity, "hideTopSection");
             ShadowLooper.idleMainLooper();
+            activity = controller.get();
             assertTrue("area atas ditandai tersembunyi", (Boolean) field(activity, "topHidden"));
 
             invoke(activity, "showTopSection");
             ShadowLooper.idleMainLooper();
+            activity = controller.get();
             assertFalse("area atas ditandai tampil lagi",
                     (Boolean) field(activity, "topHidden"));
             assertEquals("area atas benar-benar terlihat", View.VISIBLE,
-                    top.getVisibility());
+                    tag(activity, "otakudesu_top_section").getVisibility());
         }
     }
 
