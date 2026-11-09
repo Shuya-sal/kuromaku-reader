@@ -48,6 +48,16 @@
             android:exported="false" />
 
         <activity
+            android:name=".komiku.KomikuActivity"
+            android:exported="false" />
+        <activity
+            android:name=".komiku.KomikuDetailActivity"
+            android:exported="false" />
+        <activity
+            android:name=".komiku.KomikuReaderActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+        <activity
             android:name=".anime.OtakudesuActivity"
             android:exported="false"
             android:configChanges="uiMode" />

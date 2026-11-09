@@ -8,8 +8,8 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 89
-        versionName = "2.53.9"
+        versionCode = 90
+        versionName = "2.54.0"
     }
 
     // One checked-in debug keystore, used by both CI and local builds.
@@ -47,8 +47,12 @@ android {
         unitTests.isReturnDefaultValues = true
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
-            it.maxHeapSize = "1024m"
-            it.setForkEvery(25)
+            it.maxHeapSize = "1536m"
+            // Satu kelas tes per JVM. Robolectric menyimpan Activity dan
+            // ViewRoot di memori statis; bila beberapa kelas berbagi JVM,
+            // sisa traversal satu tes membuat tes lain gagal acak dengan
+            // "barrier token has not been posted" atau ukuran layout aneh.
+            it.setForkEvery(1)
         }
     }
 

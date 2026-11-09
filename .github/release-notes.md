@@ -1,3 +1,11 @@
+* **@VERSION@ — Manga Server 3 (Komiku) hadir sebagai sumber kelima.**
+  - Source Hub kini punya lima kartu: Novel, Manga Server 1, Manga Server 2, **Manga Server 3**, dan Anime Streaming. Kartu baru berada tepat setelah Manga Server 2 dan tetap muat di layar kecil karena halaman hub bisa digulir.
+  - Beranda Manga Server 3 native: **Chapter Terbaru**, **Terpopuler**, **Manga Terbaru**, dan **Favorit**, plus pencarian judul. Semua daftar dibaca langsung dari halaman Komiku saat itu — tidak ada katalog contoh yang ditanam di aplikasi.
+  - Detail judul menampilkan cover, judul alternatif, status, tipe, genre, sinopsis, dan daftar chapter dengan tanggal. Urutan default **Terbaru → Terlama**, bisa dibalik menjadi **Terlama → Terbaru**, dan bisa dicari — berlaku untuk seluruh daftar, bukan hanya bagian yang tampil.
+  - Reader native menampilkan gambar chapter secara vertikal tanpa banner atau elemen situs. Ketuk sekali untuk menyembunyikan kontrol, progres tersimpan per chapter, dan tombol Sebelumnya/Berikutnya mengikuti urutan chapter judul itu.
+  - Riwayat, progres, dan favorit Manga Server 3 disimpan terpisah dari Manga Server 2 dengan kunci berupa alamat chapter/judul, sehingga urutan katalog yang berubah tidak menukar data.
+  - Parser menolak alamat non-HTTPS dan host asing, membuang banner promosi, dan tidak pernah menganggap halaman error sebagai gambar. Bila chapter tidak memuat gambar sah, layar mengatakan demikian — bukan menampilkan halaman hitam.
+  - Belum termasuk di rilis ini: unduhan offline Manga Server 3, sinkronisasi progres dua arah dengan Manga Server 2, dan backup/restore gabungan. Ketiganya menyusul sebagai tahap terpisah.
 Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.

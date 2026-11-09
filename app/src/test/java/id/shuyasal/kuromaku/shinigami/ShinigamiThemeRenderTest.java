@@ -63,6 +63,21 @@ public class ShinigamiThemeRenderTest {
         };
     }
 
+    /**
+     * Bangun ulang Activity untuk menguji pergantian tema.
+     *
+     * <p>Antrean utama dijalankan sampai kosong lebih dulu: kalau ada traversal
+     * tata letak yang masih tertunda, Robolectric memanggil
+     * {@code removeSyncBarrier} untuk token yang sudah dilepas dan tes gagal
+     * dengan "barrier token has not been posted" — kegagalan yang bergantung
+     * pada tes lain yang berjalan lebih dulu, bukan pada tema.
+     */
+    static void recreate(ActivityController<Screen> controller) throws Exception {
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        controller.recreate();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+
     void await(Screen host) throws Exception {
         Field field = ShinigamiActivity.class.getDeclaredField("worker");
         field.setAccessible(true);
@@ -124,7 +139,7 @@ public class ShinigamiThemeRenderTest {
             assertTrue("katalog harus dimuat sekali di awal", before >= 1);
 
             new Prefs(host).setTheme(Prefs.THEME_DARK);
-            controller.recreate();
+            recreate(controller);
             await(controller.get());
 
             Screen dark = controller.get();
@@ -136,7 +151,7 @@ public class ShinigamiThemeRenderTest {
                     before, catalogRequests());
 
             new Prefs(dark).setTheme(Prefs.THEME_LIGHT);
-            controller.recreate();
+            recreate(controller);
             await(controller.get());
 
             assertEquals("kembali ke terang harus benar-benar digambar",
@@ -182,7 +197,7 @@ public class ShinigamiThemeRenderTest {
             Screen host = controller.get();
             await(host);
             new Prefs(host).setTheme(Prefs.THEME_SEPIA);
-            controller.recreate();
+            recreate(controller);
             await(controller.get());
 
             java.lang.reflect.Method dialog = ShinigamiActivity.class

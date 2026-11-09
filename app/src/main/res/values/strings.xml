@@ -17,6 +17,8 @@
     <string name="source_voratoon_note">Baca manga dari server pertama langsung di dalam aplikasi.</string>
     <string name="source_shinigami">Manga Server 2</string>
     <string name="source_shinigami_note">Baca manga dari server kedua, lengkap dengan unduhan offline.</string>
+    <string name="source_komiku">Manga Server 3</string>
+    <string name="source_komiku_note">Baca komik dari Komiku langsung di aplikasi, tanpa iklan situs.</string>
     <string name="source_otakudesu">Anime Streaming</string>
     <string name="source_otakudesu_note">Streaming anime subtitle Indonesia, dengan unduhan episode.</string>
 

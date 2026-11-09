@@ -21,6 +21,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import id.shuyasal.kuromaku.anime.OtakudesuActivity;
+import id.shuyasal.kuromaku.komiku.KomikuActivity;
 import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
 import id.shuyasal.kuromaku.ui.GlassCard;
 import id.shuyasal.kuromaku.ui.Palette;
@@ -106,6 +107,9 @@ public class SourceHubActivity extends AppCompatActivity {
         cards.addView(card(R.string.source_shinigami, R.string.source_shinigami_note,
                 R.drawable.ic_moon, 0xFFC2453F,
                 "source_hub_card_shinigami", () -> open(ShinigamiActivity.class)));
+        cards.addView(card(R.string.source_komiku, R.string.source_komiku_note,
+                R.drawable.ic_panels, 0xFF2E9E6B,
+                "source_hub_card_komiku", () -> open(KomikuActivity.class)));
         cards.addView(card(R.string.source_otakudesu, R.string.source_otakudesu_note,
                 R.drawable.ic_film, 0xFF2F7DE1,
                 "source_hub_card_otakudesu", () -> open(OtakudesuActivity.class)));
