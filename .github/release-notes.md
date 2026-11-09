@@ -2,6 +2,8 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Kestabilan pengujian: baris chapter diberi satu putaran tata letak.**
+  - Tes akordeon volume membaca baris chapter sebelum RecyclerView sempat menata isinya; hasilnya bergantung urutan tes. Tidak ada perubahan perilaku aplikasi.
 * **@VERSION@ — Server anime diperiksa otomatis, tanpa menekan Periksa.**
   - Pemeriksaan seluruh mirror dimulai begitu episode dibuka dan berlanjut saat menu Server ditekan; maksimal dua permintaan sekaligus, hasilnya muncul satu per satu.
   - Panel dibagi tiga bagian: **Siap diputar** (dikelompokkan per kualitas, tombol Putar), **Sedang diperiksa** (indikator, tanpa tombol), dan **Server lainnya (N)** yang dilipat berisi status `Tidak kompatibel`/`Tidak tersedia` beserta alasannya.

@@ -420,6 +420,10 @@ public class HeaderAndMotionTest {
 
         byTag(decor, "volume:1").performClick();
         Shadows.shadowOf(Looper.getMainLooper()).idle();
+        // Baris chapter lahir dari tata letak RecyclerView; tanpa melewatkan
+        // satu putaran ukur/tata letak, isinya belum tentu dibuat (dan hasilnya
+        // bergantung urutan tes).
+        layout(host);
         assertEquals("accordion harus terbuka", View.VISIBLE,
                 byTag(host.getWindow().getDecorView(), "chapters:1").getVisibility());
         assertNotNull("chapter harus ikut tampil",
