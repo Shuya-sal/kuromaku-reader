@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import id.shuyasal.kuromaku.sync.SyncBar;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.ThemeManager;
@@ -57,6 +58,9 @@ public class KomikuDetailActivity extends AppCompatActivity {
     private TextView statusView;
     private ImageView coverView;
     private LinearLayout chapterList;
+    private LinearLayout syncHolder;
+    private SyncBar syncBar;
+    private id.shuyasal.kuromaku.sync.SyncBridge bridge;
     private Button orderButton;
     private Button favoriteButton;
     private ProgressBar spinner;
@@ -70,6 +74,7 @@ public class KomikuDetailActivity extends AppCompatActivity {
         palette = Palette.of(new Prefs(this).resolvedTheme());
         source = new KomikuSource();
         store = new KomikuStore(this);
+        bridge = new id.shuyasal.kuromaku.sync.SyncBridge(this);
         url = getIntent().getStringExtra(EXTRA_URL);
         fallbackTitle = getIntent().getStringExtra(EXTRA_TITLE);
         fallbackCover = getIntent().getStringExtra(EXTRA_COVER);
@@ -137,6 +142,14 @@ public class KomikuDetailActivity extends AppCompatActivity {
         synopsisView.setTag("komiku_detail_synopsis");
         synopsisView.setPadding(0, Ui.dp(this, 12), 0, Ui.dp(this, 12));
         content.addView(synopsisView);
+
+        syncHolder = new LinearLayout(this);
+        syncHolder.setOrientation(LinearLayout.VERTICAL);
+        syncHolder.setTag("komiku_detail_sync_holder");
+        LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        syncParams.bottomMargin = Ui.dp(this, 12);
+        content.addView(syncHolder, syncParams);
 
         LinearLayout chapterBar = new LinearLayout(this);
         chapterBar.setOrientation(LinearLayout.HORIZONTAL);
@@ -236,7 +249,18 @@ public class KomikuDetailActivity extends AppCompatActivity {
         if (!detail.coverUrl.isEmpty()) KomikuImages.load(detail.coverUrl, coverView);
         else if (fallbackCover != null) KomikuImages.load(fallbackCover, coverView);
         favoriteButton.setText(store.isFavorite(detail.id) ? "★ Favorit" : "Favorit");
+        attachSyncBar();
         renderChapters();
+    }
+
+    /** Bar tautan ke Manga Server 2 untuk judul ini. */
+    private void attachSyncBar() {
+        if (syncHolder == null || detail == null) return;
+        syncHolder.removeAllViews();
+        syncBar = new SyncBar(this, palette, new SyncBar.Self(
+                SyncBar.SOURCE_KOMIKU, detail.id, detail.title, detail.alternative, url))
+                .onChanged(() -> { if (syncBar != null) syncBar.refresh(syncHolder.getChildAt(0)); });
+        syncHolder.addView(syncBar.build());
     }
 
     private void toggleFavorite() {
@@ -248,6 +272,8 @@ public class KomikuDetailActivity extends AppCompatActivity {
     private void renderChapters() {
         if (detail == null) return;
         chapterList.removeAllViews();
+        View resume = resumeRow();
+        if (resume != null) chapterList.addView(resume);
         List<KomikuChapter> ordered = newestFirst
                 ? KomikuChapter.newestFirst(detail.chapters)
                 : KomikuChapter.oldestFirst(detail.chapters);
@@ -266,6 +292,43 @@ public class KomikuDetailActivity extends AppCompatActivity {
             empty.setPadding(0, Ui.dp(this, 10), 0, 0);
             chapterList.addView(empty);
         }
+    }
+
+    /**
+     * Baris "Lanjutkan" dari chapter kanonis terakhir yang tersedia di sumber
+     * ini. Tidak pernah mengarang alamat: bila tidak ada chapter setara,
+     * baris ini tidak muncul.
+     */
+    private View resumeRow() {
+        List<String> labels = new ArrayList<>();
+        for (KomikuChapter chapter : KomikuChapter.oldestFirst(detail.chapters)) {
+            labels.add(chapter.title);
+        }
+        String next = bridge.nextAfterLastCompleted(SyncBar.SOURCE_KOMIKU, detail.id, labels);
+        if (next.isEmpty()) return null;
+        KomikuChapter target = null;
+        for (KomikuChapter chapter : detail.chapters) {
+            if (chapter.title.equals(next)) target = chapter;
+        }
+        if (target == null) return null;
+
+        final KomikuChapter chapter = target;
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 10));
+        row.setBackground(Ui.ripple(this, palette.surface, palette.accent, 12, palette.ripple));
+        TextView text = Ui.label(this, "Lanjutkan · " + chapter.title, 14, palette.text);
+        row.addView(text, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView arrow = Ui.label(this, "›", 18, palette.accent);
+        row.addView(arrow);
+        row.setOnClickListener(v -> openChapter(chapter));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.bottomMargin = Ui.dp(this, 8);
+        row.setLayoutParams(params);
+        return row;
     }
 
     private View chapterRow(KomikuChapter chapter) {
@@ -289,6 +352,10 @@ public class KomikuDetailActivity extends AppCompatActivity {
         double progress = store.progress(chapter.url);
         if (progress > 0.01) {
             TextView mark = Ui.label(this, Math.round(progress * 100) + "%", 11, palette.accent);
+            row.addView(mark);
+        } else if (bridge.isCompletedAnywhere(SyncBar.SOURCE_KOMIKU, detail.id, chapter.title)) {
+            // Chapter yang sama sudah selesai dibaca di Manga Server 2.
+            TextView mark = Ui.label(this, "✓ dibaca", 11, palette.accent);
             row.addView(mark);
         }
 
@@ -317,6 +384,13 @@ public class KomikuDetailActivity extends AppCompatActivity {
         intent.putStringArrayListExtra(KomikuReaderActivity.EXTRA_CHAPTERS, urls);
         intent.putStringArrayListExtra(KomikuReaderActivity.EXTRA_LABELS, labels);
         startActivity(intent);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        // Setelah kembali dari pembaca, status "selesai"/"Lanjutkan" harus
+        // mengikuti data terbaru tanpa memuat ulang katalog.
+        if (detail != null) renderChapters();
     }
 
     @Override protected void onDestroy() {

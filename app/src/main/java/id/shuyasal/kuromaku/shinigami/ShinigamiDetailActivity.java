@@ -43,6 +43,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import id.shuyasal.kuromaku.sync.SyncBar;
+import id.shuyasal.kuromaku.sync.SyncBridge;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.RatioFrameLayout;
@@ -99,6 +101,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
     private ShinigamiDownloader downloader;
 
     private String mangaId;
+    private LinearLayout syncHolder;
+    private SyncBar syncBar;
     private String title;
     private String coverUrl;
 
@@ -322,6 +326,17 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         body.addView(head);
 
+        // Bar sinkron: menampilkan keadaan tautan yang sebenarnya. Teks awal
+        // "belum dipasangkan" tetap jujur walau detail belum termuat.
+        syncHolder = new LinearLayout(this);
+        syncHolder.setOrientation(LinearLayout.VERTICAL);
+        syncHolder.setTag("shinigami_detail_sync_holder");
+        LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        syncParams.topMargin = Ui.dp(this, 14);
+        body.addView(syncHolder, syncParams);
+        attachSyncBar();
+
         synopsis = Ui.label(this, "", 14, palette.text);
         synopsis.setTag("shinigami_detail_synopsis");
         synopsis.setPadding(0, Ui.dp(this, 14), 0, Ui.dp(this, 6));
@@ -489,6 +504,18 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
                 applyManga(result);
             });
         });
+    }
+
+    /** Pasang/perbarui bar sinkron untuk judul ini. */
+    private void attachSyncBar() {
+        if (syncHolder == null || mangaId == null) return;
+        syncHolder.removeAllViews();
+        syncBar = new SyncBar(this, palette, new SyncBar.Self(
+                SyncBar.SOURCE_SHINIGAMI, mangaId, title == null ? "" : title,
+                lastDetail == null ? "" : lastDetail.alternativeTitle,
+                mangaId))
+                .onChanged(() -> { if (syncBar != null) syncBar.refresh(syncHolder.getChildAt(0)); });
+        syncHolder.addView(syncBar.build());
     }
 
     private void applyManga(ShinigamiManga manga) {
@@ -796,6 +823,27 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
         loadChapters(1, true);
     }
 
+    private SyncBridge syncBridge;
+    private final java.util.Map<String, Boolean> syncCache = new java.util.HashMap<>();
+
+    /** Benar bila chapter ini selesai dibaca di sumber pasangannya. */
+    private boolean syncCompleted(ShinigamiChapter chapter) {
+        if (mangaId == null) return false;
+        Boolean cached = syncCache.get(chapter.id);
+        if (cached != null) return cached;
+        if (syncBridge == null) syncBridge = new SyncBridge(this);
+        boolean done = syncBridge.isCompletedAnywhere(SyncBar.SOURCE_SHINIGAMI, mangaId,
+                chapter.label());
+        syncCache.put(chapter.id, done);
+        return done;
+    }
+
+    private String partnerLabel() {
+        if (syncBridge == null) syncBridge = new SyncBridge(this);
+        SyncBridge.LinkState state = syncBridge.stateFor(SyncBar.SOURCE_SHINIGAMI, mangaId);
+        return state.linked ? state.otherSourceLabel() : "sumber lain";
+    }
+
     private View buildChapterRow(ShinigamiChapter chapter) {
         boolean picked = selected.contains(chapter.id);
         int expected = store.expectedPages(chapter.id);
@@ -828,6 +876,11 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
 
         int progress = store.progress(chapter.id);
         String readLabel = ShinigamiChapterProgress.readLabel(progress);
+        if (readLabel.isEmpty() && syncCompleted(chapter)) {
+            // Chapter ini belum dibuka di sini, tetapi sudah selesai dibaca
+            // pada judul pasangannya di Manga Server 3.
+            readLabel = "✓ selesai di " + partnerLabel();
+        }
         TextView readState = Ui.label(this, readLabel, 11,
                 progress >= 100 ? palette.muted : palette.accent);
         readState.setTag("shinigami_chapter_progress");
@@ -1174,6 +1227,8 @@ public class ShinigamiDetailActivity extends AppCompatActivity {
             return;
         }
         if (store == null || chapterList == null || chapters.isEmpty()) return;
+        // Keadaan sinkron bisa berubah selama layar pembaca terbuka.
+        syncCache.clear();
         renderChapters();
         // Status unduhan bisa berjalan di WorkManager saat halaman ini
         // ditinggalkan; selaraskan lagi supaya ring tidak menampilkan angka basi.

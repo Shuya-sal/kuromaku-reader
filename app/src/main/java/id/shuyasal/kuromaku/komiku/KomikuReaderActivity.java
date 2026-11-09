@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import id.shuyasal.kuromaku.sync.SyncBridge;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.ThemeManager;
@@ -313,6 +314,10 @@ public class KomikuReaderActivity extends AppCompatActivity {
         }
         progressView.setText(Math.round(fraction * 100) + "%");
         store.setProgress(chapterUrl, fraction);
+        // Teruskan ke lapisan kanonis: judul yang dipasangkan dengan Manga
+        // Server 2 ikut menandai chapter yang sama.
+        new SyncBridge(this).onChapterOpened(SyncBridge.SOURCE_KOMIKU, mangaId,
+                chapterLabel, fraction >= 0.95);
         View bar = panel.findViewWithTag("komiku_read_progress");
         if (bar instanceof ProgressBar) ((ProgressBar) bar).setProgress((int) (fraction * 1000));
     }

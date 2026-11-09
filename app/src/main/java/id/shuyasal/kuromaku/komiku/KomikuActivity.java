@@ -45,6 +45,7 @@ public class KomikuActivity extends AppCompatActivity {
     private static final int TAB_POPULAR = 1;
     private static final int TAB_NEW = 2;
     private static final int TAB_FAVORITES = 3;
+    private static final int TAB_HISTORY = 4;
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -156,6 +157,7 @@ public class KomikuActivity extends AppCompatActivity {
         addChip("Chapter Terbaru", tab == TAB_LATEST, () -> select(TAB_LATEST));
         addChip("Terpopuler", tab == TAB_POPULAR, () -> select(TAB_POPULAR));
         addChip("Manga Terbaru", tab == TAB_NEW, () -> select(TAB_NEW));
+        addChip("Riwayat", tab == TAB_HISTORY, () -> select(TAB_HISTORY));
         addChip("Favorit", tab == TAB_FAVORITES, () -> select(TAB_FAVORITES));
     }
 
@@ -241,13 +243,26 @@ public class KomikuActivity extends AppCompatActivity {
                 if (message != null) {
                     status.setText("Gagal memuat: " + message);
                 } else if (loaded.isEmpty()) {
-                    status.setText(which == TAB_FAVORITES
-                            ? "Belum ada judul favorit." : "Daftar kosong dari sumber.");
+                    status.setText(which == TAB_FAVORITES ? "Belum ada judul favorit."
+                            : which == TAB_HISTORY ? "Belum ada riwayat baca."
+                            : "Daftar kosong dari sumber.");
                 } else {
                     status.setText(loaded.size() + " judul");
                 }
             });
         });
+    }
+
+    /** Riwayat baca sebagai daftar judul (terbaru dulu). */
+    private List<KomikuManga> history() {
+        List<KomikuManga> out = new ArrayList<>();
+        for (KomikuStore.Entry entry : store.history()) {
+            if (entry.mangaId.isEmpty()) continue;
+            out.add(new KomikuManga(entry.mangaId, entry.title,
+                    KomikuConfig.BASE + "/manga/" + entry.mangaId + "/", entry.coverUrl,
+                    "", entry.chapterLabel, "terakhir dibaca"));
+        }
+        return out;
     }
 
     private void open(KomikuManga manga) {

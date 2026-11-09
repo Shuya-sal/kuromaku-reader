@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import id.shuyasal.kuromaku.sync.SyncBridge;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.ThemeManager;
@@ -64,6 +65,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private String mangaCover;
     private String chapterId;
     private double chapterNumber;
+    private boolean completedMarked;
     private String chapterTitle;
 
     private RecyclerView list;
@@ -731,6 +733,22 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
     private void recordOpen() {
         store.recordRead(mangaId, mangaTitle, mangaCover, chapterId, chapterNumber);
         store.setLastChapter(mangaId, chapterId, chapterNumber);
+        // Teruskan ke lapisan kanonis. Bila judul ini belum dipasangkan dengan
+        // sumber lain, tidak ada yang berubah — riwayat lokal tetap sumber utama.
+        new SyncBridge(this).onChapterOpened(SyncBridge.SOURCE_SHINIGAMI, mangaId,
+                syncLabel(), false);
+    }
+
+    /**
+     * Label yang dipakai lapisan sinkron.
+     *
+     * <p>Nomor chapter wajib ada di label: judul chapter di sumber ini sering
+     * kosong atau hanya berisi judul cerita, sehingga tanpa nomor chapter yang
+     * sama tidak akan pernah bisa dipasangkan dengan sumber lain.
+     */
+    private String syncLabel() {
+        return id.shuyasal.kuromaku.shinigami.ShinigamiManga
+                .chapterLabel(chapterNumber, chapterTitle);
     }
 
     private void restorePosition() {
@@ -752,7 +770,15 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
         if (first < 0) return;
         store.setPage(chapterId, first);
         if (!progressReliable) return;
-        store.setProgress(chapterId, readingPercent());
+        int percent = readingPercent();
+        store.setProgress(chapterId, percent);
+        // Chapter dianggap selesai hanya bila benar-benar sampai ujung. Ambang
+        // 95% memberi ruang untuk halaman terakhir yang tinggi gambarnya.
+        if (percent >= 95 && !completedMarked) {
+            completedMarked = true;
+            new SyncBridge(this).onChapterOpened(SyncBridge.SOURCE_SHINIGAMI, mangaId,
+                    syncLabel(), true);
+        }
         updateReadingIndicator();
     }
 

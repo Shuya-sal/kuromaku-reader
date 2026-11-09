@@ -1,3 +1,19 @@
+* **@VERSION@ — Progres baca Manga Server 2 dan Manga Server 3 kini tersinkron dua arah.**
+  - Tautkan judul yang sama lewat bar **"Cari pasangan di Manga Server 2/3"** di layar detail. Saran diambil dari riwayat dan favorit, atau dicari langsung ke sumber lain; setiap saran menyebut tingkat kemiripannya, dan penautan tetap menunggu konfirmasi Master — judul yang hanya mirip nama tidak pernah digabung otomatis.
+  - Setelah tertaut, membaca chapter di satu server langsung menandai chapter yang sama di server lain (`✓ selesai di Manga Server 3`), termasuk saat chapter dibuka dari daftar. Status selesai hanya ditambahkan — membuka chapter lama tidak pernah mencabutnya.
+  - Progres disimpan satu kali sebagai data kanonis, bukan disalin ke database sumber lain. Karena itu tidak ada dua penulis yang saling menimpa, dan siklus Server 2 → Server 3 → Server 2 tidak berputar.
+  - Chapter dipasangkan lewat kunci kanonis dari nomornya ("Chapter 10", "Ch. 10", "Chapter 10 - Judul" dianggap sama; "1.5", "Prolog", "Epilog", dan "Extra" punya kunci sendiri). Chapter yang tidak punya padanan dibiarkan `unmatched`, tidak dipaksa sinkron.
+  - Baris **Lanjutkan** di daftar chapter Manga Server 3 memakai chapter kanonis terakhir, tetapi hanya bila chapter itu benar-benar ada di sumber tersebut — tidak pernah mengarang alamat.
+  - Tombol **Lepas tautan** tersedia di kedua server. Melepas tidak menghapus riwayat maupun progres; menautkan ulang memakai catatan yang sama.
+  - Status unduhan tetap milik masing-masing sumber dan tidak ikut disinkronkan.
+* **@VERSION@ — Progres Manga Server 2 dan Manga Server 3 tersinkron dua arah.**
+  - Judul yang dipasangkan kini berbagi status baca: selesaikan Chapter 10 di Manga Server 2, buka judul yang sama di Manga Server 3, dan chapter itu sudah bertanda **✓ dibaca**. Berlaku sebaliknya juga, dan di perangkat yang sama tanpa internet.
+  - Pemasangan judul memakai identitas karya bersama, bukan nama saja. Saran diambil dari riwayat/favorit sumber lain atau hasil pencarian, dengan tingkat keyakinan yang ditampilkan apa adanya — *judul sama* dan *judul alternatif sama* dianggap kuat, sedangkan kemiripan kata seperti **Magic Emperor** vs **Demonic Emperor** tidak pernah ditautkan otomatis.
+  - Bar di layar detail menyebut keadaan sebenarnya: **"Belum dipasangkan…"** selama belum ada pasangan, **"Tersinkron dengan Manga Server 2/3"** setelah dipasangkan, lengkap dengan tombol **Ubah pasangan** dan **Lepas tautan**.
+  - Melepas tautan tidak menghapus riwayat, progres, maupun chapter yang sudah ditandai selesai di masing-masing sumber. Menautkan ulang memakai identitas karya yang sama, jadi progres lama langsung terlihat lagi.
+  - Penomoran chapter dinormalkan lebih dulu: `Chapter 10`, `Ch. 10`, dan `Bab 10` dianggap chapter yang sama, sementara `Prolog`, `Chapter 0`, `Extra`, `Epilog`, dan `Chapter 1.5` punya identitas sendiri dan tidak pernah disamakan dengan `Chapter 1`.
+  - Status **selesai** tidak pernah dicabut hanya karena pengguna membuka chapter lama, dan kejadian yang lebih tua diabaikan sehingga sinkronisasi tidak berputar balik. Persentase scroll tetap milik masing-masing sumber karena jumlah halaman bisa berbeda.
+  - Judul yang belum dipasangkan sama sekali tidak terpengaruh: tidak ada klaim sinkron palsu dan tidak ada data yang berpindah.
 * **@VERSION@ — Manga Server 3 (Komiku) hadir sebagai sumber kelima.**
   - Source Hub kini punya lima kartu: Novel, Manga Server 1, Manga Server 2, **Manga Server 3**, dan Anime Streaming. Kartu baru berada tepat setelah Manga Server 2 dan tetap muat di layar kecil karena halaman hub bisa digulir.
   - Beranda Manga Server 3 native: **Chapter Terbaru**, **Terpopuler**, **Manga Terbaru**, dan **Favorit**, plus pencarian judul. Semua daftar dibaca langsung dari halaman Komiku saat itu — tidak ada katalog contoh yang ditanam di aplikasi.
