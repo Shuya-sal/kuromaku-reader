@@ -4,6 +4,12 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
 * **@VERSION@ — Kestabilan pengujian: baris chapter diberi satu putaran tata letak.**
   - Tes akordeon volume membaca baris chapter sebelum RecyclerView sempat menata isinya; hasilnya bergantung urutan tes. Tidak ada perubahan perilaku aplikasi.
+* **@VERSION@ — Dialog server berubah langsung saat pemeriksaan selesai.**
+  - Akar bug: `PopupWindow.setContentView()` diabaikan selama popup tampil, jadi dialog hanya terisi sekali saat dibuka. Hasil pemeriksaan baru terlihat setelah menu Server ditutup dan dibuka lagi. Sekarang popup dibuat sekali dan isinya digambar ulang di tempat setiap ada hasil.
+  - Posisi gulir dipertahankan saat satu baris berpindah dari "Sedang diperiksa" ke "Siap diputar".
+  - Progres agregat ditampilkan: `7 dari 9 diperiksa · 2 siap`, lalu `Selesai · 2 siap dari 9`.
+  - Setiap pemeriksaan punya batas waktu 20 detik; mirror yang tidak menjawab menjadi **Tidak dapat diperiksa — waktu habis** dan slotnya dipakai mirror berikutnya, bukan berputar selamanya.
+  - Hasil yang datang terlambat setelah batas waktu diabaikan, sehingga status tidak berubah bolak-balik.
 * **@VERSION@ — Server anime diperiksa otomatis, tanpa menekan Periksa.**
   - Pemeriksaan seluruh mirror dimulai begitu episode dibuka dan berlanjut saat menu Server ditekan; maksimal dua permintaan sekaligus, hasilnya muncul satu per satu.
   - Panel dibagi tiga bagian: **Siap diputar** (dikelompokkan per kualitas, tombol Putar), **Sedang diperiksa** (indikator, tanpa tombol), dan **Server lainnya (N)** yang dilipat berisi status `Tidak kompatibel`/`Tidak tersedia` beserta alasannya.

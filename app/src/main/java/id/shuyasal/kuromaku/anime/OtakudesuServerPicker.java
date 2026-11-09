@@ -50,6 +50,8 @@ public final class OtakudesuServerPicker {
         PROTECTED_SERVER("Pemutar penyedia"),
         /** Halaman pemutar tidak bisa dibuka atau berkasnya hilang. */
         UNAVAILABLE("Tidak tersedia"),
+        /** Pemeriksaan melewati batas waktu. */
+        TIMED_OUT("Waktu pemeriksaan habis"),
         /** Belum diperiksa. */
         UNTESTED("Belum diperiksa");
 

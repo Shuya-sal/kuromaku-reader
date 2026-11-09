@@ -96,6 +96,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     private static final long SAVE_EVERY_MS = 5_000L;
     /** Kontrol hilang setelah 5 detik tanpa interaksi (mode layar penuh). */
+    /** Batas waktu satu pemeriksaan mirror. */
+    private static final long PROBE_TIMEOUT_MS = 20_000L;
+
     private static final long CONTROLS_TIMEOUT_MS = 5_000L;
     private static final long CONTROLS_FADE_MS = 160L;
     private static final long SEEK_STEP_MS = 10_000L;
@@ -198,7 +201,17 @@ public class AnimePlayerActivity extends AppCompatActivity {
      */
     private final java.util.ArrayDeque<OtakudesuPlayback.Mirror> probeQueue =
             new java.util.ArrayDeque<>();
+    /**
+     * Penanda pemeriksaan yang sedang berjalan per mirror.
+     *
+     * <p>Dipakai untuk dua hal: mengabaikan hasil yang datang setelah batas
+     * waktu, dan memastikan hasil lama tidak menimpa pemeriksaan baru.
+     */
+    private final java.util.Map<String, Integer> probeTokens = new java.util.HashMap<>();
+    private int probeTokenSeq;
     private PopupWindow serverPanel;
+    /** Panel yang sedang tampil; isinya digambar ulang saat hasil masuk. */
+    private OtakudesuServerPanel serverPanelView;
     private Document episodeDoc;
     private String activeServerLabel = "";
     /** Alamat pemutar server yang sedang dipilih; dipakai "Buka Player Sumber". */
@@ -763,9 +776,9 @@ public class AnimePlayerActivity extends AppCompatActivity {
         }
         OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
-        OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
+        serverPanelView = new OtakudesuServerPanel(this, colors);
 
-        popupPanel(panel.build(mirrors, probedServers, failedServers, checkingKeys(),
+        popupPanel(serverPanelView.build(mirrors, probedServers, failedServers, checkingKeys(),
                 panelListener()));
 
         // Pemeriksaan latar belakang dibatasi: hanya dua server yang paling
@@ -839,6 +852,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
     private void dismissServerPanel() {
         if (serverPanel != null && serverPanel.isShowing()) serverPanel.dismiss();
         serverPanel = null;
+        serverPanelView = null;
         setPanelOpen(false);
     }
 
@@ -951,6 +965,11 @@ public class AnimePlayerActivity extends AppCompatActivity {
         if (id.isEmpty()) return;
         probingServers.add(id);
         final int probeGeneration = serverGeneration;
+        final int token = ++probeTokenSeq;
+        probeTokens.put(id, token);
+        // Batas waktu per mirror: tanpa ini satu server yang tidak menjawab
+        // membuat barisnya berputar selamanya.
+        main.postDelayed(() -> onProbeTimeout(id, token), PROBE_TIMEOUT_MS);
         refreshServerPanel();
         main.postDelayed(refreshServerPanelTask, 150);
 
@@ -972,6 +991,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 probingServers.remove(id);
                 // Hasil dari generasi lama tidak boleh menyentuh keadaan baru.
                 if (probeGeneration != serverGeneration) return;
+                // Sudah dinyatakan habis waktunya: hasil yang telat diabaikan.
+                if (!Integer.valueOf(token).equals(probeTokens.remove(id))) return;
                 if (outcome.playable() && outcome.source != null) {
                     probedServers.put(id, outcome.source);
                     failedServers.remove(id);
@@ -1030,13 +1051,18 @@ public class AnimePlayerActivity extends AppCompatActivity {
         }
     };
 
+    /**
+     * Gambar ulang isi panel yang sedang terbuka.
+     *
+     * <p><b>Jangan</b> memakai {@code PopupWindow.setContentView()} di sini:
+     * metode itu diabaikan selama popup tampil, sehingga dialog terus
+     * menampilkan "Memeriksa…" sampai ditutup dan dibuka lagi. Yang diperbarui
+     * adalah isi panel milik popup yang sama.
+     */
     private void refreshServerPanel() {
-        if (serverPanel == null || !serverPanel.isShowing()) return;
-        OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
-                palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
-        OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
-        serverPanel.setContentView(panel.build(mirrors, probedServers, failedServers, checkingKeys(),
-                panelListener()));
+        if (serverPanel == null || !serverPanel.isShowing() || serverPanelView == null) return;
+        serverPanelView.render(mirrors, probedServers, failedServers, checkingKeys(),
+                panelListener());
     }
 
     /**
@@ -1071,6 +1097,25 @@ public class AnimePlayerActivity extends AppCompatActivity {
             // kegagalan setelah ini ditangani listener pemutar.
             switchingServer = false;
         }
+    }
+
+    /**
+     * Pemeriksaan satu mirror melewati batas waktu.
+     *
+     * <p>Statusnya menjadi "Tidak dapat diperiksa — waktu habis", slotnya
+     * dibebaskan, dan antrean berjalan lagi. Baris tidak boleh berputar
+     * selamanya hanya karena penyedia tidak menjawab.
+     */
+    private void onProbeTimeout(String id, int token) {
+        if (isFinishing() || isDestroyed()) return;
+        if (!Integer.valueOf(token).equals(probeTokens.get(id))) return;
+        probeTokens.remove(id);
+        probingServers.remove(id);
+        failedServers.put(id, new OtakudesuServerPicker.Probed(
+                OtakudesuServerPicker.Status.TIMED_OUT, null, "tidak ada jawaban"));
+        updateServerButton();
+        refreshServerPanel();
+        pumpProbes();
     }
 
     /** Alamat pemutar server ini, bila sudah pernah dibuka saat diperiksa. */

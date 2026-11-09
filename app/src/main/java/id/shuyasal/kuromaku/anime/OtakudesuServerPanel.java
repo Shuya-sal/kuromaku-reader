@@ -71,6 +71,7 @@ final class OtakudesuServerPanel {
     private final Context context;
     private final Palette palette;
     private LinearLayout column;
+    private ScrollView scroll;
 
     OtakudesuServerPanel(Context context, Palette palette) {
         this.context = context;
@@ -91,7 +92,7 @@ final class OtakudesuServerPanel {
                LinkedHashMap<String, OtakudesuServerPicker.Probed> failed,
                Set<String> checking,
                Listener listener) {
-        ScrollView scroll = new ScrollView(context);
+        scroll = new ScrollView(context);
         scroll.setTag("anime_server_panel");
         scroll.setBackgroundColor(Color.TRANSPARENT);
 
@@ -101,10 +102,38 @@ final class OtakudesuServerPanel {
         scroll.addView(column, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        render(mirrors, probed, failed, checking, listener);
+        return scroll;
+    }
+
+    /**
+     * Perbarui isi panel <b>di tempat</b>.
+     *
+     * <p>Ini bagian yang dulu hilang: {@code PopupWindow.setContentView()}
+     * diabaikan selama popup tampil, sehingga hasil pemeriksaan baru hanya
+     * terlihat setelah dialog ditutup dan dibuka lagi. Sekarang popup dibuat
+     * sekali, dan isinya digambar ulang lewat metode ini setiap ada hasil.
+     *
+     * <p>Posisi gulir dipertahankan supaya daftar tidak melompat saat satu
+     * baris berpindah dari "Sedang diperiksa" ke "Siap diputar".
+     */
+    void render(List<OtakudesuPlayback.Mirror> mirrors,
+                LinkedHashMap<String, OtakudesuPlayback.Source> probed,
+                LinkedHashMap<String, OtakudesuServerPicker.Probed> failed,
+                Set<String> checking,
+                Listener listener) {
+        if (column == null) return;
+        int anchor = scroll == null ? 0 : scroll.getScrollY();
+        column.removeAllViews();
+
         if (mirrors.isEmpty()) {
             column.addView(note("Halaman episode ini tidak menyebut satu pun mirror."));
-            return scroll;
+            return;
         }
+
+        // Progres agregat: pengguna tahu pemeriksaan berjalan, bukan menggantung.
+        column.addView(progressLine(probed.size() + failed.size(), mirrors.size(),
+                probed.size(), checking.isEmpty()));
 
         List<OtakudesuPlayback.Mirror> playable = new ArrayList<>();
         List<OtakudesuPlayback.Mirror> pending = new ArrayList<>();
@@ -144,7 +173,7 @@ final class OtakudesuServerPanel {
         if (playable.isEmpty() && pending.isEmpty()) {
             column.addView(emptyState(listener));
         }
-        return scroll;
+        if (scroll != null) scroll.scrollTo(0, anchor);
     }
 
     /** Bagian lipat berisi mirror yang tidak bisa diputar, beserta alasannya. */
@@ -238,6 +267,29 @@ final class OtakudesuServerPanel {
 
         box.addView(actions);
         return box;
+    }
+
+    private TextView progressLine(int done, int total, int ready, boolean finished) {
+        TextView line = new TextView(context);
+        line.setTag("anime_server_progress");
+        line.setText(progressText(done, total, ready, finished));
+        line.setTextColor(palette.muted);
+        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        line.setPadding(dp(12), dp(6), dp(12), dp(2));
+        return line;
+    }
+
+    /**
+     * Kalimat progres pemeriksaan.
+     *
+     * <p>Selama berjalan: {@code 7 dari 9 diperiksa · 2 siap}. Setelah selesai:
+     * {@code Selesai · 2 siap dari 9}. Angka diambil dari state yang sama
+     * dengan kartu dan badge, jadi tidak mungkin berbeda.
+     */
+    static String progressText(int done, int total, int ready, boolean finished) {
+        if (total <= 0) return "";
+        if (finished) return "Selesai · " + ready + " siap dari " + total;
+        return done + " dari " + total + " diperiksa · " + ready + " siap";
     }
 
     private TextView sectionHeader(String text) {
@@ -383,6 +435,9 @@ final class OtakudesuServerPanel {
                         + (note.isEmpty() ? "" : " (" + note + ")");
             case UNAVAILABLE:
                 return "Tidak tersedia" + (note.isEmpty() ? "" : " — " + note);
+            case TIMED_OUT:
+                return "Tidak dapat diperiksa — waktu habis"
+                        + (note.isEmpty() ? "" : " (" + note + ")");
             case READY:
                 return "Siap diputar";
             default:

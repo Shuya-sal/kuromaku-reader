@@ -217,6 +217,62 @@ public class OtakudesuServerPanelTest {
         assertFalse("baris tidak menangkap klik kedua", row.hasOnClickListeners());
     }
 
+    /**
+     * Inti perbaikan: panel yang <b>sama</b> berubah isi saat hasil masuk.
+     *
+     * <p>Bug sebelumnya: popup hanya diisi sekali, karena
+     * {@code PopupWindow.setContentView()} diabaikan selama popup tampil.
+     * Pengujian ini memastikan render ulang benar-benar mengganti isi view
+     * yang sudah ada, bukan membuat panel baru.
+     */
+    @Test public void renderMemperbaruiIsiPanelYangSama() {
+        OtakudesuServerPanel panel = new OtakudesuServerPanel(
+                ApplicationProvider.getApplicationContext(), palette());
+        Set<String> checking = new LinkedHashSet<>(Arrays.asList(key(0), key(1)));
+        View view = panel.build(new ArrayList<>(MIRRORS), new LinkedHashMap<>(),
+                new LinkedHashMap<>(), checking, listener);
+
+        assertEquals("awal: dua baris diperiksa", 2,
+                findAll(view, "anime_server_spinner").size());
+        assertFalse("belum ada yang siap",
+                texts(view, "anime_server_section").contains("Siap diputar"));
+
+        // Hasil pertama masuk selagi panel masih terbuka.
+        LinkedHashMap<String, OtakudesuPlayback.Source> probed = new LinkedHashMap<>();
+        probed.put(key(0), new OtakudesuPlayback.Source("https://cdn/x.mp4",
+                OtakudesuPlayback.Kind.PROGRESSIVE, "720p"));
+        Set<String> sisa = new LinkedHashSet<>(Arrays.asList(key(1)));
+        panel.render(new ArrayList<>(MIRRORS), probed, new LinkedHashMap<>(), sisa, listener);
+
+        assertTrue("grup siap diputar muncul tanpa membuka ulang",
+                texts(view, "anime_server_section").contains("Siap diputar"));
+        assertEquals("satu tombol Putar", 1, toStrings(view).size());
+        assertEquals("satu baris masih diperiksa", 1,
+                findAll(view, "anime_server_spinner").size());
+        assertTrue("progres ikut berubah",
+                texts(view, "anime_server_progress").get(0).contains("1 siap"));
+    }
+
+    @Test public void progresAgregatJujur() {
+        assertEquals("7 dari 9 diperiksa · 2 siap",
+                OtakudesuServerPanel.progressText(7, 9, 2, false));
+        assertEquals("Selesai · 2 siap dari 9",
+                OtakudesuServerPanel.progressText(9, 9, 2, true));
+        assertEquals("", OtakudesuServerPanel.progressText(0, 0, 0, true));
+    }
+
+    @Test public void serverWaktuHabisTidakBerputarSelamanya() {
+        LinkedHashMap<String, OtakudesuServerPicker.Probed> failed = new LinkedHashMap<>();
+        failed.put(key(2), new OtakudesuServerPicker.Probed(
+                OtakudesuServerPicker.Status.TIMED_OUT, null, "tidak ada jawaban"));
+
+        View panel = build(new LinkedHashMap<>(), failed, new LinkedHashSet<>());
+        String semua = String.join("\n", texts(panel, "anime_server_status"));
+        assertTrue("status waktu habis dijelaskan", semua.contains("waktu habis"));
+        assertTrue("tidak ada spinner tersisa",
+                findAll(panel, "anime_server_spinner").isEmpty());
+    }
+
     @Test public void labelTombolServerMenyebutJumlahSiap() {
         assertEquals("2 siap · 9 mirror", OtakudesuServerPanel.counter(2, 9));
         assertEquals("9 mirror", OtakudesuServerPanel.counter(0, 9));
