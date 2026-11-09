@@ -2,6 +2,10 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Status server terisi sendiri, dan pesan gagal tidak lagi menutupi video yang berjalan.**
+  - Seluruh mirror sekarang diperiksa berurutan di latar (maksimal dua permintaan sekaligus), bukan hanya dua yang pertama. Status "Belum diperiksa" berubah sendiri menjadi terverifikasi atau tidak kompatibel tanpa pengguna menekan **Periksa** satu per satu.
+  - Akar keluhan "video sudah jalan tetapi layar masih menampilkan pesan gagal": kotak pesan tidak pernah disembunyikan saat pemutar mencapai keadaan siap. Sekarang pesan itu hilang begitu gambar benar-benar berjalan, sehingga tidak perlu menekan **Coba Lagi** untuk mulai menonton.
+  - Bila satu server gagal saat video lain sedang berjalan, kegagalan dilaporkan tanpa menjeda atau menutup tontonan.
 * **@VERSION@ — Layar tidak lagi meredup saat menonton, dan daftar server tidak menawarkan putar palsu.**
   - Akar layar gelap: aplikasi tidak pernah memakai `FLAG_KEEP_SCREEN_ON`, sehingga Android menjalankan peredupan dan screen timeout normal begitu layar tidak disentuh — bertepatan dengan kontrol yang hilang di detik ke-5. Sekarang flag ditahan selama video berjalan atau buffering di depan pengguna, dan dilepas saat jeda, selesai, atau keluar layar. Kecerahan pilihan pengguna tidak pernah ditimpa (`BRIGHTNESS_OVERRIDE_NONE`).
   - Mirror yang gagal diperiksa kini disimpan statusnya, bukan dibuang. Panel menampilkan server terverifikasi lebih dulu dengan tombol **Putar**; mirror lain ada di balik **Lihat semua server (N)** dengan status `Tidak kompatibel — hanya pemutar penyedia` / `Tidak tersedia — <alasan>`.

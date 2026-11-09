@@ -188,6 +188,16 @@ public class AnimePlayerActivity extends AppCompatActivity {
             new java.util.LinkedHashMap<>();
     /** Benar antara onStart dan onStop: player sedang di depan pengguna. */
     private boolean playerForeground;
+    /**
+     * Mirror yang menunggu diperiksa.
+     *
+     * <p>Panel lama hanya memeriksa dua mirror pertama; sisanya tetap
+     * "Belum diperiksa" sampai pengguna menekan satu per satu, sehingga
+     * daftar terlihat penuh pilihan yang statusnya tidak diketahui. Sekarang
+     * sisanya diperiksa berurutan, tetap maksimal dua permintaan sekaligus.
+     */
+    private final java.util.ArrayDeque<OtakudesuPlayback.Mirror> probeQueue =
+            new java.util.ArrayDeque<>();
     private PopupWindow serverPanel;
     private Document episodeDoc;
     private String activeServerLabel = "";
@@ -526,6 +536,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setGravity(Gravity.CENTER);
+        box.setTag("anime_player_error_box");
         box.setBackgroundColor(0xFF000000);
         box.setPadding(Ui.dp(this, 24), Ui.dp(this, 24), Ui.dp(this, 24), Ui.dp(this, 24));
         box.setVisibility(View.GONE);
@@ -611,8 +622,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 buffering.setVisibility(state == Player.STATE_BUFFERING ? View.VISIBLE : View.GONE);
                 updatePlayButton();
                 if (state == Player.STATE_READY) {
-                    updateTrackButtons();
-                    firstSource = false;
+                    onVideoReady();
                 } else if (state == Player.STATE_ENDED) {
                     saveProgress(true);
                     markFinished();
@@ -701,6 +711,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 mirrors.addAll(result.mirrors);
                 probedServers.clear();
                 failedServers.clear();
+                probeQueue.clear();
                 activePlayback = result;
 
                 // Sumber media yang sudah dipublikasikan halaman episode dipakai
@@ -756,12 +767,38 @@ public class AnimePlayerActivity extends AppCompatActivity {
         // Sisanya menunggu permintaan pengguna (ketuk server, atau Periksa
         // semua server). Untuk sembilan mirror, memeriksa semuanya otomatis
         // berarti sembilan permintaan ke penyedia.
-        for (OtakudesuPlayback.Mirror mirror : OtakudesuServerPicker.probeOrder(mirrors)) {
-            if (probingServers.size() >= 2) break;
+        queueProbes();
+        pumpProbes();
+    }
+
+    /**
+     * Periksa sisa mirror sedikit demi sedikit.
+     *
+     * <p>Dua permintaan sekaligus, bukan sembilan: penyedia tidak dibanjiri dan
+     * perangkat kecil tidak membuka banyak koneksi. Setiap hasil langsung
+     * memperbarui panel, jadi status terisi sendiri tanpa pengguna menekan
+     * "Periksa".
+     */
+    private void pumpProbes() {
+        while (probingServers.size() < 2 && !probeQueue.isEmpty()) {
+            OtakudesuPlayback.Mirror mirror = probeQueue.pollFirst();
             if (mirror == null) continue;
             String id = mirror.key();
-            if (probedServers.containsKey(id) || probingServers.contains(id)) continue;
+            if (probedServers.containsKey(id) || failedServers.containsKey(id)) continue;
+            if (probingServers.contains(id)) continue;
             probeServer(mirror, id, false);
+        }
+    }
+
+    /** Isi antrean pemeriksaan dari semua mirror yang statusnya belum diketahui. */
+    private void queueProbes() {
+        probeQueue.clear();
+        for (OtakudesuPlayback.Mirror mirror : OtakudesuServerPicker.probeOrder(mirrors)) {
+            if (mirror == null) continue;
+            String id = mirror.key();
+            if (probedServers.containsKey(id) || failedServers.containsKey(id)) continue;
+            if (probingServers.contains(id)) continue;
+            probeQueue.addLast(mirror);
         }
     }
 
@@ -905,6 +942,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 }
                 markMirrorPlayerUrl(id, outcome.playerUrl);
                 refreshServerPanel();
+                // Slot kosong dipakai mirror berikutnya dalam antrean.
+                pumpProbes();
                 if (!pickWhenReady) return;
                 if (outcome.playable() && outcome.source != null) {
                     switchServer(mirror, outcome.source);
@@ -1570,6 +1609,28 @@ public class AnimePlayerActivity extends AppCompatActivity {
 
     // ---------------------------------------------------------------- status
 
+    /**
+     * Video benar-benar siap diputar.
+     *
+     * <p>Pesan kegagalan dari percobaan sebelumnya — server lain, atau
+     * percobaan yang sempat gagal lalu berhasil — harus hilang di sini. Tanpa
+     * ini pengguna melihat layar "tidak bisa diputar" padahal gambarnya sudah
+     * berjalan, dan satu-satunya jalan keluar terasa seperti "Coba Lagi".
+     */
+    void onVideoReady() {
+        hideError();
+        updateTrackButtons();
+        firstSource = false;
+    }
+
+    /** Benar bila pemutar sedang menyajikan gambar yang bisa ditonton. */
+    private boolean videoIsRunning() {
+        return player != null
+                && player.getPlaybackState() == Player.STATE_READY
+                && errorBox != null
+                && errorBox.getVisibility() != View.VISIBLE;
+    }
+
     private void showBuffering(boolean visible) {
         if (buffering != null) buffering.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
@@ -1587,6 +1648,12 @@ public class AnimePlayerActivity extends AppCompatActivity {
     /** Sumber tidak bisa diputar native: jelaskan, jangan tampilkan layar hitam. */
     private void showUnavailable(String message) {
         showControls();
+        if (videoIsRunning()) {
+            // Sudah ada gambar yang berjalan: jangan tutup dan jangan jeda.
+            // Kegagalan server baru cukup dilaporkan, tontonan tidak dihentikan.
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
+            return;
+        }
         if (player != null) {
             player.pause();
         }
@@ -1794,6 +1861,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
      * {@code RejectedExecutionException} yang muncul setelah layar ditutup.
      */
     @Override protected void onDestroy() {
+        probeQueue.clear();
         playerForeground = false;
         applyKeepScreenOn();
         main.removeCallbacksAndMessages(null);
