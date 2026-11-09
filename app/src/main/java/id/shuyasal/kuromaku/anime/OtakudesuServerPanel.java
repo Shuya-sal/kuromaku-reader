@@ -3,29 +3,40 @@ package id.shuyasal.kuromaku.anime;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.util.TypedValue;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
- * Panel "Pilih Server Streaming" berisi mirror yang benar-benar disebut halaman
- * episode, dikelompokkan per resolusi.
+ * Panel "Pilih Server Streaming".
  *
- * <p>Setiap baris menyebut dua hal terpisah: nama server, dan status
- * pemeriksaannya. Status tidak pernah disimpulkan dari nama — "Siap diputar"
- * hanya muncul setelah halaman pemutar server itu benar-benar dibuka dan di
- * dalamnya tertulis alamat berkas media.
+ * <p>Tiga bagian, urut menurut kepentingan pengguna:
+ * <ol>
+ *   <li><b>Siap diputar</b> — hanya mirror yang berkasnya benar-benar terbaca
+ *       pemutar native, dikelompokkan per kualitas, dengan tombol Putar.</li>
+ *   <li><b>Sedang diperiksa</b> — mirror yang pemeriksaannya berjalan; tidak
+ *       ada tombol apa pun, hanya indikator.</li>
+ *   <li><b>Server lainnya</b> — dilipat; berisi mirror yang gagal atau belum
+ *       dapat diverifikasi, lengkap dengan alasannya.</li>
+ * </ol>
+ *
+ * <p>Status tidak pernah disimpulkan dari nama server. "Siap diputar" hanya
+ * muncul setelah halaman pemutar mirror itu benar-benar menyebut alamat berkas
+ * media yang bisa dibaca Media3.
  */
 final class OtakudesuServerPanel {
 
@@ -47,11 +58,14 @@ final class OtakudesuServerPanel {
     }
 
     interface Listener {
-        /** Pengguna memilih satu server; sumber {@code null} berarti belum diperiksa. */
+        /** Pengguna memilih satu server. */
         void onPick(OtakudesuPlayback.Mirror mirror);
 
-        /** Pengguna meminta seluruh server diperiksa lebih dulu. */
-        void onCheckAll();
+        /** Periksa ulang mirror yang gagal. */
+        void onRetryFailed();
+
+        /** Buka halaman sumber di peramban. */
+        void onWatchSource();
     }
 
     private final Context context;
@@ -64,36 +78,18 @@ final class OtakudesuServerPanel {
     }
 
     /**
-     * Susunan lama: tanpa daftar kegagalan. Dipertahankan agar pemanggil lama
-     * tetap berjalan; semua mirror lalu dianggap belum diperiksa.
-     */
-    View build(List<OtakudesuPlayback.Mirror> mirrors,
-               LinkedHashMap<String, OtakudesuPlayback.Source> probed,
-               List<String> probing,
-               Listener listener) {
-        return build(mirrors, probed,
-                new LinkedHashMap<String, OtakudesuServerPicker.Probed>(), probing, listener);
-    }
-
-    /**
      * Menyusun tampilan panel.
      *
-     * <p>Urutan mengikuti prinsip "jangan menawarkan tombol putar palsu":
-     * server yang benar-benar terverifikasi tampil lebih dulu dengan tombol
-     * <b>Putar</b>; mirror lain hanya muncul setelah pengguna membuka
-     * <b>Lihat semua server</b>, dengan status apa adanya dan tombol
-     * <b>Periksa</b> — bukan Putar.
-     *
-     * @param mirrors semua mirror yang tersedia, urut seperti di sumber
-     * @param probed  kunci mirror → sumber yang sudah terverifikasi
-     * @param failed  kunci mirror → hasil pemeriksaan yang tidak bisa diputar
-     * @param probing kunci mirror yang sedang diperiksa
+     * @param mirrors  semua mirror yang disebut halaman episode
+     * @param probed   kunci mirror → sumber yang sudah terverifikasi
+     * @param failed   kunci mirror → hasil pemeriksaan yang tidak bisa diputar
+     * @param checking kunci mirror yang sedang atau akan diperiksa
      * @param listener aksi pengguna
      */
     View build(List<OtakudesuPlayback.Mirror> mirrors,
                LinkedHashMap<String, OtakudesuPlayback.Source> probed,
                LinkedHashMap<String, OtakudesuServerPicker.Probed> failed,
-               List<String> probing,
+               Set<String> checking,
                Listener listener) {
         ScrollView scroll = new ScrollView(context);
         scroll.setTag("anime_server_panel");
@@ -111,79 +107,148 @@ final class OtakudesuServerPanel {
         }
 
         List<OtakudesuPlayback.Mirror> playable = new ArrayList<>();
+        List<OtakudesuPlayback.Mirror> pending = new ArrayList<>();
         List<OtakudesuPlayback.Mirror> others = new ArrayList<>();
         for (OtakudesuPlayback.Mirror mirror : mirrors) {
             if (mirror == null) continue;
             String id = mirror.key();
             if (probed.get(id) != null) playable.add(mirror);
+            else if (checking.contains(id)) pending.add(mirror);
             else others.add(mirror);
         }
 
-        if (playable.isEmpty()) {
-            column.addView(note("Belum ada server yang terverifikasi dapat diputar di aplikasi. "
-                    + "Periksa server di bawah, atau buka halaman sumbernya."));
+        if (!playable.isEmpty()) {
+            column.addView(sectionHeader("Siap diputar"));
+            // Dikelompokkan per kualitas: pengguna memilih resolusi lebih dulu,
+            // baru server — sama seperti urutan di halaman sumber.
+            for (String quality : qualities(playable)) {
+                column.addView(groupHeader(quality));
+                for (OtakudesuPlayback.Mirror mirror : playable) {
+                    if (!quality.equals(qualityOf(mirror))) continue;
+                    column.addView(row(mirror, probed.get(mirror.key()), null, false, listener));
+                }
+            }
         }
-        for (OtakudesuPlayback.Mirror mirror : playable) {
-            String id = mirror.key();
-            column.addView(row(mirror, mirror.index, probed.get(id), failed.get(id),
-                    probing.contains(id), listener));
-        }
-        if (!playable.isEmpty() && !others.isEmpty()) {
-            column.addView(separator());
+
+        if (!pending.isEmpty()) {
+            column.addView(sectionHeader("Sedang diperiksa"));
+            for (OtakudesuPlayback.Mirror mirror : pending) {
+                column.addView(row(mirror, null, null, true, listener));
+            }
         }
 
         if (!others.isEmpty()) {
-            // Tanpa server yang bisa diputar, daftar lain langsung terbuka:
-            // menyembunyikannya hanya membuat layar tampak kosong.
-            final boolean startExpanded = playable.isEmpty();
-            LinearLayout hidden = new LinearLayout(context);
-            hidden.setOrientation(LinearLayout.VERTICAL);
-            hidden.setTag("anime_server_others");
-            hidden.setVisibility(startExpanded ? View.VISIBLE : View.GONE);
-            for (OtakudesuPlayback.Mirror mirror : others) {
-                String id = mirror.key();
-                hidden.addView(row(mirror, mirror.index, null, failed.get(id),
-                        probing.contains(id), listener));
-            }
-            column.addView(hidden);
-
-            // Tanpa satu pun server terverifikasi, daftar ini adalah isi panel:
-            // tombol sembunyikan hanya akan menyisakan layar kosong.
-            if (startExpanded) {
-                column.addView(checkAllRow(listener));
-                return scroll;
-            }
-
-            Button toggle = new Button(context);
-            toggle.setTag("anime_server_toggle");
-            toggle.setText("Lihat semua server (" + others.size() + ")");
-            toggle.setAllCaps(false);
-            toggle.setTextColor(palette.muted);
-            toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            toggle.setBackgroundColor(Color.TRANSPARENT);
-            toggle.setMinHeight(dp(48));
-            toggle.setOnClickListener(v -> {
-                boolean show = hidden.getVisibility() != View.VISIBLE;
-                hidden.setVisibility(show ? View.VISIBLE : View.GONE);
-                toggle.setText(show
-                        ? "Sembunyikan server lain"
-                        : "Lihat semua server (" + others.size() + ")");
-            });
-            column.addView(toggle);
+            column.addView(othersSection(others, failed, listener));
         }
 
-        column.addView(checkAllRow(listener));
+        if (playable.isEmpty() && pending.isEmpty()) {
+            column.addView(emptyState(listener));
+        }
         return scroll;
     }
 
-    private View separator() {
-        View line = new View(context);
-        line.setBackgroundColor(palette.muted & 0x33FFFFFF);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
-        params.setMargins(0, dp(10), 0, dp(4));
-        line.setLayoutParams(params);
-        return line;
+    /** Bagian lipat berisi mirror yang tidak bisa diputar, beserta alasannya. */
+    private View othersSection(List<OtakudesuPlayback.Mirror> others,
+                               LinkedHashMap<String, OtakudesuServerPicker.Probed> failed,
+                               Listener listener) {
+        LinearLayout box = new LinearLayout(context);
+        box.setOrientation(LinearLayout.VERTICAL);
+
+        LinearLayout hidden = new LinearLayout(context);
+        hidden.setOrientation(LinearLayout.VERTICAL);
+        hidden.setTag("anime_server_others");
+        hidden.setVisibility(View.GONE);
+        for (OtakudesuPlayback.Mirror mirror : others) {
+            hidden.addView(row(mirror, null, failed.get(mirror.key()), false, listener));
+        }
+        box.addView(hidden);
+
+        Button toggle = new Button(context);
+        toggle.setTag("anime_server_toggle");
+        toggle.setText("Server lainnya (" + others.size() + ")");
+        toggle.setAllCaps(false);
+        toggle.setTextColor(palette.muted);
+        toggle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        toggle.setBackgroundColor(Color.TRANSPARENT);
+        toggle.setMinHeight(dp(48));
+        toggle.setOnClickListener(v -> {
+            boolean show = hidden.getVisibility() != View.VISIBLE;
+            hidden.setVisibility(show ? View.VISIBLE : View.GONE);
+            toggle.setText(show
+                    ? "Sembunyikan server lainnya"
+                    : "Server lainnya (" + others.size() + ")");
+        });
+        box.addView(toggle);
+
+        // Retry hanya relevan bila ada yang benar-benar gagal diperiksa.
+        if (!failed.isEmpty()) {
+            Button retry = new Button(context);
+            retry.setTag("anime_server_retry");
+            retry.setText("Periksa ulang yang gagal");
+            retry.setAllCaps(false);
+            retry.setTextColor(palette.accent);
+            retry.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            retry.setBackgroundColor(Color.TRANSPARENT);
+            retry.setMinHeight(dp(48));
+            retry.setOnClickListener(v -> listener.onRetryFailed());
+            box.addView(retry);
+        }
+        return box;
+    }
+
+    /** Tidak ada satu pun server yang bisa diputar: beri dua jalan keluar. */
+    private View emptyState(Listener listener) {
+        LinearLayout box = new LinearLayout(context);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setTag("anime_server_empty");
+        box.setPadding(dp(12), dp(16), dp(12), dp(8));
+
+        TextView message = new TextView(context);
+        message.setText("Belum ada server yang bisa diputar di aplikasi untuk episode ini.");
+        message.setTextColor(palette.onSurface);
+        message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        box.addView(message);
+
+        LinearLayout actions = new LinearLayout(context);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setPadding(0, dp(10), 0, 0);
+
+        Button retry = new Button(context);
+        retry.setTag("anime_server_retry");
+        retry.setText("Coba lagi");
+        retry.setAllCaps(false);
+        retry.setTextColor(palette.accent);
+        retry.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
+                palette.accent & 0x33FFFFFF, palette.ripple, 10, context));
+        retry.setOnClickListener(v -> listener.onRetryFailed());
+        actions.addView(retry);
+
+        Button source = new Button(context);
+        source.setTag("anime_server_source");
+        source.setText("Tonton di Sumber");
+        source.setAllCaps(false);
+        source.setTextColor(palette.onSurface);
+        source.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
+                0x1AFFFFFF, 0x33FFFFFF, 10, context));
+        source.setOnClickListener(v -> listener.onWatchSource());
+        LinearLayout.LayoutParams sourceParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        sourceParams.leftMargin = dp(8);
+        actions.addView(source, sourceParams);
+
+        box.addView(actions);
+        return box;
+    }
+
+    private TextView sectionHeader(String text) {
+        TextView header = new TextView(context);
+        header.setText(text);
+        header.setTag("anime_server_section");
+        header.setTextColor(palette.onSurface);
+        header.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        header.setTypeface(Typeface.DEFAULT_BOLD);
+        header.setPadding(dp(12), dp(14), dp(12), dp(2));
+        return header;
     }
 
     private TextView groupHeader(String quality) {
@@ -191,19 +256,20 @@ final class OtakudesuServerPanel {
         header.setText(quality);
         header.setTag("anime_server_group");
         header.setTextColor(palette.accent);
-        header.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        header.setTypeface(Typeface.DEFAULT_BOLD);
-        header.setPadding(dp(12), dp(14), dp(12), dp(6));
+        header.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        header.setPadding(dp(12), dp(8), dp(12), dp(2));
         return header;
     }
 
-    private View row(OtakudesuPlayback.Mirror mirror, int index,
-                     OtakudesuPlayback.Source source, OtakudesuServerPicker.Probed failure,
-                     boolean checking, Listener listener) {
+    private View row(OtakudesuPlayback.Mirror mirror,
+                     OtakudesuPlayback.Source source,
+                     OtakudesuServerPicker.Probed failure,
+                     boolean checking,
+                     Listener listener) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setTag("anime_server_" + index);
+        row.setTag("anime_server_" + mirror.index);
         row.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
                 0x14FFFFFF, 0x22FFFFFF, 12, context));
         row.setPadding(dp(12), dp(10), dp(12), dp(10));
@@ -247,43 +313,41 @@ final class OtakudesuServerPanel {
         row.addView(text, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        boolean playable = source != null;
-        Button action = new Button(context);
-        // Tombol hanya berbunyi "Putar" bila berkasnya benar-benar sudah
-        // terverifikasi. Selain itu "Periksa" — tidak ada klaim palsu.
-        action.setText(playable ? "Putar" : (checking ? "Memeriksa…" : "Periksa"));
-        action.setTag("anime_server_action");
-        action.setAllCaps(false);
-        action.setEnabled(!checking);
-        action.setAlpha(checking ? 0.5f : 1f);
-        action.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        // Tombol berwarna tema punya kontras yang sama dengan bilah lainnya,
-        // jadi tombol ini tetap terbaca pada kedua tema.
-        action.setTextColor(palette.accent);
-        action.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
-                palette.accent & 0x33FFFFFF, palette.ripple, 10, context));
-        action.setPadding(dp(14), dp(8), dp(14), dp(8));
-        action.setMinimumHeight(dp(40));
-        action.setMinimumWidth(dp(64));
-        action.setOnClickListener(v -> listener.onPick(mirror));
-        row.addView(action);
+        if (checking) {
+            // Indikator kecil, bukan tombol: tidak ada yang perlu ditekan.
+            ProgressBar spinner = new ProgressBar(context);
+            spinner.setTag("anime_server_spinner");
+            spinner.setIndeterminate(true);
+            spinner.setLayoutParams(new LinearLayout.LayoutParams(dp(20), dp(20)));
+            row.addView(spinner);
+            return row;
+        }
 
+        if (source != null) {
+            Button action = new Button(context);
+            action.setText("Putar");
+            action.setTag("anime_server_action");
+            action.setAllCaps(false);
+            action.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+            // Tombol berwarna tema punya kontras yang sama dengan bilah lainnya,
+            // jadi tombol ini tetap terbaca pada kedua tema.
+            action.setTextColor(palette.accent);
+            action.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
+                    palette.accent & 0x33FFFFFF, palette.ripple, 10, context));
+            action.setPadding(dp(14), dp(8), dp(14), dp(8));
+            action.setMinimumHeight(dp(40));
+            action.setMinimumWidth(dp(64));
+            action.setOnClickListener(v -> listener.onPick(mirror));
+            row.addView(action);
+        }
         return row;
-    }
-
-    /** Nama server apa adanya dari halaman episode; tidak pernah dikarang. */
-    /** Nama server apa adanya dari halaman episode; tidak pernah dikarang. */
-    static String serverName(OtakudesuPlayback.Mirror mirror) {
-        if (mirror == null) return "Server tanpa nama";
-        String name = mirror.provider == null ? "" : mirror.provider.trim();
-        return name.isEmpty() ? "Server tanpa nama" : name;
     }
 
     /**
      * Status satu baris server.
      *
-     * <p>Empat keadaan dibedakan dengan teks: terverifikasi, sedang diperiksa,
-     * tidak kompatibel, dan belum diperiksa. Tidak ada tebakan dari nama.
+     * <p>Empat keadaan dibedakan dengan teks: siap, sedang diperiksa, tidak
+     * kompatibel, dan belum diperiksa. Tidak ada tebakan dari nama.
      */
     private TextView statusView(OtakudesuPlayback.Source source,
                                 OtakudesuServerPicker.Probed failure,
@@ -292,11 +356,11 @@ final class OtakudesuServerPanel {
         status.setTag("anime_server_status");
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         if (source != null) {
-            status.setText("Terverifikasi dapat diputar"
+            status.setText("Siap diputar"
                     + (source.kind == OtakudesuPlayback.Kind.HLS ? " · HLS" : " · MP4"));
             status.setTextColor(0xFF7FD18A);
         } else if (checking) {
-            status.setText("Sedang diperiksa…");
+            status.setText("Memeriksa…");
             status.setTextColor(palette.muted);
         } else if (failure != null) {
             status.setText(statusText(failure));
@@ -320,27 +384,28 @@ final class OtakudesuServerPanel {
             case UNAVAILABLE:
                 return "Tidak tersedia" + (note.isEmpty() ? "" : " — " + note);
             case READY:
-                return "Terverifikasi dapat diputar";
+                return "Siap diputar";
             default:
                 return "Belum diperiksa";
         }
     }
 
-    private View checkAllRow(Listener listener) {
-        Button checkAll = new Button(context);
-        checkAll.setText("Periksa semua server");
-        checkAll.setTag("anime_server_check_all");
-        checkAll.setAllCaps(false);
-        checkAll.setTextColor(palette.onSurface);
-        checkAll.setBackground(id.shuyasal.kuromaku.ui.Ui.rounded(
-                0x1AFFFFFF, 0x33FFFFFF, 12, context));
-        checkAll.setMinHeight(dp(48));
-        checkAll.setOnClickListener(v -> listener.onCheckAll());
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, dp(14), 0, 0);
-        checkAll.setLayoutParams(params);
-        return checkAll;
+    private static String qualityOf(OtakudesuPlayback.Mirror mirror) {
+        return mirror.quality == null || mirror.quality.isEmpty() ? "\u2014" : mirror.quality;
+    }
+
+    /** Kualitas unik, urut seperti kemunculan pertama di halaman episode. */
+    private static List<String> qualities(List<OtakudesuPlayback.Mirror> mirrors) {
+        Set<String> seen = new LinkedHashSet<>();
+        for (OtakudesuPlayback.Mirror mirror : mirrors) seen.add(qualityOf(mirror));
+        return new ArrayList<>(seen);
+    }
+
+    /** Nama server apa adanya dari halaman episode; tidak pernah dikarang. */
+    static String serverName(OtakudesuPlayback.Mirror mirror) {
+        if (mirror == null) return "Server tanpa nama";
+        String name = mirror.provider == null ? "" : mirror.provider.trim();
+        return name.isEmpty() ? "Server tanpa nama" : name;
     }
 
     private TextView note(String message) {
@@ -363,6 +428,18 @@ final class OtakudesuServerPanel {
         if (name.isEmpty()) name = "Server";
         if (mirror.quality == null || mirror.quality.isEmpty()) return name;
         return String.format(Locale.ROOT, "%s %s", name, mirror.quality);
+    }
+
+    /**
+     * Label tombol Server: jumlah yang benar-benar siap, bukan jumlah mirror.
+     *
+     * <p>"Server (9)" membuat pengguna mengira sembilan pilihan bisa diputar.
+     * Yang ditampilkan: {@code 2 siap · 9 mirror}.
+     */
+    static String counter(int ready, int total) {
+        if (total <= 0) return "Server";
+        if (ready <= 0) return total + " mirror";
+        return ready + " siap · " + total + " mirror";
     }
 
     /** Pilihan sintetis untuk hasil pemeriksaan yang dipakai pemutar. */

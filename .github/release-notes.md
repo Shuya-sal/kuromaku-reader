@@ -2,6 +2,13 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
+* **@VERSION@ — Server anime diperiksa otomatis, tanpa menekan Periksa.**
+  - Pemeriksaan seluruh mirror dimulai begitu episode dibuka dan berlanjut saat menu Server ditekan; maksimal dua permintaan sekaligus, hasilnya muncul satu per satu.
+  - Panel dibagi tiga bagian: **Siap diputar** (dikelompokkan per kualitas, tombol Putar), **Sedang diperiksa** (indikator, tanpa tombol), dan **Server lainnya (N)** yang dilipat berisi status `Tidak kompatibel`/`Tidak tersedia` beserta alasannya.
+  - Tombol "Periksa semua server" dan tombol "Periksa" per baris dihapus. "Periksa ulang yang gagal" hanya muncul bila memang ada yang gagal.
+  - Label tombol Server kini menyebut kenyataan: `2 siap · 9 mirror`, bukan `Server (9)` yang terkesan semuanya bisa diputar.
+  - Hasil pemeriksaan diingat 10 menit per episode + mirror, jadi membuka panel lagi tidak memeriksa dari awal; hasil episode lain tidak pernah tercampur.
+  - Bila tak satu pun server bisa diputar, panel menampilkan penjelasan dengan **Coba lagi** dan **Tonton di Sumber**.
 * **@VERSION@ — Status server terisi sendiri, dan pesan gagal tidak lagi menutupi video yang berjalan.**
   - Seluruh mirror sekarang diperiksa berurutan di latar (maksimal dua permintaan sekaligus), bukan hanya dua yang pertama. Status "Belum diperiksa" berubah sendiri menjadi terverifikasi atau tidak kompatibel tanpa pengguna menekan **Periksa** satu per satu.
   - Akar keluhan "video sudah jalan tetapi layar masih menampilkan pesan gagal": kotak pesan tidak pernah disembunyikan saat pemutar mencapai keadaan siap. Sekarang pesan itu hilang begitu gambar benar-benar berjalan, sehingga tidak perlu menekan **Coba Lagi** untuk mulai menonton.

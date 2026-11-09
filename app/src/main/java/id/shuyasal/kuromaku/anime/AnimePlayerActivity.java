@@ -712,7 +712,12 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 probedServers.clear();
                 failedServers.clear();
                 probeQueue.clear();
+                seedFromCache();
                 activePlayback = result;
+                // Pemeriksaan berjalan sendiri di latar sejak episode dibuka,
+                // jadi saat menu Server ditekan statusnya sudah terisi.
+                queueProbes();
+                pumpProbes();
 
                 // Sumber media yang sudah dipublikasikan halaman episode dipakai
                 // lebih dulu; kalau tidak ada, pemilih server yang menentukan.
@@ -733,7 +738,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
         if (!activeServerLabel.isEmpty()) {
             serverButton.setText(activeServerLabel);
         } else if (!mirrors.isEmpty()) {
-            serverButton.setText("Server (" + mirrors.size() + ")");
+            serverButton.setText(OtakudesuServerPanel.counter(
+                    probedServers.size(), mirrors.size()));
         } else {
             serverButton.setText("Server");
         }
@@ -759,7 +765,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
         OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
 
-        popupPanel(panel.build(mirrors, probedServers, failedServers, probingServers,
+        popupPanel(panel.build(mirrors, probedServers, failedServers, checkingKeys(),
                 panelListener()));
 
         // Pemeriksaan latar belakang dibatasi: hanya dua server yang paling
@@ -787,6 +793,34 @@ public class AnimePlayerActivity extends AppCompatActivity {
             if (probedServers.containsKey(id) || failedServers.containsKey(id)) continue;
             if (probingServers.contains(id)) continue;
             probeServer(mirror, id, false);
+        }
+    }
+
+    /**
+     * Kunci mirror yang sedang atau akan diperiksa.
+     *
+     * <p>Termasuk yang masih menunggu di antrean: pengguna melihat "Memeriksa…"
+     * untuk semuanya, bukan "Belum diperiksa" yang terasa seperti tidak ada
+     * yang berjalan.
+     */
+    private java.util.Set<String> checkingKeys() {
+        java.util.LinkedHashSet<String> keys = new java.util.LinkedHashSet<>(probingServers);
+        for (OtakudesuPlayback.Mirror mirror : probeQueue) {
+            if (mirror != null) keys.add(mirror.key());
+        }
+        return keys;
+    }
+
+    /** Pakai hasil pemeriksaan yang masih segar untuk episode ini. */
+    private void seedFromCache() {
+        long now = System.currentTimeMillis();
+        for (OtakudesuPlayback.Mirror mirror : mirrors) {
+            if (mirror == null) continue;
+            String id = mirror.key();
+            OtakudesuServerPicker.Probed cached = ServerProbeCache.get(episodeUrl, id, now);
+            if (cached == null) continue;
+            if (cached.playable() && cached.source != null) probedServers.put(id, cached.source);
+            else failedServers.put(id, cached);
         }
     }
 
@@ -873,12 +907,18 @@ public class AnimePlayerActivity extends AppCompatActivity {
                 pickServer(mirror);
             }
 
-            @Override public void onCheckAll() {
-                for (OtakudesuPlayback.Mirror mirror : new ArrayList<>(mirrors)) {
-                    String id = mirror.key();
-                    if (probedServers.containsKey(id) || probingServers.contains(id)) continue;
-                    probeServer(mirror, id, false);
-                }
+            @Override public void onRetryFailed() {
+                // Hanya yang gagal/kedaluwarsa yang diperiksa ulang; hasil yang
+                // masih segar tidak disentuh.
+                ServerProbeCache.forget(episodeUrl);
+                failedServers.clear();
+                queueProbes();
+                pumpProbes();
+                refreshServerPanel();
+            }
+
+            @Override public void onWatchSource() {
+                openEpisodePage();
             }
         };
     }
@@ -940,8 +980,14 @@ public class AnimePlayerActivity extends AppCompatActivity {
                     // "Tidak kompatibel"/"Tidak tersedia" dengan jujur.
                     failedServers.put(id, outcome);
                 }
+                ServerProbeCache.put(episodeUrl, id, outcome, System.currentTimeMillis());
                 markMirrorPlayerUrl(id, outcome.playerUrl);
-                refreshServerPanel();
+                updateServerButton();
+                // Satu pembaruan panel per gelombang hasil, bukan satu per
+                // mirror: panel tidak berkedip saat beberapa hasil tiba
+                // berdekatan.
+                main.removeCallbacks(refreshServerPanelTask);
+                main.postDelayed(refreshServerPanelTask, 150);
                 // Slot kosong dipakai mirror berikutnya dalam antrean.
                 pumpProbes();
                 if (!pickWhenReady) return;
@@ -989,7 +1035,7 @@ public class AnimePlayerActivity extends AppCompatActivity {
         OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
         OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
-        serverPanel.setContentView(panel.build(mirrors, probedServers, failedServers, probingServers,
+        serverPanel.setContentView(panel.build(mirrors, probedServers, failedServers, checkingKeys(),
                 panelListener()));
     }
 
