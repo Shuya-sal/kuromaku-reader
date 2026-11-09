@@ -776,9 +776,8 @@ public class AnimePlayerActivity extends AppCompatActivity {
         }
         OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
                 palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
-        serverPanelView = new OtakudesuServerPanel(this, colors);
-
-        popupPanel(serverPanelView.build(mirrors, probedServers, failedServers, checkingKeys(),
+        OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
+        popupPanel(panel, panel.build(mirrors, probedServers, failedServers, checkingKeys(),
                 panelListener()));
 
         // Pemeriksaan latar belakang dibatasi: hanya dua server yang paling
@@ -857,8 +856,19 @@ public class AnimePlayerActivity extends AppCompatActivity {
     }
 
     /** Panel ditampilkan sebagai popup agar tidak memindahkan layar video. */
-    private void popupPanel(View content) {
-        dismissServerPanel();
+    /**
+     * Tampilkan panel server sebagai popup.
+     *
+     * <p>Panel diserahkan bersama view-nya supaya referensi untuk menggambar
+     * ulang selalu menunjuk panel yang benar-benar tampil. Sebelumnya
+     * {@code dismissServerPanel()} di awal metode ini mengosongkan referensi
+     * itu, sehingga setiap pembaruan hasil keluar lebih awal dan dialog
+     * tertahan di "Memeriksa…" sampai dibuka ulang.
+     */
+    private void popupPanel(OtakudesuServerPanel panel, View content) {
+        if (serverPanel != null && serverPanel.isShowing()) serverPanel.dismiss();
+        serverPanel = null;
+        serverPanelView = panel;
         setPanelOpen(true);
         int width = Math.min(getResources().getDisplayMetrics().widthPixels - Ui.dp(this, 24),
                 Ui.dp(this, 420));

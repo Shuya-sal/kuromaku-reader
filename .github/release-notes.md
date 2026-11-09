@@ -4,6 +4,9 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
 * **@VERSION@ — Kestabilan pengujian: baris chapter diberi satu putaran tata letak.**
   - Tes akordeon volume membaca baris chapter sebelum RecyclerView sempat menata isinya; hasilnya bergantung urutan tes. Tidak ada perubahan perilaku aplikasi.
+* **@VERSION@ — Dialog server benar-benar berubah saat pemeriksaan selesai.**
+  - Perbaikan sebelumnya menyimpan panel di referensi yang justru dikosongkan oleh `dismissServerPanel()` di awal `popupPanel()`, jadi pembaruan tetap tidak pernah sampai ke layar. Kini panel diserahkan bersama view-nya ke popup, sehingga referensi selalu menunjuk panel yang tampil.
+  - Tes regresi baru membuktikan hasil pemeriksaan mengubah isi dialog yang sedang terbuka — dan gagal bila referensi itu dikosongkan lagi.
 * **@VERSION@ — Dialog server berubah langsung saat pemeriksaan selesai.**
   - Akar bug: `PopupWindow.setContentView()` diabaikan selama popup tampil, jadi dialog hanya terisi sekali saat dibuka. Hasil pemeriksaan baru terlihat setelah menu Server ditutup dan dibuka lagi. Sekarang popup dibuat sekali dan isinya digambar ulang di tempat setiap ada hasil.
   - Posisi gulir dipertahankan saat satu baris berpindah dari "Sedang diperiksa" ke "Siap diputar".
