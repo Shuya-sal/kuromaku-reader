@@ -96,4 +96,29 @@ public final class ChapterKey {
         String keyB = of(b);
         return !keyA.isEmpty() && keyA.equals(keyB);
     }
+
+    /**
+     * Label yang bisa dibaca manusia dari kunci kanonis.
+     *
+     * <p>{@code n:10} menjadi "Chapter 10", {@code prolog} menjadi "Prolog",
+     * {@code extra:2} menjadi "Extra 2". Kunci yang tidak dikenali
+     * dikembalikan apa adanya supaya tidak ada label karangan.
+     */
+    public static String displayLabel(String key) {
+        if (key == null || key.isEmpty()) return "";
+        if (key.startsWith("n:")) {
+            return "Chapter " + key.substring(2).replace(":", " Part ");
+        }
+        if (key.startsWith("extra")) {
+            String tail = key.length() > 6 ? key.substring(6) : "";
+            return tail.isEmpty() || ":".equals(tail) ? "Extra" : "Extra " + tail.replace(":", "");
+        }
+        if (key.startsWith("special")) {
+            String tail = key.length() > 8 ? key.substring(8) : "";
+            return tail.isEmpty() ? "Special" : "Special " + tail.replace(":", "");
+        }
+        if (key.equals("prolog")) return "Prolog";
+        if (key.equals("epilog")) return "Epilog";
+        return key;
+    }
 }

@@ -307,6 +307,21 @@ public final class SyncStore {
         prefs.edit().putString(KEY_PROGRESS, map.toString()).apply();
     }
 
+    /**
+     * Chapter kanonis terakhir yang dibuka pada salah satu sumber.
+     *
+     * <p>Dipakai untuk menawarkan "Lanjutkan Membaca" pada sumber yang belum
+     * punya riwayat lokal sendiri: judulnya sudah dibaca di sumber pasangan,
+     * jadi sumber ini tetap bisa menawarkan chapter yang sama.
+     */
+    public Progress lastOpened(String seriesId) {
+        Progress best = null;
+        for (Progress item : progressFor(seriesId)) {
+            if (best == null || item.lastOpenedAt > best.lastOpenedAt) best = item;
+        }
+        return best;
+    }
+
     /** Chapter kanonis tertinggi yang sudah selesai, atau {@code null}. */
     public String lastCompleted(String seriesId) {
         String best = null;

@@ -1,4 +1,10 @@
-* **@VERSION@ — Beranda Manga Server 3 disamakan dengan Manga Server 2.**
+## 2.57.0 — Perbaikan crash beranda Manga Server 3
+
+* **Crash `IndexOutOfBoundsException` saat membuka beranda Manga Server 3 diperbaiki.** Adapter daftar kini memegang salinan datanya sendiri, jadi tidak ada lagi saat di mana RecyclerView meminta posisi yang datanya sudah dikosongkan. Data diserahkan ke adapter sebelum adapter dipasang.
+* **"Lanjutkan Membaca" di Manga Server 3 kini juga memuat judul yang dibaca di Manga Server 2** — hanya bila judulnya sudah dipasangkan di layar detail. Kartu tanpa tautan tidak ditampilkan, dan kartu dari Server 2 dibuka lewat halaman detail (alamat chapter tidak ditebak).
+* Judul dari Server 2 ditandai "Manga Server 2" tanpa persentase palsu.
+
+* **2.57.0 — Beranda Manga Server 3 disamakan dengan Manga Server 2.**
   - Kerangkanya sekarang identik: bar atas dengan menu samping, judul, tombol unduhan, dan menu titik tiga; kolom pencarian "Cari judul manga" dengan tombol **Cari**; chip **Chapter Terbaru / Terpopuler / Manga Terbaru / Riwayat / Favorit** yang bisa digeser; baris jumlah; rail **Lanjutkan Membaca**; lalu satu daftar.
   - Chapter Terbaru dan Riwayat tampil sebagai **baris** (cover 48x70, judul, "Ch. N · waktu") seperti di Manga Server 2. Terpopuler, Manga Terbaru, dan hasil pencarian tampil sebagai **grid** dengan rasio cover yang sama.
   - Rail **Lanjutkan Membaca** berisi kartu ringkas cover 64x90, judul, "Ch. N · Y%", dan bar progres — persis bentuk kartu di Manga Server 2. Rail menjadi item pertama daftar sehingga ikut tergulir, dan hilang sama sekali saat belum ada riwayat.
@@ -6,7 +12,7 @@
   - Bagian pencarian, chip, dan baris jumlah menyusut saat menggulir turun lalu kembali saat naik, dengan ambang asimetris dan penguncian animasi supaya tidak berkedip.
   - Menu samping sekarang memuat **Manga Server 3**, dan tema Light/Dark/Sepia/System berlaku langsung tanpa memuat ulang daftar.
   - Ikon unduhan ditampilkan redup dengan penjelasan jujur bahwa unduhan offline Komiku belum tersedia; tidak ada tombol yang terlihat berfungsi padahal tidak.
-* **@VERSION@ — Progres baca Manga Server 2 dan Manga Server 3 kini tersinkron dua arah.**
+* **2.57.0 — Progres baca Manga Server 2 dan Manga Server 3 kini tersinkron dua arah.**
   - Tautkan judul yang sama lewat bar **"Cari pasangan di Manga Server 2/3"** di layar detail. Saran diambil dari riwayat dan favorit, atau dicari langsung ke sumber lain; setiap saran menyebut tingkat kemiripannya, dan penautan tetap menunggu konfirmasi Master — judul yang hanya mirip nama tidak pernah digabung otomatis.
   - Setelah tertaut, membaca chapter di satu server langsung menandai chapter yang sama di server lain (`✓ selesai di Manga Server 3`), termasuk saat chapter dibuka dari daftar. Status selesai hanya ditambahkan — membuka chapter lama tidak pernah mencabutnya.
   - Progres disimpan satu kali sebagai data kanonis, bukan disalin ke database sumber lain. Karena itu tidak ada dua penulis yang saling menimpa, dan siklus Server 2 → Server 3 → Server 2 tidak berputar.
@@ -14,7 +20,7 @@
   - Baris **Lanjutkan** di daftar chapter Manga Server 3 memakai chapter kanonis terakhir, tetapi hanya bila chapter itu benar-benar ada di sumber tersebut — tidak pernah mengarang alamat.
   - Tombol **Lepas tautan** tersedia di kedua server. Melepas tidak menghapus riwayat maupun progres; menautkan ulang memakai catatan yang sama.
   - Status unduhan tetap milik masing-masing sumber dan tidak ikut disinkronkan.
-* **@VERSION@ — Progres Manga Server 2 dan Manga Server 3 tersinkron dua arah.**
+* **2.57.0 — Progres Manga Server 2 dan Manga Server 3 tersinkron dua arah.**
   - Judul yang dipasangkan kini berbagi status baca: selesaikan Chapter 10 di Manga Server 2, buka judul yang sama di Manga Server 3, dan chapter itu sudah bertanda **✓ dibaca**. Berlaku sebaliknya juga, dan di perangkat yang sama tanpa internet.
   - Pemasangan judul memakai identitas karya bersama, bukan nama saja. Saran diambil dari riwayat/favorit sumber lain atau hasil pencarian, dengan tingkat keyakinan yang ditampilkan apa adanya — *judul sama* dan *judul alternatif sama* dianggap kuat, sedangkan kemiripan kata seperti **Magic Emperor** vs **Demonic Emperor** tidak pernah ditautkan otomatis.
   - Bar di layar detail menyebut keadaan sebenarnya: **"Belum dipasangkan…"** selama belum ada pasangan, **"Tersinkron dengan Manga Server 2/3"** setelah dipasangkan, lengkap dengan tombol **Ubah pasangan** dan **Lepas tautan**.
@@ -22,7 +28,7 @@
   - Penomoran chapter dinormalkan lebih dulu: `Chapter 10`, `Ch. 10`, dan `Bab 10` dianggap chapter yang sama, sementara `Prolog`, `Chapter 0`, `Extra`, `Epilog`, dan `Chapter 1.5` punya identitas sendiri dan tidak pernah disamakan dengan `Chapter 1`.
   - Status **selesai** tidak pernah dicabut hanya karena pengguna membuka chapter lama, dan kejadian yang lebih tua diabaikan sehingga sinkronisasi tidak berputar balik. Persentase scroll tetap milik masing-masing sumber karena jumlah halaman bisa berbeda.
   - Judul yang belum dipasangkan sama sekali tidak terpengaruh: tidak ada klaim sinkron palsu dan tidak ada data yang berpindah.
-* **@VERSION@ — Manga Server 3 (Komiku) hadir sebagai sumber kelima.**
+* **2.57.0 — Manga Server 3 (Komiku) hadir sebagai sumber kelima.**
   - Source Hub kini punya lima kartu: Novel, Manga Server 1, Manga Server 2, **Manga Server 3**, dan Anime Streaming. Kartu baru berada tepat setelah Manga Server 2 dan tetap muat di layar kecil karena halaman hub bisa digulir.
   - Beranda Manga Server 3 native: **Chapter Terbaru**, **Terpopuler**, **Manga Terbaru**, dan **Favorit**, plus pencarian judul. Semua daftar dibaca langsung dari halaman Komiku saat itu — tidak ada katalog contoh yang ditanam di aplikasi.
   - Detail judul menampilkan cover, judul alternatif, status, tipe, genre, sinopsis, dan daftar chapter dengan tanggal. Urutan default **Terbaru → Terlama**, bisa dibalik menjadi **Terlama → Terbaru**, dan bisa dicari — berlaku untuk seluruh daftar, bukan hanya bagian yang tampil.
@@ -34,66 +40,66 @@ Pembaca native untuk novel dari Kaori Translation. Dua novel bawaan
 (*Monogatari no Kuromaku* dan *Magical★Explorer*) tetap ada, dan novel
 lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
 
-* **@VERSION@ — Kestabilan pengujian: baris chapter diberi satu putaran tata letak.**
+* **2.57.0 — Kestabilan pengujian: baris chapter diberi satu putaran tata letak.**
   - Tes akordeon volume membaca baris chapter sebelum RecyclerView sempat menata isinya; hasilnya bergantung urutan tes. Tidak ada perubahan perilaku aplikasi.
-* **@VERSION@ — Dialog server benar-benar berubah saat pemeriksaan selesai.**
+* **2.57.0 — Dialog server benar-benar berubah saat pemeriksaan selesai.**
   - Perbaikan sebelumnya menyimpan panel di referensi yang justru dikosongkan oleh `dismissServerPanel()` di awal `popupPanel()`, jadi pembaruan tetap tidak pernah sampai ke layar. Kini panel diserahkan bersama view-nya ke popup, sehingga referensi selalu menunjuk panel yang tampil.
   - Tes regresi baru membuktikan hasil pemeriksaan mengubah isi dialog yang sedang terbuka — dan gagal bila referensi itu dikosongkan lagi.
-* **@VERSION@ — Dialog server berubah langsung saat pemeriksaan selesai.**
+* **2.57.0 — Dialog server berubah langsung saat pemeriksaan selesai.**
   - Akar bug: `PopupWindow.setContentView()` diabaikan selama popup tampil, jadi dialog hanya terisi sekali saat dibuka. Hasil pemeriksaan baru terlihat setelah menu Server ditutup dan dibuka lagi. Sekarang popup dibuat sekali dan isinya digambar ulang di tempat setiap ada hasil.
   - Posisi gulir dipertahankan saat satu baris berpindah dari "Sedang diperiksa" ke "Siap diputar".
   - Progres agregat ditampilkan: `7 dari 9 diperiksa · 2 siap`, lalu `Selesai · 2 siap dari 9`.
   - Setiap pemeriksaan punya batas waktu 20 detik; mirror yang tidak menjawab menjadi **Tidak dapat diperiksa — waktu habis** dan slotnya dipakai mirror berikutnya, bukan berputar selamanya.
   - Hasil yang datang terlambat setelah batas waktu diabaikan, sehingga status tidak berubah bolak-balik.
-* **@VERSION@ — Server anime diperiksa otomatis, tanpa menekan Periksa.**
+* **2.57.0 — Server anime diperiksa otomatis, tanpa menekan Periksa.**
   - Pemeriksaan seluruh mirror dimulai begitu episode dibuka dan berlanjut saat menu Server ditekan; maksimal dua permintaan sekaligus, hasilnya muncul satu per satu.
   - Panel dibagi tiga bagian: **Siap diputar** (dikelompokkan per kualitas, tombol Putar), **Sedang diperiksa** (indikator, tanpa tombol), dan **Server lainnya (N)** yang dilipat berisi status `Tidak kompatibel`/`Tidak tersedia` beserta alasannya.
   - Tombol "Periksa semua server" dan tombol "Periksa" per baris dihapus. "Periksa ulang yang gagal" hanya muncul bila memang ada yang gagal.
   - Label tombol Server kini menyebut kenyataan: `2 siap · 9 mirror`, bukan `Server (9)` yang terkesan semuanya bisa diputar.
   - Hasil pemeriksaan diingat 10 menit per episode + mirror, jadi membuka panel lagi tidak memeriksa dari awal; hasil episode lain tidak pernah tercampur.
   - Bila tak satu pun server bisa diputar, panel menampilkan penjelasan dengan **Coba lagi** dan **Tonton di Sumber**.
-* **@VERSION@ — Status server terisi sendiri, dan pesan gagal tidak lagi menutupi video yang berjalan.**
+* **2.57.0 — Status server terisi sendiri, dan pesan gagal tidak lagi menutupi video yang berjalan.**
   - Seluruh mirror sekarang diperiksa berurutan di latar (maksimal dua permintaan sekaligus), bukan hanya dua yang pertama. Status "Belum diperiksa" berubah sendiri menjadi terverifikasi atau tidak kompatibel tanpa pengguna menekan **Periksa** satu per satu.
   - Akar keluhan "video sudah jalan tetapi layar masih menampilkan pesan gagal": kotak pesan tidak pernah disembunyikan saat pemutar mencapai keadaan siap. Sekarang pesan itu hilang begitu gambar benar-benar berjalan, sehingga tidak perlu menekan **Coba Lagi** untuk mulai menonton.
   - Bila satu server gagal saat video lain sedang berjalan, kegagalan dilaporkan tanpa menjeda atau menutup tontonan.
-* **@VERSION@ — Layar tidak lagi meredup saat menonton, dan daftar server tidak menawarkan putar palsu.**
+* **2.57.0 — Layar tidak lagi meredup saat menonton, dan daftar server tidak menawarkan putar palsu.**
   - Akar layar gelap: aplikasi tidak pernah memakai `FLAG_KEEP_SCREEN_ON`, sehingga Android menjalankan peredupan dan screen timeout normal begitu layar tidak disentuh — bertepatan dengan kontrol yang hilang di detik ke-5. Sekarang flag ditahan selama video berjalan atau buffering di depan pengguna, dan dilepas saat jeda, selesai, atau keluar layar. Kecerahan pilihan pengguna tidak pernah ditimpa (`BRIGHTNESS_OVERRIDE_NONE`).
   - Mirror yang gagal diperiksa kini disimpan statusnya, bukan dibuang. Panel menampilkan server terverifikasi lebih dulu dengan tombol **Putar**; mirror lain ada di balik **Lihat semua server (N)** dengan status `Tidak kompatibel — hanya pemutar penyedia` / `Tidak tersedia — <alasan>`.
   - Tombol pada server yang belum terverifikasi berbunyi **Periksa**, bukan **Putar**. Bila belum ada server siap, daftar langsung terbuka dengan penjelasan.
   - Satu ketukan pada baris server tidak lagi memicu aksi dua kali (listener ganda dihapus).
-* **@VERSION@ — Header beranda Anime Streaming tidak lagi berkedip saat digulir.**
+* **2.57.0 — Header beranda Anime Streaming tidak lagi berkedip saat digulir.**
   - Header tidak lagi mengubah tinggi layout per frame (itu yang membuat daftar berubah ukuran dan posisi gulir melompat). Sekarang header menjadi lapisan di atas daftar dan hanya bergeser + memudar; ukuran `RecyclerView` tetap.
   - Satu pengendali keadaan menggantikan pemanggilan langsung per event gulir, dengan ambang berbeda untuk sembunyi (24 px) dan tampil (12 px), sehingga fling bolak-balik dan gerakan kecil tidak membuat header berosilasi.
   - Animator lama dibatalkan sebelum transisi baru, jadi tidak ada dua animator yang berebut properti yang sama.
   - Header selalu tampil ketika daftar kembali ke posisi paling atas.
   - Bagian **Lanjutkan Menonton** kini hilang seluruhnya — judul, kartu, dan jaraknya — bila riwayat kosong; celah tinggi di bawah kolom pencarian tidak muncul lagi.
   - Inset atas daftar mengikuti tinggi header yang sebenarnya, dan anchor gulir dijaga ketika tinggi itu berubah.
-* **@VERSION@ — Kestabilan pengujian: pemulihan unduhan tidak berjalan di lingkungan tes.**
+* **2.57.0 — Kestabilan pengujian: pemulihan unduhan tidak berjalan di lingkungan tes.**
   - Thread pemulihan di `Application` bisa hidup melewati sandbox pengujian dan menyentuh objek yang sudah dilepas. Di perangkat jalur ini tetap berjalan seperti biasa.
-* **@VERSION@ — Kestabilan pengujian: menunggu activity hasil recreate.**
+* **2.57.0 — Kestabilan pengujian: menunggu activity hasil recreate.**
   - Tes area atas anime membaca instance Activity yang mungkin sudah diganti `recreate()`; sekarang selalu memakai instance terbaru. Tidak ada perubahan perilaku aplikasi.
-* **@VERSION@ — Unduhan yang sedang berjalan kini tampil di layar Unduhan.**
+* **2.57.0 — Unduhan yang sedang berjalan kini tampil di layar Unduhan.**
   - **Bagian "Sedang diunduh" di layar Unduhan Anime Streaming dan Manga Server 2.** Sebelumnya layar itu hanya menampilkan berkas yang sudah selesai, sehingga unduhan yang berjalan tidak terlihat di mana pun selain daftar episode/chapter.
   - **Nama yang bisa dibaca, bukan kunci teknis.** Judul anime/manga dan keterangan episode (mis. "Episode 3 · 720p") disimpan sekali saat unduhan dijadwalkan, lalu dipertahankan saat progres berubah.
   - **Persentase dan progress bar** dari byte yang benar-benar tersimpan; tanpa total yang diketahui, tampil "Menyiapkan…" alih-alih persen palsu.
   - **Tombol batal per baris** (area sentuh 48dp) membatalkan hanya unduhan itu, memakai tag pekerjaan yang stabil.
   - **Hanya yang benar-benar berjalan** yang masuk bagian ini; yang gagal tetap tampil di daftar episode dengan tombol Coba Lagi, jadi tidak menumpuk.
   - Bagian ini diperbarui tanpa membangun ulang daftar berkas, sehingga posisi gulir tidak melompat.
-* **@VERSION@ — Perbaikan akar masalah force close saat unduhan di Android 16.**
+* **2.57.0 — Perbaikan akar masalah force close saat unduhan di Android 16.**
   - **Penyebab sebenarnya, dari stack trace perangkat:** `android.app.InvalidForegroundServiceTypeException: Starting FGS with type none ... targetSDK=35 has been prohibited`, dilempar `Service.startForeground` lewat `SystemForegroundService$Api31Impl.startForeground`.
   - **Sebabnya:** `ForegroundInfo` dibuat dengan konstruktor 2 argumen, sehingga tipe foreground service = `FOREGROUND_SERVICE_TYPE_NONE`. Android 16 (API 36) melarang aplikasi `targetSdk >= 35` memulai foreground service bertipe `none`. Karena exception dilempar dari dalam service WorkManager, ia tidak bisa ditangkap dan langsung mematikan proses — di ketiga modul, karena semuanya memakai jalur notifikasi yang sama.
   - **Perbaikannya:** `ForegroundInfo` kini selalu memakai tipe eksplisit `dataSync`, sama dengan yang dideklarasikan di manifest dan izin `FOREGROUND_SERVICE_DATA_SYNC`.
   - Tes baru menjaga tipe ini tidak pernah kembali menjadi `none`.
-* **@VERSION@ — Laporan crash kini juga menangkap crash native, ANR, dan pembunuhan oleh sistem.**
+* **2.57.0 — Laporan crash kini juga menangkap crash native, ANR, dan pembunuhan oleh sistem.**
   - **Riwayat kematian proses dibaca dari Android** (`ApplicationExitInfo`, API 30+): jenis kejadian, waktu, keterangan, dan potongan tombstone untuk crash native. Sebelumnya hanya exception Java yang tercatat, sehingga aplikasi yang ditutup sistem atau crash di kode native tidak meninggalkan jejak apa pun.
   - **Dialog laporan muncul dari dua sumber** — exception tertangkap dan riwayat sistem — dengan tombol **Salin laporan**.
   - Tidak ada perubahan pada data pengguna, unduhan, atau progres.
-* **@VERSION@ — Unduhan: ForegroundInfo untuk pekerjaan yang dijalankan ulang, antrean rusak diperbaiki, laporan crash muncul sendiri.**
+* **2.57.0 — Unduhan: ForegroundInfo untuk pekerjaan yang dijalankan ulang, antrean rusak diperbaiki, laporan crash muncul sendiri.**
   - **`getForegroundInfoAsync()` di-override di ketiga worker.** Bawaan `Worker` melempar `IllegalStateException("Not implemented")`; WorkManager memanggilnya saat pekerjaan perlu dipromosikan menjadi foreground di luar `doWork()` — misalnya setelah proses dibunuh sistem. Tanpa override, unduhan yang dijalankan ulang gagal dengan exception.
   - **Antrean WorkManager yang rusak diperbaiki otomatis.** Bila basis data antrean tidak bisa dibuka, berkas `androidx.work.workdb*` dihapus dan dibuat ulang. Yang hilang hanya daftar pekerjaan lama; novel, manga, anime, progres, dan berkas unduhan tidak disentuh.
   - **Semua jalur "Unduh" dibungkus.** `enqueueVolume` (Download Semua) dan `enqueueChapters` (manga) kini menangkap `Throwable`; kegagalan menjadi status, bukan force close.
   - **Laporan crash muncul sendiri.** Saat aplikasi dibuka setelah crash, Source Hub menampilkan dialog berisi stack trace dengan tombol **Salin laporan** — tanpa adb.
-* **@VERSION@ — Unduhan tiga modul tidak lagi mematikan aplikasi, plus penangkap crash di dalam aplikasi.**
+* **2.57.0 — Unduhan tiga modul tidak lagi mematikan aplikasi, plus penangkap crash di dalam aplikasi.**
   - **Laporan crash bisa dibaca tanpa adb.** Menu ⋮ beranda Novel kini punya **Laporan crash terakhir** (muncul bila ada). Isinya versi aplikasi, versi Android, thread, `FATAL EXCEPTION`, dan `Caused by` — bisa disalin langsung dari aplikasi.
   - **Tidak ada exception yang lolos dari pekerja unduhan.** Novel, Manga Server 2, dan Anime Streaming semuanya membungkus `doWork()`; kegagalan berakhir sebagai status *Gagal*, bukan kematian proses.
   - **Antrean novel tidak lagi melempar ke thread UI.** Kegagalan menjadwalkan WorkManager menjadi status gagal yang jujur.
@@ -102,7 +108,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Status tidak lagi menulis disk setiap blok byte.** Penulisan dibatasi 500 ms dan `fsync` hanya untuk perubahan status, sehingga thread UI tidak ikut menunggu penyimpanan.
   - **Rekonsiliasi punya masa tenggang 30 detik.** Klaim "tersimpan" yang baru ditulis tidak langsung diturunkan menjadi gagal.
   - **Penangkap crash idempoten.** Dipasang sekali per proses; pemasangan berulang tidak lagi membuat rantai handler yang menghabiskan memori.
-* **@VERSION@ — Perbaikan darurat: unduhan anime tidak lagi mematikan aplikasi.**
+* **2.57.0 — Perbaikan darurat: unduhan anime tidak lagi mematikan aplikasi.**
   - **Tidak ada exception yang lolos dari pekerjaan unduhan.** Seluruh `doWork()` dibungkus; apa pun yang terjadi, hasilnya status *Gagal* di episode itu, bukan kematian proses.
   - **Alamat berkas yang tidak sah ditolak lebih awal.** OkHttp melempar `IllegalArgumentException` untuk alamat non-http(s); sekarang diperiksa dulu dan dilaporkan sebagai "alamat berkas tidak sah".
   - **Pemeriksaan kualitas aman.** Kegagalan tak terduga saat membaca halaman sumber menjadi pesan di lembar kualitas, bukan force close.
@@ -111,7 +117,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Karantina setelah pembaruan.** Pekerjaan unduhan anime lama yang sudah pernah dicoba tidak dilanjutkan otomatis pada versi baru; statusnya "Perlu dicoba ulang". Unduhan Novel dan Manga Server 2 tidak disentuh.
   - **Percobaan dibatasi 3×.** Kegagalan permanen menjadi *Gagal*, bukan retry tanpa akhir.
 
-* **@VERSION@ — Crash pilih server, landscape yang menetap, dan kontrol auto-hide.**
+* **2.57.0 — Crash pilih server, landscape yang menetap, dan kontrol auto-hide.**
   - **Crash saat memilih server diperbaiki dari akarnya.** Pilihan pengguna dulu dicari dengan `mirrors.indexOf(mirror)`. Panel yang masih terbuka bisa memegang mirror dari daftar episode sebelumnya, sehingga hasilnya `-1`; indeks itu dipakai membaca dan menulis daftar, dan penjaganya (`index < mirrors.size()`) justru **lolos** untuk `-1`. Hasilnya `IndexOutOfBoundsException: Index -1 out of bounds for length 2` — aplikasi tertutup. Sekarang setiap mirror punya **identitas kanonis** (`quality|provider|serverId|posisi`) dan tidak ada indeks mentah yang dipakai untuk menulis.
   - **Dua server pada resolusi sama tidak lagi saling menimpa.** Dulu hasil pemeriksaan disimpan per posisi di daftar, jadi 480p ODCDN dan 480p Vidhide berbagi satu kunci. Sekarang per identitas, sehingga setiap server dapat dipilih sendiri dan statusnya benar.
   - **Perpindahan server diserialisasi.** Ketukan kedua saat perpindahan berjalan diabaikan dengan pemberitahuan, bukan dijalankan bersamaan. Hasil pemeriksaan dari generasi lama dibuang (`serverGeneration`), jadi callback lama tidak menulis ke pemutar yang sudah memuat server lain.
@@ -122,7 +128,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Galat pemutaran tidak menutup aplikasi.** Kegagalan membuat pemutar, sumber kosong, dan `onPlayerError` berakhir sebagai pesan spesifik dengan tombol **Coba Lagi**, **Pilih Server Lain**, dan **Tonton di Sumber** — bukan crash, dan Activity tidak pernah `finish()` sendiri.
   - **Timer pemutar tidak lagi menumpuk.** `startTicker()` dulu hanya membatalkan `saveTick`; setiap perpindahan server menambah satu rantai `clockTick` yang memposting dirinya sendiri. Sekarang keduanya dibatalkan lebih dulu.
 
-* **@VERSION@ — Full Screen, unduh episode anime, dan perpustakaan offline.**
+* **2.57.0 — Full Screen, unduh episode anime, dan perpustakaan offline.**
   - **Satu tombol "Full Screen".** Label "Putar Layar" diganti "Full Screen" di tombol, menu, dan `contentDescription`. Satu ketukan = **landscape + immersive sekaligus**; ketukan berikutnya mengembalikan orientasi semula beserta system bar. Tidak ada lagi tombol "layar penuh tanpa rotasi" yang terpisah, jadi tidak ada dua kontrol yang mirip dengan hasil berbeda.
   - **Kontrol hilang otomatis 5 detik** di mode layar penuh; satu ketukan menampilkannya lagi selama 5 detik. Timer ditahan saat menyeret timeline, saat dialog/panel terbuka, dan saat video dijeda atau buffering.
   - **Unduh episode — benar-benar tersimpan.** Tombol **Unduh** ada di pemutar dan di setiap baris episode halaman detail. Unduhan berjalan lewat **WorkManager** (satu pekerjaan unik per episode) dan menulis ke penyimpanan khusus aplikasi: berkas `*.part` selama berjalan, lalu `rename` setelah lolos pemeriksaan ukuran dan kepala berkas (MP4 `ftyp` / WebM EBML). Berkas setengah jadi atau halaman HTML tidak pernah tampil sebagai "Tersimpan offline".
@@ -133,7 +139,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Pemutaran offline tanpa jaringan.** Episode tersimpan diputar dari berkas (`file://`), dan perpustakaan membuka pemutar dengan mode offline: tanpa permintaan jaringan sama sekali.
   - **Persetujuan sekali sebelum unduhan pertama.** Berkas disimpan untuk ditonton sendiri di perangkat ini, tidak untuk disebarkan ulang.
 
-* **@VERSION@ — Unduh dari daftar episode, pemutar lebih ringkas, tema/genre di beranda anime.**
+* **2.57.0 — Unduh dari daftar episode, pemutar lebih ringkas, tema/genre di beranda anime.**
   - **Unduh langsung dari daftar episode.** Tombol **Unduh** pada baris episode tidak lagi membuka pemutar. Halaman episode diperiksa di latar belakang, lalu unduhan diantrekan ke WorkManager. Tombol pada baris itu sendiri melaporkan keadaan: **Unduh → Menyiapkan… → 12% (dengan bar progres mini) → Tersimpan**, atau **Coba Lagi** bila gagal, dan **Lanjutkan** bila ada sisa unduhan dari sesi sebelumnya.
   - **Pemilihan server untuk unduhan jujur.** Berkas yang diterbitkan halaman episode dipakai lebih dulu; bila tidak ada, mirror diperiksa satu per satu dengan batas maksimal 3. HLS/DASH, halaman embed, dan mirror pemutar bertaut tidak pernah dianggap bisa diunduh — pengguna diberi alasan dan jalan "Tonton di Sumber".
   - **Pemutar lebih ringkas.** Tombol besar **Full Screen** dan **Unduh** di area bawah dihapus; area bawah kembali hanya berisi kontrol pemutaran inti (Sebelumnya, −10s, Putar/Jeda, +10s, Berikutnya, timeline). Keduanya pindah ke menu titik tiga, bersama **Info episode** dan **Buka sumber**.
@@ -142,7 +148,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Area atas menyusut saat scroll.** Kolom cari, "Lanjutkan Menonton", dan baris filter menyusut bersama (animasi tinggi 180 ms) ketika daftar digulir ke bawah, dan muncul kembali saat digulir ke atas atau saat daftar baru dimuat.
   - **Pembersihan setelah layar ditutup.** Callback UI dan tugas latar tidak lagi berjalan setelah Activity dihancurkan, sehingga tidak ada `RejectedExecutionException` ketika layar ditutup di tengah pemuatan.
 
-* **@VERSION@ — Batalkan unduhan dari daftar episode, pilih kualitas 720p/480p, toolbar beranda dirapikan.**
+* **2.57.0 — Batalkan unduhan dari daftar episode, pilih kualitas 720p/480p, toolbar beranda dirapikan.**
   - **Tombol X pada baris episode.** Saat episode antre atau sedang diunduh, baris itu menampilkan persen, bar progres, dan tombol **X** 48dp (`contentDescription="Batalkan unduhan episode"`). X membatalkan **hanya episode itu**, lewat tag pekerjaan yang stabil — bukan posisi baris, bukan semua unduhan. Berkas sementara dibuang; berkas yang sudah lengkap tidak pernah dihapus, termasuk bila pembatalan datang berbarengan dengan selesainya unduhan.
   - **Pembatalan tidak menghidupkan ulang unduhan.** Pengunduh membedakan "dibatalkan" dari "koneksi terputus": pembatalan berhenti dan tidak dijadwalkan ulang, sedangkan koneksi terputus tetap bisa dilanjutkan.
   - **Lembar Pilih Kualitas Unduhan.** Menekan **Unduh** membuka lembar kualitas (bukan pemutar). Hanya kualitas yang benar-benar punya berkas yang bisa dipilih; sisanya tampil nonaktif dengan alasan. Nama server dan ukuran berkas berasal dari pemeriksaan nyata (permintaan satu byte ke server), bukan perkiraan.
@@ -151,7 +157,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Toolbar beranda anime tanpa panah kembali.** Susunannya `☰ · Anime Otakudesu · Unduhan · ⋮`. Tombol Back Android dari beranda menuju **Source Hub**, bukan layar sebelumnya yang kebetulan ada di tumpukan. Detail anime dan pemutar tetap punya tepat satu tombol Kembali.
   - **Persen dari byte nyata.** Angka berasal dari byte yang benar-benar tersimpan; saat halaman ditinggal dan dibuka lagi, status dibaca ulang dari berkas dan WorkManager, bukan dari state Activity.
 
-* **@VERSION@ — Unduhan bertahan di latar belakang, menu ⋮ seragam, nama sumber baru.**
+* **2.57.0 — Unduhan bertahan di latar belakang, menu ⋮ seragam, nama sumber baru.**
   - **Status unduhan tidak lagi hilang saat proses mati.** Novel, Manga Server 2, dan Anime Streaming menulis keadaannya ke satu berkas JSON di penyimpanan aplikasi (penulisan atomik). Setelah aplikasi dibuka ulang, layar membaca keadaan itu — bukan mulai dari "belum diunduh".
   - **Rekonsiliasi saat aplikasi dibuka.** Entri yang tercatat "antre/mengunduh" tetapi tidak bergerak lagi ditandai **Dijeda** (bukan berputar selamanya, bukan dianggap selesai), dan klaim "tersimpan" yang berkasnya sudah tidak ada diturunkan menjadi gagal. Tidak ada berkas unduhan yang dihapus.
   - **Foreground worker + notifikasi progres.** Unduhan episode video, chapter manga, dan volume novel berjalan sebagai foreground worker dengan notifikasi progres dan aksi **Batal** yang membatalkan pekerjaan itu saja. Bila izin notifikasi ditolak, unduhan tetap berjalan.
@@ -159,9 +165,9 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Pengaturan Manga Server 2 hanya dua:** Tema dan Indikator Progres Membaca. Entri Domain Sumber dihapus dari UI; resolver domain internal tidak diubah.
   - **Nama sumber baru:** Novel, **Manga Server 1** (Voratoon), **Manga Server 2** (Shinigami), **Anime Streaming** (Otakudesu). Hanya label yang berubah — id sumber, database, lokasi unduhan, dan nama pekerjaan tetap.
 
-* Versi: **@VERSION@** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
+* Versi: **2.57.0** (versionCode @VERSION_CODE@) — butuh **Android 8.0 (API 26)** atau lebih baru.
 * Dibangun otomatis dari commit `@COMMIT@` pada @BUILD_DATE@.
-* **@VERSION@ — Pemutar video native Media3 menggantikan WebView.**
+* **2.57.0 — Pemutar video native Media3 menggantikan WebView.**
   - **WebView dihapus dari jalur menonton.** `OtakudesuPlayerActivity` (pemutar berbasis halaman web) dihapus beserta entri manifest-nya; penggantinya `AnimePlayerActivity` dengan **AndroidX Media3 ExoPlayer** dan `PlayerView`. Tidak ada banner, popup, footer, chat widget, atau tombol mirror milik website — seluruh kontrol digambar aplikasi.
   - **Sumber video diperiksa dulu, bukan ditebak.** `OtakudesuMediaResolver` memisahkan tiga hal: alamat halaman website, iframe pemutar pihak ketiga, dan berkas media yang benar-benar kompatibel (`m3u8`, `mpd`, `mp4`, `webm`). Hanya jenis terakhir yang diberikan ke Media3.
   - **Kenyataan sumber Otakudesu.** Halaman episode hanya memuat iframe `desustream` dan daftar mirror berupa ID server (`{"id":207282,"q":"480p"}`) untuk filedon, vidhide, mega, odcdn, ondesuhd, dan odstream — tidak ada satu pun alamat media. Aplikasi **tidak** menebak atau mengekstrak alamat dari mirror itu, karena berarti melewati pemutar dan monetisasi penyedia. Untuk episode seperti ini layar menampilkan penjelasan dan tombol **Tonton di Sumber** (Custom Tab), bukan layar hitam.
@@ -173,40 +179,40 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Bukti pengujian:** 715 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Tes baru: `OtakudesuMediaResolverTest` (halaman episode asli hanya mirror → tidak ada sumber; HLS/MP4 dikenali; alamat provider ditolak walau berakhiran .mp4; hanya HTTPS tanpa kredensial), `OtakudesuProgressTest` (posisi bertahan, tidak mundur, selesai di akhir), `AnimePlayerTest` (format waktu, layar tanpa sumber menampilkan pesan + Tonton di Sumber).
   - **Keterbatasan:** pemutaran video sungguhan **belum** diuji pada perangkat — Robolectric tidak punya codec, dan sumber Otakudesu tidak menyediakan berkas media yang boleh diputar aplikasi pihak ketiga. Jalur native siap dipakai begitu ada alamat media yang sah.
 
-* **@VERSION@ — Ketukan tunggal reader yang benar-benar terbaca + Putar Layar = landscape penuh.**
+* **2.57.0 — Ketukan tunggal reader yang benar-benar terbaca + Putar Layar = landscape penuh.**
   - **Akar bug "ketuk sekali tidak masuk layar penuh" ketemu.** Satu ketukan tercatat **dua kali**: `onInterceptTouchEvent` mengembalikan `true` sehingga Android mengirim sisa rangkaian sentuhan (termasuk `ACTION_UP`) ke `onTouchEvent`, dan kedua jalur itu sama-sama mencatat ketukan. Akibatnya satu ketukan dihitung sebagai dua — handler memutuskan "zoom 2×", bukan "ketuk sekali". Sekarang ada penjaga yang tidak bergantung pada urutan pemanggilan: satu `ACTION_UP` hanya dicatat sekali per rangkaian. Bukti: rangkaian ketukan sungguhan lewat `dispatchTouchEvent` kini menghasilkan tepat satu aksi ketukan tunggal (sebelumnya dua).
   - **Kotak galat tidak lagi menutupi gambar.** Tombol "Coba Lagi" dan pesan galat berada di atas daftar halaman dalam satu `FrameLayout`. Selama kotak itu tampil — termasuk pada chapter yang halaman berikutnya memang tidak ada — seluruh ketukan mendarat di tombol itu dan tidak pernah sampai ke gambar. Pesan galat kini hanya menutupi gambar bila memang tidak ada halaman yang bisa dibaca; kalau halaman sudah ada, pesannya muncul sebagai pemberitahuan kecil.
   - **Satu sumber kebenaran untuk layar penuh.** Tombol toolbar dan ketukan tunggal pada gambar memakai jalur `toggleReaderFullscreen()` yang sama, dengan keadaan `readerFullscreen` yang juga dipulihkan saat Activity dibuat ulang.
   - **"Putar Layar" kini benar-benar landscape + layar penuh.** Sebelumnya tombol ini hanya mengubah orientasi sambil menyisakan toolbar, dan pada keadaan tertentu malah mengembalikan ke portrait. Sekarang satu ketukan meminta landscape eksplisit sekaligus menyembunyikan bilah; menekannya lagi mengembalikan orientasi yang berlaku sebelumnya. Keadaan `rotatedFullscreen` terpisah dari `fullscreen`, sehingga kedua tombol bisa dipakai bergantian tanpa saling merusak.
   - **Pemutar tidak pernah di-restart.** Tidak ada pelepasan player saat mode berubah, `onConfigurationChanged` hanya menyusun ulang tata letak, dan `MediaItem`, posisi, `playWhenReady`, pilihan audio/subtitle, serta buffer tetap. Tombol Back keluar dari mode rotasi lebih dulu, lalu layar penuh, baru meninggalkan pemutar.
 
-* **@VERSION@ — Navigasi episode yang benar arahnya, toolbar yang muat, dan layar penuh tanpa rotasi paksa.**
+* **2.57.0 — Navigasi episode yang benar arahnya, toolbar yang muat, dan layar penuh tanpa rotasi paksa.**
   - **Berikutnya/Sebelumnya tidak lagi terbalik.** Halaman episode Otakudesu menulis episode terbaru lebih dulu, jadi daftarnya menurun sementara cerita menaik. Memakai indeks daftar apa adanya membuat "Berikutnya" dari Episode 1 mati (dianggap di luar batas) dan "Berikutnya" dari Episode 3 justru mundur ke Episode 2. Daftar kini diurutkan ke urutan cerita dulu; episode tanpa nomor tidak dibuang dan tidak dibuat-buat nomornya.
   - **Toolbar pemutar tidak lagi terpotong.** Dulu lima chip (Server, Kualitas, Subtitle, 1x, Layar penuh) berbagi satu baris dengan tombol kembali dan judul, sehingga pada layar sempit chip terakhir keluar tepi kanan dan tidak bisa ditekan. Sekarang baris atas memuat kembali, judul singkat, pintasan server, dan menu tambahan; Kualitas, Subtitle, Kecepatan, dan Putar layar pindah ke menu itu dengan label jelas.
   - **Layar penuh tidak memutar perangkat.** Tombol "Layar penuh" dulu memanggil orientasi landscape paksa, jadi menonton pada posisi portrait berputar sendiri. Sekarang layar penuh hanya menyembunyikan bilah: portrait tetap portrait, dan bila perangkat diputar manual tata letak mengikuti. Pemutaran paksa tersedia terpisah sebagai **Putar layar**.
   - **Daftar server: nama dan resolusi terbaca pada baris masing-masing.** Nama server dipaksa putih sebelumnya sehingga tidak terbaca pada tema terang; kini memakai warna tema. Resolusi diulang per baris (header grup bisa tergulir keluar layar), tombol pilih berukuran minimal 48dp, dan dua server pada resolusi sama tetap dua pilihan terpisah yang bisa digulir sampai bawah.
   - **Indikator progres membaca Manga Shinigami** di bagian paling bawah reader, di atas navigation bar: garis tipis plus angka persen kecil. Persen dihitung dari jarak gulir dan panjang konten nyata — bukan dari berapa halaman yang sudah dimuat — sehingga angka tidak meloncat saat gambar berikutnya masuk; rasio dimensi halaman yang tersimpan dipakai untuk halaman yang belum dimuat. Pembaruan hanya menyentuh satu ProgressBar, tanpa `notifyDataSetChanged()` dan tanpa relayout, jadi gambar HD tidak berkedip. Bisa dimatikan di Pengaturan Manga Shinigami, dan tetap terpisah dari progres unduhan.
 
-* **@VERSION@ — Posisi menonton tidak lagi hilang saat berganti server + pengujian lintas episode.**
+* **2.57.0 — Posisi menonton tidak lagi hilang saat berganti server + pengujian lintas episode.**
   - **Ganti server tidak mengembalikan ke awal episode.** Sebelumnya memilih server lain mengosongkan posisi menonton, jadi episode yang sudah ditonton separuh mulai lagi dari nol — riwayatnya tersimpan, tetapi posisinya terbuang. Sekarang posisi diambil dari pemutar yang sedang berjalan (bila masih episode yang sama) atau dari progres tersimpan, lalu dibawa ke server baru. Riwayat, favorit, dan progres episode tetap utuh.
   - **Diverifikasi pada empat episode nyata** FX Senshi Kurumi-chan (Episode 1, 2, 3, 6). Berkas yang terbuka: **odcdn** pada keempat episode (`cdn.odcloud.net/anime/Otakudesu.io_FSKC--0N_720p.mp4`, HTTP 200 `video/mp4`, range 206), dan **odstream** pada Episode 2 (`archive.org/download/perempuan-dewasa-yang-semakindwa/Otakudesu.io_FSKC--02_720p.mp4`, HTTP 206 `video/mp4`, berkas terunduh `ISO Media, MP4`). Kelompok server yang tersedia berbeda tiap episode (8–12 mirror) dan daftarnya selalu dibaca dari halaman episode — **filedon** muncul di Episode 6, bukti bahwa tidak ada nama server yang ditulis di kode.
   - **Server yang belum kompatibel dilaporkan apa adanya:** vidhide dan mega menutup berkasnya di balik pemutar beriklan (vidhide memakai enkripsi), ondesuhd baru membentuk alamat berkas setelah pemutarnya dijalankan, dan sebagian odstream mengirim alamat yang host-nya tersusun ganda sehingga tidak bisa diminta.
 
-* **@VERSION@ — Ketukan tunggal layar penuh yang menunggu konfirmasi + pengembalian bilah yang benar.**
+* **2.57.0 — Ketukan tunggal layar penuh yang menunggu konfirmasi + pengembalian bilah yang benar.**
   - **Ketukan tunggal tidak lagi langsung dijalankan.** Sebelumnya aksi layar penuh berjalan pada sentuhan pertama, sehingga rangkaian dua atau tiga ketukan sempat mengubah mode sebelum zoom dibuka. Kini ketukan tunggal menunggu jendela konfirmasi 280 ms — padanan `onSingleTapConfirmed()`: rangkaian yang ternyata dua ketukan (zoom 2×) atau tiga ketukan (zoom 3×) **tidak pernah** mengubah layar penuh. Tiga ketukan sudah pasti, jadi jalannya tanpa menunggu.
   - **Menggulir tidak pernah mengubah mode.** Jari yang bergeser lebih dari ambang menandai rangkaian sebagai gulir/geser dan membatalkan ketukan, jadi menggulir atau menggeser gambar yang diperbesar, sekalipun berakhir dengan ketukan, tidak menyentuh layar penuh. Ketukan pada tombol toolbar juga tetap milik toolbar.
   - **Masuk layar penuh:** bilah atas, bar navigasi chapter, status bar, dan navigation bar Android disembunyikan sekaligus (bilah sistem memakai mode sementara-lewat-geser). **Keluar:** seluruh bilah aplikasi dan bilah sistem dikembalikan, lalu padding dari window insets dipasang ulang supaya toolbar tidak tertutup status bar. Tombol kembali juga mengembalikan mode normal lebih dulu.
   - **Isi bacaan tidak tersentuh.** Bilah memakai ruang tata letaknya sendiri di luar daftar halaman, jadi beralih mode hanya menambah/mengurangi tinggi area baca: adapter tidak dibuat ulang, LayoutManager tetap, posisi halaman terlihat tidak berpindah, gambar tidak dimuat ulang, dan progres membaca tetap tersimpan. Tidak ada kedipan maupun layar hitam.
   - **Semua gestur lama tetap:** double-tap zoom, triple-tap zoom, pinch zoom, gulir vertikal, dan pan saat gambar diperbesar.
 
-* **@VERSION@ — Jalan keluar saat server gagal + penjelasan, bukan layar hitam.**
+* **2.57.0 — Jalan keluar saat server gagal + penjelasan, bukan layar hitam.**
   - **Setiap kegagalan menyebut sebabnya.** Ketika server yang dipilih tidak bisa diputar, layar tidak lagi hanya berkata "tidak ada berkas video": pesannya menyebut **nama server**, **penyebabnya** (berkas ditutup enkripsi pemutar penyedia, alamat berkas baru terbentuk setelah pemutar dijalankan, pemutar tidak memuat alamat berkas, atau berkas gagal dimuat beserta kode kesalahan ExoPlayer), lalu menunjuk dua jalan keluar.
   - **Tiga jalan keluar di kotak galat:** **Coba Server Lain** (kembali ke panel pemilih), **Buka Player Sumber** (membuka pemutar penyedia di peramban), dan **Tonton di Sumber** (halaman episode). Pemutar penyedia dibuka apa adanya — aplikasi tidak mengubah atau melewati apa pun di sana.
   - **Alamat pemutar disimpan per server.** Setelah sebuah server diperiksa, alamat pemutarnya ikut tercatat, jadi tombol "Buka Player Sumber" tetap tahu tujuannya kapan pun dipakai. Bila server mengirim berkas langsung tanpa halaman pemutar, halaman episode yang jadi tujuan.
   - **Pemeriksaan otomatis dibatasi dua server.** Tidak lagi memeriksa seluruh mirror secara agresif: hanya dua server yang paling mungkin terbuka, dan tidak menumpuk bila ada yang sedang berjalan. Sisanya menunggu sentuhan pengguna atau tombol **Periksa semua server**.
   - **Peringatan iklan sebelum membuka pemutar penyedia.** Saat membuka pemutar sumber, aplikasi memberi tahu bahwa tampilannya mengikuti penyedia dan tidak selalu bebas iklan. Pemutar native aplikasi sendiri tetap bersih: tidak ada banner, pop-up, maupun elemen HTML website.
 
-* **@VERSION@ — Pemilih server streaming + single-tap layar penuh pada reader Manga.**
+* **2.57.0 — Pemilih server streaming + single-tap layar penuh pada reader Manga.**
   - **Pemilihan server sebelum menonton.** Saat halaman episode tidak menyediakan berkas media langsung, pemutar membuka panel **Pilih Server Streaming**: semua mirror yang benar-benar disebut halaman episode, dikelompokkan per resolusi (720p → 480p → 360p), dengan nama server dan status pemeriksaan terpisah. Tidak ada nama server yang ditulis di kode — daftarnya selalu dibaca dari halaman episode.
   - **Status tidak disimpulkan dari nama.** "Siap diputar" hanya muncul setelah halaman pemutar server itu dibuka dan di dalamnya benar-benar tertulis alamat berkas. Selama diperiksa, barisnya menampilkan "Memeriksa…"; yang gagal atau menutup berkasnya dilaporkan apa adanya. Tombol **Periksa semua server** memeriksa sisanya sekaligus.
   - **Tombol Server di pemutar.** Bilah atas kini punya tombol **Server** untuk berpindah server kapan saja; setelah satu server dipilih, namanya tampil di tombol itu (mis. "odcdn 480p").
@@ -215,7 +221,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Alamat rusak tidak pernah dilaporkan siap.** Sumber ini menaruh alamat tersusun ganda (`archive.org/download/https://…`) di salah satu pemutarnya; sekarang alamat seperti itu dan HLS yang segmennya belum dibakukan dilewati. Playlist HLS tidak dibuka lebih jauh — mengurai nama segmen dari playlist master berarti menebak alamat berkas.
   - **Single-tap layar penuh di reader Manga Shinigami.** Satu ketukan pada gambar masuk/keluar layar penuh; dua ketukan zoom 2×, tiga ketukan zoom 3×. Sebelumnya satu ketukan membuka zoom dan layar penuh hanya bisa dinyalakan dari tombol, lalu keluar lewat area 56dp di dasar layar — area itu sekarang dihapus, jadi tidak ada lagi ketukan yang direbut dan tidak ada halaman yang tergeser.
 
-* **@VERSION@ — Pemutar video native (Media3 ExoPlayer) untuk Anime Otakudesu.**
+* **2.57.0 — Pemutar video native (Media3 ExoPlayer) untuk Anime Otakudesu.**
   - **WebView diganti pemutar native.** `AnimePlayerActivity` memakai **Media3 ExoPlayer 1.4.1** dengan `PlayerView`, `DefaultTrackSelector`, dan `DefaultLoadControl` (buffer 15 s / 60 s / 2,5 s). Tidak ada banner, popup, footer, chat widget, atau tombol mirror milik website: seluruh kontrol digambar aplikasi.
   - **Kontrol lengkap.** Play/Pause, seek −10 s / +10 s, progress bar yang bisa digeser, layar penuh landscape (immersive, kontrol disembunyikan), pemilih kualitas dari track yang benar-benar ada di manifest, kecepatan 0,5×–2×, subtitle bila sumber menyediakannya, episode ‹ Sebelumnya / Berikutnya › dalam satu Activity, simpan posisi, dan lanjutkan dari posisi terakhir.
   - **Sumber yang diputar hanya yang benar-benar ada.** `OtakudesuMediaResolver` memeriksa halaman episode lalu halaman **/batch/** milik sumber: dari sana alamat MP4 (mis. `cdn.odcloud.net/anime/Otakudesu.io_FSKC--01_720p.mp4`) didapat dari apa yang dipublikasikan halaman, bukan dari pola URL yang ditebak. Untuk FX Senshi Kurumi-chan, **keenam episode** punya berkas 720p yang merespons HTTP 200 `video/mp4` dan mendukung Range (206), jadi bisa di-seek.
@@ -225,7 +231,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Optimasi player.** Satu player per Activity dan dilepas penuh di `onDestroy`, rotasi layar tidak mengulang video (posisi disimpan di `onSaveInstanceState`), buffering ditampilkan saat `STATE_BUFFERING`, error menampilkan pesan + **Coba Lagi**, dan playback tidak dipaksa jalan setelah pengguna menjeda sendiri.
   - **Pengujian:** 79 tes modul anime lulus (termasuk 18 tes baru resolver dua tingkat dan 4 fixture HTML baru dari halaman sumber). Suite penuh dijalankan sebelum rilis.
 
-* **@VERSION@ — Sumber keempat: Anime Otakudesu.**
+* **2.57.0 — Sumber keempat: Anime Otakudesu.**
   - **Empat menu.** Source Hub dan navigation drawer sekarang berisi Novel, Manga Voratoon, Manga Shinigami, dan Anime Otakudesu (ikon film). Kartu keempat memakai latar dan glassmorphism yang sama, dan daftar kartu tetap bisa digulir di layar kecil.
   - **Katalog native, bukan WebView.** Beranda Anime Otakudesu punya pencarian, tab Ongoing (default), Complete, Jadwal Rilis, Riwayat, dan Favorit. Grid adaptif 2–4 kolom dengan kartu berisi cover, judul, episode terbaru, hari tayang, dan tanggal update.
   - **Parser HTML sungguhan.** `OtakudesuSource` membaca `div.venz div.detpost`, `h2.jdlflm`, `div.epz`, `div.epztipe`, `div.newnime`, `div.jdlrx h1`, `div.infozingle`, `div.episodelist span.zeebr`, `ul.chivsrc`, dan `div.kglist321` — struktur yang benar-benar ada di `otakudesu.blog`, disimpan sebagai fixture tes. Tidak ada endpoint API yang dikarang: kalau markup berubah, aplikasi menampilkan pesan galat, bukan data palsu.
@@ -237,7 +243,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Bukti pengujian:** parser diuji terhadap HTML asli (`ongoing.html`, `detail.html`, `search.html`, `schedule.html`), termasuk penolakan CAPTCHA, HTTP non-TLS, dan struktur yang berubah. Store diuji untuk favorit, migrasi format lama, progres yang tidak mundur, dan tanda episode. Backup diuji untuk tiga sumber sekaligus dan kompatibilitas berkas lama.
   - **Keterbatasan:** pemutaran video belum diuji pada perangkat fisik; seluruh pengujian berjalan di Robolectric dengan HTML sumber yang direkam.
 
-* **@VERSION@ — Perbaikan menyeluruh gambar reader yang berkedip (area hitam + loading).**
+* **2.57.0 — Perbaikan menyeluruh gambar reader yang berkedip (area hitam + loading).**
   - **Akar masalah 1 — identitas halaman dibuang saat recycle.** `onViewRecycled()` mengosongkan `shownKey`, jadi setiap kali RecyclerView me-recycle lalu mengikat ulang posisi yang sama (sangat sering di tepi viewport saat scroll), `load()` menganggap halaman itu belum punya gambar. Sekarang `shownKey` + `shownPosition` dipertahankan melewati recycle, dan `load()` langsung kembali bila halaman yang sama masih tampil.
   - **Akar masalah 2 — `showLoading()` tidak punya penjaga.** Metode ini selalu mengosongkan ImageView, menutup permukaan gambar, lalu menampilkan spinner — persis "area hitam + loading" di video. Sekarang ia tidak melakukan apa pun bila `hasContent()` benar. `showFailure()` juga tidak lagi menghapus gambar yang valid; kegagalan hanya dicatat.
   - **Akar masalah 3 — tile di-recycle saat cache penuh.** `removeEldestEntry` memanggil `bitmap.recycle()` untuk potongan yang bisa saja masih berada di area gambar, sehingga potongan itu hilang sesaat. Sekarang tidak ada `recycle()` di jalur gambar; pemangkasan lewat `trim(from, to)` dan potongan yang sedang terlihat tidak pernah dibuang.
@@ -246,7 +252,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Bukti pengujian:** 646 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Tes baru: `showLoading()`/`showFailure()` pada halaman yang sudah tampil tidak menyembunyikan gambar dan tidak memunculkan spinner.
   - **Belum diuji pada perangkat fisik.** Kriteria "diamkan 15 detik, scroll lambat/cepat/balik, ulangi" pada Demonic Emperor 927, Nano Machine, dan judul lain harus Master Lupi jalankan sendiri; kalau masih berkedip, logcat tag `ShinigamiReader` akan menunjukkan penyebabnya.
 
-* **@VERSION@ — Default Chapter Terbaru, top bar anti-kedip, dan gambar reader tanpa flicker.**
+* **2.57.0 — Default Chapter Terbaru, top bar anti-kedip, dan gambar reader tanpa flicker.**
   - **Beranda dibuka di Chapter Terbaru.** Urutan tab kini Chapter Terbaru | Terpopuler | Manga Terbaru | Riwayat | Favorit | Unduhan. Label tidak pernah bertukar, dan tiap tab tetap memakai kursor pagination + cache sendiri.
   - **Migrasi preferensi lama:** state yang masih menyimpan `sort=rank` dari tombol lama dibuka pada tab Terpopuler; preferensi lain (pencarian, genre, status, tema, progres) tidak disentuh. Tanpa state lama, default selalu Chapter Terbaru.
   - **Penyebab top bar berkedip:** tinggi container header dianimasikan, sehingga tinggi RecyclerView ikut berubah setiap frame. Perubahan itu memancarkan `onScrolled` lagi, listener mengira pengguna bergerak, lalu animasi dibalik arah — berulang. Diperparah `GONE` di akhir animasi yang menggeser layout sekali lagi.
@@ -256,7 +262,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Bukti pengujian:** 645 tes lulus, 0 gagal, 1 tes jaringan opt-in dilewati. Tes baru: default + urutan tab, rebind halaman yang sama tidak menutup permukaan gambar, dan dua `fetch` bersamaan untuk URL yang sama hanya mengunduh sekali.
   - **Belum diukur pada perangkat fisik:** FPS/jank dan RAM tidak diambil dengan Profiler/Perfetto (tidak ada perangkat adb). Klaim di atas berasal dari perubahan jalur kode + tes otomatis.
 
-* **@VERSION@ — Performa, tab kategori permanen, auto-hide header, dan scroll reader yang mulus.**
+* **2.57.0 — Performa, tab kategori permanen, auto-hide header, dan scroll reader yang mulus.**
   - **Tab beranda tidak lagi berganti label.** Kini enam tab tetap: Terpopuler | Manga Terbaru | Chapter Terbaru | Riwayat | Favorit | Unduhan. Menekan tab tidak pernah mengubah teksnya.
   - **Tiap kategori benar-benar meminta data berbeda** ke sumber, bukan sekadar mengganti label: Terpopuler = `sort=rank` menurun, Chapter Terbaru = `sort=latest` menurun, Manga Terbaru = `sort=rank` menaik lalu diurutkan ulang menurut `created_at` (sumber Shinigami tidak menyediakan urutan "judul baru", jadi kursor terdekat dipakai dan hasilnya diurutkan lokal).
   - **Data, kursor pagination, dan posisi scroll disimpan terpisah per tab.** Kembali ke tab yang sudah punya data tidak memicu permintaan baru dan tidak mengembalikan pengguna ke atas.
@@ -269,7 +275,7 @@ lain bisa **ditambahkan sendiri lewat URL** tanpa memperbarui APK.
   - **Belum diukur pada perangkat fisik:** angka FPS/jank dan pemakaian RAM nyata belum diambil (tidak ada perangkat adb tersambung); klaim performa di atas berasal dari perubahan jalur kode, bukan dari Profiler/Perfetto.
   - Batas paralelisme WorkManager untuk unduhan belum diubah; tiap chapter tetap satu work yang memproses halamannya berurutan.
 
-* **@VERSION@ — Katalog yang tidak melompat ke atas dan panah chapter di reader.**
+* **2.57.0 — Katalog yang tidak melompat ke atas dan panah chapter di reader.**
   - **Penyebab katalog kembali ke atas:** setiap halaman memanggil `list.setAdapter(new ConcatAdapter(...))` lalu `notifyDataSetChanged()`. RecyclerView membuang posisi gulir setiap kali adapter diganti, jadi begitu pengguna mencapai dasar daftar dan halaman berikutnya tiba, katalog melompat ke item pertama. Sekarang satu adapter hidup seumur Activity: pagination hanya menambah item di bawah lewat `notifyItemRangeInserted`, adapter punya stable ID, dan `LayoutManager` tidak diganti saat data bertambah.
   - Rail "Lanjutkan Membaca" tetap menjadi item pertama di dalam daftar (ikut tergulir, bukan header lengket) dan hanya memberi tahu daftar bila jumlah itemnya benar-benar berubah, sehingga kembali dari reader tidak merender ulang katalog.
   - **Panah chapter sebelumnya/berikutnya** di reader memakai nomor chapter (urutan cerita), bukan urutan tampilan daftar: Prolog, Chapter 0, 1, 1.5, 10.5, … Epilog. Tombol kiri/kanan berada di bar bawah 48 dp, tidak menutupi gambar, dan ikut tersembunyi saat layar penuh (ketuk strip bawah untuk memunculkan kontrol lagi).

@@ -169,6 +169,68 @@ public final class SyncBridge {
         return chapterLabelsOldestFirst.get(index + 1);
     }
 
+
+    /** Satu judul yang sudah tersinkron, untuk ditawarkan di beranda. */
+    public static final class PartnerEntry {
+        public final String mangaId;
+        public final String title;
+        public final String chapterKey;
+        public final long lastOpenedAt;
+
+        PartnerEntry(String mangaId, String title, String chapterKey, long lastOpenedAt) {
+            this.mangaId = mangaId == null ? "" : mangaId;
+            this.title = title == null ? "" : title;
+            this.chapterKey = chapterKey == null ? "" : chapterKey;
+            this.lastOpenedAt = lastOpenedAt;
+        }
+
+        /** "Chapter 10" dari kunci kanonis; kosong bila belum ada. */
+        public String chapterLabel() {
+            return ChapterKey.displayLabel(chapterKey);
+        }
+    }
+
+    /**
+     * Judul yang dibaca di sumber pasangan tetapi belum ada riwayatnya di
+     * sumber ini.
+     *
+     * <p>Ini yang membuat daftar "Lanjutkan Membaca" di Manga Server 3 tetap
+     * berguna walau judul itu baru dibaca di Manga Server 2: judulnya muncul
+     * dengan chapter kanonis terakhir. Yang dikembalikan hanya judul yang
+     * benar-benar punya tautan dan punya chapter tercatat — tidak ada entri
+     * karangan, dan tidak ada judul yang sudah punya riwayat lokal sendiri
+     * (supaya tidak tampil dua kali).
+     */
+    public List<PartnerEntry> pendingFrom(String sourceId, String partnerSourceId,
+                                         java.util.Set<String> localMangaIds) {
+        List<PartnerEntry> out = new ArrayList<>();
+        if (sourceId == null || partnerSourceId == null) return out;
+        for (SyncStore.Series series : sync.series()) {
+            String mine = series.mangaIdFor(sourceId);
+            String partner = series.mangaIdFor(partnerSourceId);
+            // Butuh tautan ke sumber ini: tanpa alamat judul di sini, tidak ada
+            // yang bisa ditawarkan. Bila judul sudah ada di sini, alamat itu
+            // yang dipakai; bila belum, alamat pasangan yang dipakai untuk
+            // membuka halaman detailnya.
+            String target = !mine.isEmpty() ? mine : partner;
+            if (target.isEmpty()) continue;
+            // Yang sudah punya riwayat lokal sudah muncul dari riwayat, jangan
+            // ditampilkan dua kali.
+            if (!mine.isEmpty() && localMangaIds != null && localMangaIds.contains(mine)) {
+                continue;
+            }
+            SyncStore.Progress progress = sync.lastOpened(series.id);
+            if (progress == null || progress.chapterKey.isEmpty()) continue;
+            String title = series.titleFor(sourceId);
+            if (title.isEmpty()) title = series.titleFor(partnerSourceId);
+            if (title.isEmpty()) title = series.preferredTitle;
+            out.add(new PartnerEntry(target, title, progress.chapterKey,
+                    progress.lastOpenedAt));
+        }
+        out.sort((a, b) -> Long.compare(b.lastOpenedAt, a.lastOpenedAt));
+        return out;
+    }
+
     /** Daftar sumber yang ikut sinkron, untuk keperluan UI. */
     public static List<String> sources() {
         List<String> out = new ArrayList<>();

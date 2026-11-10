@@ -34,6 +34,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import id.shuyasal.kuromaku.R;
+import id.shuyasal.kuromaku.sync.SyncBridge;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.RatioFrameLayout;
@@ -89,6 +90,7 @@ public class KomikuActivity extends AppCompatActivity {
     private Palette palette;
     private KomikuSource source;
     private KomikuStore store;
+    private id.shuyasal.kuromaku.sync.SyncBridge syncBridge;
     private int activeTheme;
 
     private EditText searchField;
@@ -124,6 +126,35 @@ public class KomikuActivity extends AppCompatActivity {
     private final Runnable searchRunnable = this::runSearch;
     private final Runnable chromeRelease = () -> chromeBusy = false;
 
+    /**
+     * Satu kartu di rail "Lanjutkan Membaca".
+     *
+     * <p>Ada dua asal: riwayat di sumber ini (punya alamat chapter, bisa
+     * langsung dibuka) dan judul yang baru dibaca di Manga Server 2 (hanya
+     * punya identitas judul, jadi membukanya menuju halaman detail — bukan
+     * alamat chapter yang ditebak).
+     */
+    private static final class ContinueItem {
+        final String mangaId;
+        final String title;
+        final String coverUrl;
+        final String chapterLabel;
+        final String chapterUrl;
+        final int percent;
+        final boolean fromPartner;
+
+        ContinueItem(String mangaId, String title, String coverUrl, String chapterLabel,
+                     String chapterUrl, int percent, boolean fromPartner) {
+            this.mangaId = mangaId == null ? "" : mangaId;
+            this.title = title == null ? "" : title;
+            this.coverUrl = coverUrl == null ? "" : coverUrl;
+            this.chapterLabel = chapterLabel == null ? "" : chapterLabel;
+            this.chapterUrl = chapterUrl == null ? "" : chapterUrl;
+            this.percent = percent;
+            this.fromPartner = fromPartner;
+        }
+    }
+
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         ThemeManager.applyTheme(this);
@@ -131,6 +162,7 @@ public class KomikuActivity extends AppCompatActivity {
         activeTheme = new Prefs(this).resolvedTheme();
         source = new KomikuSource();
         store = new KomikuStore(this);
+        syncBridge = new id.shuyasal.kuromaku.sync.SyncBridge(this);
         buildUi();
         loadTab(tab);
     }
@@ -370,13 +402,35 @@ public class KomikuActivity extends AppCompatActivity {
         return rail;
     }
 
+    /**
+     * Isi rail "Lanjutkan Membaca".
+     *
+     * <p>Dua bagian: riwayat di sumber ini (bisa langsung dibuka), lalu judul
+     * yang sudah dibaca di Manga Server 2 dan sudah dipasangkan di layar detail
+     * (dibuka lewat halaman detail, karena alamat chapter-nya belum diketahui).
+     * Tanpa tautan, judul server lain memang tidak boleh muncul — itu bukan
+     * riwayat sumber ini.
+     */
     private void refreshContinueRail() {
-        if (continueRail == null || continueAdapter == null) return;
-        List<KomikuStore.Entry> recent = new ArrayList<>();
+        if (continueRail == null || continueAdapter == null || store == null) return;
+        List<ContinueItem> recent = new ArrayList<>();
+        java.util.LinkedHashSet<String> localIds = new java.util.LinkedHashSet<>();
         for (KomikuStore.Entry entry : store.history()) {
             if (recent.size() >= CONTINUE_LIMIT) break;
             if (entry.chapterUrl.isEmpty()) continue;
-            recent.add(entry);
+            localIds.add(entry.mangaId);
+            recent.add(new ContinueItem(entry.mangaId, entry.title, entry.coverUrl,
+                    chapterShort(entry.chapterLabel), entry.chapterUrl,
+                    (int) Math.max(0, Math.min(100, Math.round(entry.fraction * 100))), false));
+        }
+        if (syncBridge != null && recent.size() < CONTINUE_LIMIT) {
+            for (SyncBridge.PartnerEntry partner : syncBridge.pendingFrom(
+                    SyncBridge.SOURCE_KOMIKU, SyncBridge.SOURCE_SHINIGAMI, localIds)) {
+                if (recent.size() >= CONTINUE_LIMIT) break;
+                if (partner.mangaId.isEmpty()) continue;
+                recent.add(new ContinueItem(partner.mangaId, partner.title, "",
+                        chapterShort(partner.chapterLabel()), "", 0, true));
+            }
         }
         boolean wasEmpty = continueAdapter.getItemCount() == 0;
         continueAdapter.submit(recent);
@@ -509,9 +563,9 @@ public class KomikuActivity extends AppCompatActivity {
                 mode = Mode.GRID;
                 items.clear();
                 items.addAll(result);
+                switchContent(gridAdapter);
+                publishItems();
                 refreshContinueRail();
-                switchContent(result.isEmpty() ? rowAdapter : gridAdapter);
-                notifyContent();
                 if (message != null) {
                     statusLine.setText("Pencarian gagal: " + message);
                 } else if (result.isEmpty()) {
@@ -551,9 +605,9 @@ public class KomikuActivity extends AppCompatActivity {
                 mode = which.usesRows() ? Mode.ROWS : Mode.GRID;
                 items.clear();
                 items.addAll(loaded);
-                refreshContinueRail();
                 switchContent(mode == Mode.ROWS ? rowAdapter : gridAdapter);
-                notifyContent();
+                publishItems();
+                refreshContinueRail();
                 if (message != null) {
                     errorText.setText("Gagal memuat: " + message);
                     errorBox.setVisibility(View.VISIBLE);
@@ -597,9 +651,16 @@ public class KomikuActivity extends AppCompatActivity {
         spinner.setVisibility(View.GONE);
     }
 
-    private void notifyContent() {
-        if (mode == Mode.ROWS) rowAdapter.notifyDataSetChanged();
-        else gridAdapter.notifyDataSetChanged();
+    /**
+     * Berikan daftar ke adapter yang sedang tampil.
+     *
+     * <p>Urutannya penting: data diserahkan ke adapter <b>sebelum</b> adapter
+     * dipasang, dan kedua adapter selalu punya salinan sendiri — jadi tidak ada
+     * saat di mana RecyclerView meminta posisi yang belum ada datanya.
+     */
+    private void publishItems() {
+        if (shownContent == gridAdapter) gridAdapter.submit(items);
+        else rowAdapter.submit(items);
         if (headerAdapter != null) headerAdapter.notifyDataSetChanged();
     }
 
@@ -615,7 +676,7 @@ public class KomikuActivity extends AppCompatActivity {
     private void open(KomikuManga manga) {
         KomikuStore.Entry last = store.lastFor(manga.id);
         if (tab.usesRows() && last != null && !last.chapterUrl.isEmpty()) {
-            openChapterDirect(manga, last);
+            openChapterDirect(manga, last.chapterUrl, last.chapterLabel);
             return;
         }
         Intent intent = new Intent(this, KomikuDetailActivity.class);
@@ -625,13 +686,25 @@ public class KomikuActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    private void openChapterDirect(KomikuManga manga, KomikuStore.Entry entry) {
+    private void openChapterDirect(KomikuManga manga, String chapterUrl, String chapterLabel) {
+        if (chapterUrl == null || chapterUrl.isEmpty()) {
+            openDetailFor(manga);
+            return;
+        }
         Intent intent = new Intent(this, KomikuReaderActivity.class);
-        intent.putExtra(KomikuReaderActivity.EXTRA_CHAPTER_URL, entry.chapterUrl);
-        intent.putExtra(KomikuReaderActivity.EXTRA_CHAPTER_LABEL, entry.chapterLabel);
+        intent.putExtra(KomikuReaderActivity.EXTRA_CHAPTER_URL, chapterUrl);
+        intent.putExtra(KomikuReaderActivity.EXTRA_CHAPTER_LABEL, chapterLabel);
         intent.putExtra(KomikuReaderActivity.EXTRA_MANGA_ID, manga.id);
         intent.putExtra(KomikuReaderActivity.EXTRA_MANGA_TITLE, manga.title);
         intent.putExtra(KomikuReaderActivity.EXTRA_COVER, manga.coverUrl);
+        startActivity(intent);
+    }
+
+    private void openDetailFor(KomikuManga manga) {
+        Intent intent = new Intent(this, KomikuDetailActivity.class);
+        intent.putExtra(KomikuDetailActivity.EXTRA_URL, manga.url);
+        intent.putExtra(KomikuDetailActivity.EXTRA_TITLE, manga.title);
+        intent.putExtra(KomikuDetailActivity.EXTRA_COVER, manga.coverUrl);
         startActivity(intent);
     }
 
@@ -708,7 +781,7 @@ public class KomikuActivity extends AppCompatActivity {
         if (tab == Tab.HISTORY && mode == Mode.ROWS) {
             items.clear();
             items.addAll(historyItems());
-            rowAdapter.notifyDataSetChanged();
+            rowAdapter.submit(items);
             statusLine.setText(items.size() + " manga dalam riwayat");
         }
     }
@@ -752,7 +825,7 @@ public class KomikuActivity extends AppCompatActivity {
 
     /** Kartu ringkas: cover 64x90 + judul 2 baris + "Ch. X · Y%" + bar. */
     private final class ContinueAdapter extends RecyclerView.Adapter<ContinueAdapter.Holder> {
-        private final List<KomikuStore.Entry> entries = new ArrayList<>();
+        private final List<ContinueItem> entries = new ArrayList<>();
 
         final class Holder extends RecyclerView.ViewHolder {
             final ImageView cover;
@@ -769,7 +842,7 @@ public class KomikuActivity extends AppCompatActivity {
             }
         }
 
-        void submit(List<KomikuStore.Entry> recent) {
+        void submit(List<ContinueItem> recent) {
             entries.clear();
             entries.addAll(recent);
             notifyDataSetChanged();
@@ -832,20 +905,32 @@ public class KomikuActivity extends AppCompatActivity {
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
-            KomikuStore.Entry entry = entries.get(position);
+            if (position < 0 || position >= entries.size()) return;
+            ContinueItem entry = entries.get(position);
             holder.title.setText(entry.title);
             holder.title.setTextColor(palette.text);
             holder.meta.setTextColor(palette.muted);
-            int percent = (int) Math.max(0, Math.min(100, Math.round(entry.fraction * 100)));
-            String chapter = chapterShort(entry.chapterLabel);
-            holder.meta.setText(chapter.isEmpty() ? percent + "%" : chapter + " · " + percent + "%");
-            holder.progress.setProgress(percent);
+            // Judul dari server pasangan belum punya persen di sumber ini, jadi
+            // yang ditampilkan hanya chapter-nya — bukan "0%" yang menyesatkan.
+            if (entry.fromPartner) {
+                holder.meta.setText(entry.chapterLabel.isEmpty()
+                        ? "Dari Manga Server 2" : entry.chapterLabel + " · Manga Server 2");
+            } else {
+                holder.meta.setText(entry.chapterLabel.isEmpty()
+                        ? entry.percent + "%" : entry.chapterLabel + " · " + entry.percent + "%");
+            }
+            holder.progress.setProgress(entry.percent);
+            holder.progress.setVisibility(entry.fromPartner ? View.INVISIBLE : View.VISIBLE);
             KomikuImages.load(entry.coverUrl, holder.cover);
             holder.itemView.setOnClickListener(v -> {
                 KomikuManga manga = new KomikuManga(entry.mangaId, entry.title,
                         KomikuConfig.BASE + "/manga/" + entry.mangaId + "/", entry.coverUrl,
-                        "", entry.chapterLabel, "");
-                openChapterDirect(manga, entry);
+                        "", "", "");
+                if (entry.fromPartner || entry.chapterUrl.isEmpty()) {
+                    openDetailFor(manga);
+                } else {
+                    openChapterDirect(manga, entry.chapterUrl, entry.chapterLabel);
+                }
             });
         }
 
@@ -854,15 +939,30 @@ public class KomikuActivity extends AppCompatActivity {
         }
     }
 
-    /** Baris daftar: cover 48x70 + judul + "Ch. N · waktu". */
+    /**
+     * Baris daftar: cover 48x70 + judul + "Ch. N · waktu".
+     *
+     * <p>Adapter menyimpan salinan datanya sendiri. Sebelumnya adapter membaca
+     * daftar milik Activity yang dikosongkan lebih dulu lalu diisi ulang; saat
+     * RecyclerView menata di antara kedua langkah itu, posisi yang diminta
+     * sudah tidak ada dan aplikasi berhenti dengan IndexOutOfBoundsException.
+     */
     private final class RowAdapter extends RecyclerView.Adapter<RowAdapter.Holder> {
+        private final List<KomikuManga> entries = new ArrayList<>();
+
         RowAdapter() {
             setHasStableIds(true);
         }
 
+        void submit(List<KomikuManga> data) {
+            entries.clear();
+            entries.addAll(data);
+            notifyDataSetChanged();
+        }
+
         @Override public long getItemId(int position) {
-            return position < 0 || position >= items.size()
-                    ? RecyclerView.NO_ID : items.get(position).id.hashCode();
+            return position < 0 || position >= entries.size()
+                    ? RecyclerView.NO_ID : entries.get(position).id.hashCode();
         }
 
         final class Holder extends RecyclerView.ViewHolder {
@@ -919,7 +1019,8 @@ public class KomikuActivity extends AppCompatActivity {
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
-            KomikuManga manga = items.get(position);
+            if (position < 0 || position >= entries.size()) return;
+            KomikuManga manga = entries.get(position);
             holder.title.setText(manga.title);
             holder.title.setTextColor(palette.text);
             holder.subtitle.setTextColor(palette.muted);
@@ -937,19 +1038,33 @@ public class KomikuActivity extends AppCompatActivity {
         }
 
         @Override public int getItemCount() {
-            return items.size();
+            return entries.size();
         }
     }
 
-    /** Grid katalog: cover rasio 0,68 + judul 2 baris + chapter/waktu. */
+    /**
+     * Grid katalog: cover rasio 0,68 + judul 2 baris + chapter/waktu.
+     *
+     * <p>Sama seperti {@link RowAdapter}, adapter memegang salinan datanya
+     * sendiri supaya pengosongan daftar di Activity tidak pernah terbaca
+     * sebagai "posisi tidak ada".
+     */
     private final class GridAdapter extends RecyclerView.Adapter<GridAdapter.Holder> {
+        private final List<KomikuManga> entries = new ArrayList<>();
+
         GridAdapter() {
             setHasStableIds(true);
         }
 
+        void submit(List<KomikuManga> data) {
+            entries.clear();
+            entries.addAll(data);
+            notifyDataSetChanged();
+        }
+
         @Override public long getItemId(int position) {
-            return position < 0 || position >= items.size()
-                    ? RecyclerView.NO_ID : items.get(position).id.hashCode();
+            return position < 0 || position >= entries.size()
+                    ? RecyclerView.NO_ID : entries.get(position).id.hashCode();
         }
 
         final class Holder extends RecyclerView.ViewHolder {
@@ -1000,7 +1115,8 @@ public class KomikuActivity extends AppCompatActivity {
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
-            KomikuManga manga = items.get(position);
+            if (position < 0 || position >= entries.size()) return;
+            KomikuManga manga = entries.get(position);
             holder.title.setText(manga.title);
             holder.title.setTextColor(palette.text);
             holder.subtitle.setTextColor(palette.muted);
@@ -1017,8 +1133,18 @@ public class KomikuActivity extends AppCompatActivity {
         }
 
         @Override public int getItemCount() {
-            return items.size();
+            return entries.size();
         }
+    }
+
+
+    /** Hanya untuk pengujian: terbitkan daftar seperti hasil jaringan. */
+    void publishForTest(List<KomikuManga> data, boolean rows) {
+        mode = rows ? Mode.ROWS : Mode.GRID;
+        items.clear();
+        items.addAll(data);
+        switchContent(rows ? rowAdapter : gridAdapter);
+        publishItems();
     }
 
     // ------------------------------------------------------------- bantuan
