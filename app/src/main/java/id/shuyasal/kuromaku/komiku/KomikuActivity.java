@@ -29,9 +29,11 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -60,6 +62,27 @@ import id.shuyasal.kuromaku.ui.Ui;
 public class KomikuActivity extends AppCompatActivity {
 
     private static final int SEARCH_DEBOUNCE_MS = 350;
+    /** Jumlah baris yang ditambahkan sekali gulir. */
+    private static final int FEED_PAGE_SIZE = 24;
+
+    /**
+     * Sasaran isi awal umpan.
+     *
+     * <p>Beranda hanya memberi 40 judul, jadi setelah 40 itu tampil daftar
+     * dilanjutkan sendiri sampai sekitar seratus baris — pengguna langsung
+     * melihat bahwa sumbernya jauh lebih besar dari satu halaman beranda,
+     * tanpa harus menggulir dulu.
+     */
+    private static final int FEED_PREFILL = 96;
+
+    /**
+     * Berapa halaman kosong berturut-turut sebelum umpan dianggap habis.
+     *
+     * <p>Empat halaman pertama katalog mengulang 40 judul beranda, jadi ambang
+     * ini harus lebih besar dari empat.
+     */
+    private static final int FEED_MAX_EMPTY_PAGES = 6;
+
     private static final int CONTINUE_LIMIT = 12;
     private static final int CHROME_ANIM_MS = 180;
     private static final int CONTINUE_TEXT_DP = 150;
@@ -98,6 +121,20 @@ public class KomikuActivity extends AppCompatActivity {
     private final ExecutorService catalogWorker = Executors.newSingleThreadExecutor();
     private volatile boolean catalogFetching;
     private volatile boolean catalogStop;
+    /** Halaman katalog berikutnya yang akan ditambahkan ke umpan. */
+    private int feedNextPage = 1;
+    private boolean feedLoading;
+    private boolean feedEnded;
+    /** Katalog tersimpan di memori saat dipakai sebagai sumber umpan. */
+    private List<KomikuManga> feedSource;
+    /**
+     * Halaman berturut-turut yang tidak menambah judul baru.
+     *
+     * <p>Empat halaman pertama katalog sama dengan 40 judul beranda (urutan
+     * terbaru), jadi halaman-halaman itu memang tidak menambah apa pun. Umpan
+     * baru boleh dianggap habis setelah beberapa halaman kosong berturut-turut.
+     */
+    private int feedEmptyStreak;
     private id.shuyasal.kuromaku.sync.SyncBridge syncBridge;
     private int activeTheme;
 
@@ -262,6 +299,7 @@ public class KomikuActivity extends AppCompatActivity {
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(RecyclerView view, int dx, int dy) {
                 updateChrome(dy);
+                maybeLoadMoreFeed();
             }
         });
         body.addView(list, new FrameLayout.LayoutParams(
@@ -628,6 +666,179 @@ public class KomikuActivity extends AppCompatActivity {
         return new ArrayList<>(merged.values());
     }
 
+
+    // ------------------------------------------------- umpan berkelanjutan
+
+    /**
+     * Tambah halaman berikutnya ke "Chapter Terbaru" saat pengguna mendekati
+     * bawah daftar.
+     *
+     * <p>Beranda Komiku hanya memuat 40 judul. Katalog lengkap situs punya
+     * urutan yang sama (terbaru di atas), jadi halaman katalog dipakai sebagai
+     * lanjutan umpan: daftar terus bertambah selama pengguna menggulir, dan
+     * berhenti sendiri saat situs tidak lagi menyediakan halaman berikutnya.
+     *
+     * <p>Dimulai dari halaman 2 karena halaman 1 sudah tercakup 40 judul
+     * beranda — memuatnya lagi hanya akan menggandakan baris yang sama.
+     */
+    private void maybeLoadMoreFeed() {
+        if (tab != Tab.NEW_CHAPTERS || feedLoading || feedEnded) return;
+        if (searchField != null && !searchField.getText().toString().trim().isEmpty()) return;
+        if (!(list.getLayoutManager() instanceof LinearLayoutManager)) return;
+        LinearLayoutManager layout = (LinearLayoutManager) list.getLayoutManager();
+        int lastVisible = layout.findLastVisibleItemPosition();
+        int total = shownAdapter == null ? 0 : shownAdapter.getItemCount();
+        // Muat lebih awal (lima baris sebelum ujung) supaya tidak terasa kosong.
+        if (lastVisible < total - 5) return;
+        loadMoreFeed();
+    }
+
+    /** Ambil satu halaman katalog berikutnya dan tambahkan ke daftar. */
+    private void loadMoreFeed() {
+        final int page = feedNextPage;
+        feedLoading = true;
+        worker.execute(() -> {
+            // Katalog tersimpan lebih dulu: tidak perlu jaringan sama sekali,
+            // dan isinya ribuan judul jauh melampaui 40 beranda.
+            if (feedSource == null && catalog != null && catalog.exists()) {
+                feedSource = catalog.load();
+            }
+            if (feedSource != null && !feedSource.isEmpty() && items.isEmpty()) {
+                // Daftar belum berisi apa pun (mis. dibuka dari tab lain):
+                // seluruh katalog tersimpan langsung jadi isi umpan.
+                final List<KomikuManga> all = feedSource;
+                main.post(() -> {
+                    feedLoading = false;
+                    if (isFinishing() || tab != Tab.NEW_CHAPTERS) return;
+                    appendFeed(all);
+                    feedEnded = true;
+                });
+                return;
+            }
+            if (feedSource != null && !feedSource.isEmpty()) {
+                int from = Math.min(items.size(), feedSource.size());
+                List<KomikuManga> slice = new ArrayList<>();
+                int until = Math.min(from + FEED_PAGE_SIZE, feedSource.size());
+                for (int i = from; i < until; i++) slice.add(feedSource.get(i));
+                final List<KomikuManga> local = slice;
+                final boolean done = until >= feedSource.size();
+                main.post(() -> {
+                    feedLoading = false;
+                    if (isFinishing() || tab != Tab.NEW_CHAPTERS) return;
+                    if (local.isEmpty()) {
+                        feedEnded = false; // katalog masih ada; tunggu diisi ulang
+                        return;
+                    }
+                    appendFeed(local);
+                    feedEnded = done;
+                    prefillFeed();
+                });
+                return;
+            }
+            List<KomikuManga> more = new ArrayList<>();
+            int next = 0;
+            String error = null;
+            try {
+                KomikuSource.CatalogPage batch = source.catalogPageWithNext(page);
+                more = batch.items;
+                next = batch.nextPage;
+            } catch (Throwable failure) {
+                error = failure.getMessage();
+            }
+            final List<KomikuManga> loaded = more;
+            final int following = next;
+            final String message = error;
+            main.post(() -> {
+                feedLoading = false;
+                if (isFinishing() || tab != Tab.NEW_CHAPTERS) return;
+                if (message != null) {
+                    // Jaringan gagal: berhenti mencoba sampai pengguna memuat
+                    // ulang, supaya tidak membanjiri sumber dengan percobaan.
+                    feedEnded = true;
+                    return;
+                }
+                if (loaded.isEmpty()) {
+                    feedEnded = true;
+                    return;
+                }
+                int added = appendFeed(loaded);
+                feedNextPage = following > page ? following : page + 1;
+                if (added == 0) {
+                    feedEmptyStreak++;
+                    if (following == 0 || feedEmptyStreak >= FEED_MAX_EMPTY_PAGES) {
+                        feedEnded = true;
+                        return;
+                    }
+                    // Halaman ini hanya mengulang judul yang sudah tampil;
+                    // lanjut ke halaman berikutnya tanpa mengakhiri umpan.
+                    prefillFeed();
+                    return;
+                }
+                feedEmptyStreak = 0;
+                if (following == 0) feedEnded = true;
+                prefillFeed();
+            });
+        });
+    }
+
+
+    /**
+     * Tambahkan judul baru ke umpan tanpa menggandakan baris.
+     *
+     * <p>Batas antar halaman bisa tumpang tindih saat ada judul baru masuk di
+     * atas, jadi judul yang sudah tampil dilewati. Perubahan dikirim ke adapter
+     * sebagai rentang sisipan — bukan {@code notifyDataSetChanged()} — supaya
+     * posisi gulir pengguna tidak melompat.
+     *
+     * @return jumlah baris yang benar-benar ditambahkan
+     */
+    private int appendFeed(List<KomikuManga> loaded) {
+        Set<String> shown = new HashSet<>();
+        for (KomikuManga manga : items) shown.add(manga.id);
+        int start = items.size();
+        for (KomikuManga manga : loaded) {
+            if (manga == null || manga.id.isEmpty()) continue;
+            if (!shown.add(manga.id)) continue;
+            items.add(manga);
+        }
+        int added = items.size() - start;
+        if (added > 0) {
+            rowAdapter.submitAndNotifyInsert(items, start, added);
+            if (tab == Tab.NEW_CHAPTERS && mode == Mode.ROWS) {
+                statusLine.setText(items.size() + " chapter terbaru");
+            }
+        }
+        return added;
+    }
+
+
+    /**
+     * Lanjutkan isi awal umpan sampai {@link #FEED_PREFILL}.
+     *
+     * <p>Dipanggil sekali dari ujung pemuatan: berhenti sendiri saat jumlah
+     * tercapai, saat situs tidak punya halaman berikutnya, atau saat katalog
+     * tersimpan sudah habis.
+     */
+    private void prefillFeed() {
+        if (feedEnded || feedLoading || isFinishing()) return;
+        if (tab != Tab.NEW_CHAPTERS) return;
+        // Saat pengguna mencari, daftar berisi hasil pencarian — bukan umpan.
+        // Menambahkan umpan di sini akan mencampur hasil dan menimpa baris
+        // status "N hasil untuk ...".
+        if (searchField != null && !searchField.getText().toString().trim().isEmpty()) return;
+        if (items.size() >= FEED_PREFILL) return;
+        list.post(this::loadMoreFeed);
+    }
+
+    /** Siapkan umpan dari awal: 40 judul beranda, lanjut halaman katalog 2. */
+    private void resetFeed() {
+        feedNextPage = 2;
+        feedLoading = false;
+        feedEnded = false;
+        feedSource = null;
+        feedEmptyStreak = 0;
+    }
+
     private void loadTab(Tab which) {
         String query = searchField == null ? "" : searchField.getText().toString().trim();
         if (!query.isEmpty()) {
@@ -656,6 +867,7 @@ public class KomikuActivity extends AppCompatActivity {
                 mode = which.usesRows() ? Mode.ROWS : Mode.GRID;
                 items.clear();
                 items.addAll(loaded);
+                if (which == Tab.NEW_CHAPTERS) resetFeed();
                 switchContent(mode == Mode.ROWS ? rowAdapter : gridAdapter);
                 publishItems();
                 refreshContinueRail();
@@ -668,10 +880,11 @@ public class KomikuActivity extends AppCompatActivity {
                             : which == Tab.HISTORY ? "Belum ada riwayat baca."
                             : "Daftar kosong dari sumber.");
                 } else if (which == Tab.NEW_CHAPTERS) {
-                    int total = catalog == null ? 0 : catalog.stats().titles;
-                    statusLine.setText(total > loaded.size()
-                            ? loaded.size() + " chapter terbaru · " + total + " judul di katalog"
-                            : loaded.size() + " chapter terbaru");
+                    statusLine.setText(loaded.size() + " chapter terbaru");
+                    // Beranda hanya 40 judul: lanjutkan sendiri. Katalog
+                    // tersimpan (bila ada) dipakai lebih dulu supaya daftar
+                    // langsung berisi ribuan judul tanpa menunggu jaringan.
+                    prefillFeed();
                 } else if (which == Tab.NEW_TITLES && catalog != null && catalog.exists()) {
                     statusLine.setText(loaded.size() + " judul dari katalog lengkap");
                 } else if (which == Tab.FAVORITES) {
@@ -1090,6 +1303,23 @@ public class KomikuActivity extends AppCompatActivity {
             notifyDataSetChanged();
         }
 
+        /**
+         * Tambahkan rentang di ujung tanpa menggulang seluruh daftar.
+         *
+         * <p>Dipakai umpan berkelanjutan: posisi gulir pengguna dan isi baris
+         * yang sudah terpasang dibiarkan apa adanya, hanya baris baru yang
+         * diberitahukan.
+         */
+        void submitAndNotifyInsert(List<KomikuManga> data, int start, int count) {
+            entries.clear();
+            entries.addAll(data);
+            if (start < 0 || count <= 0) {
+                notifyDataSetChanged();
+                return;
+            }
+            notifyItemRangeInserted(start, count);
+        }
+
         @Override public long getItemId(int position) {
             return position < 0 || position >= entries.size()
                     ? RecyclerView.NO_ID : entries.get(position).id.hashCode();
@@ -1270,6 +1500,39 @@ public class KomikuActivity extends AppCompatActivity {
 
 
     // ------------------------------------------------ kait pengujian
+
+
+
+    /** Hanya untuk pengujian: isi 40 baris pertama seperti beranda situs. */
+    void isiUmpanAwalUntukTes() {
+        List<KomikuManga> awal = new ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            String slug = "komik-nomor-" + (i + 1);
+            awal.add(new KomikuManga(slug, "Komik Nomor " + (i + 1),
+                    KomikuConfig.BASE + "/manga/" + slug + "/", "", "Manhwa", "", ""));
+        }
+        publishForTest(awal, true);
+        resetFeed();
+    }
+
+    /** Hanya untuk pengujian: siapkan umpan lalu isi sampai target awal. */
+    void muatUmpanUntukTes() {
+        resetFeed();
+        prefillFeed();
+    }
+
+    /** Hanya untuk pengujian: ambil satu batch umpan berikutnya. */
+    void tambahUmpanUntukTes() {
+        if (feedEnded || feedLoading) return;
+        loadMoreFeed();
+    }
+
+    /** Hanya untuk pengujian: jumlah judul unik yang tampil. */
+    int jumlahItemUnikUntukTes() {
+        Set<String> ids = new HashSet<>();
+        for (KomikuManga manga : items) ids.add(manga.id);
+        return ids.size();
+    }
 
     /** Hanya untuk pengujian: pilih tab menurut urutan chip. */
     void pilihTabUntukTes(int index) {

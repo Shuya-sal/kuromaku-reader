@@ -1,3 +1,11 @@
+## 2.59.0 — "Chapter Terbaru" Manga Server 3 tidak lagi berhenti di 40
+
+* **Daftar "Chapter Terbaru" kini mengalir terus.** Beranda Komiku hanya memuat 40 judul; setelah 40 itu tampil, daftar dilanjutkan sendiri dari halaman katalog berikutnya, baik saat digulir maupun langsung sampai sekitar seratus baris agar terlihat bahwa sumbernya jauh lebih besar.
+* **Katalog tersimpan dipakai lebih dulu** — bila Master pernah menekan "Ambil seluruh katalog", gulir berikutnya tidak memerlukan jaringan sama sekali.
+* **Empat halaman pertama katalog ternyata sama dengan 40 judul beranda.** Halaman yang hanya mengulang judul sudah tampil tidak lagi mengakhiri daftar; baru berhenti setelah enam halaman kosong berturut-turut atau saat situs tidak menyediakan halaman berikutnya.
+* Baris baru dikirim sebagai rentang sisipan, bukan penggulangan seluruh daftar — posisi gulir tidak melompat.
+* Umpan berhenti saat pengguna mencari, supaya hasil pencarian tidak tercampur dan baris statusnya tidak tertimpa.
+
 ## 2.58.0 — Manga Server 3 mengambil seluruh katalog
 
 * **Seluruh katalog Komiku kini diambil, bukan hanya 40 judul beranda.** Katalog situs berisi sekitar 8.000 judul dalam 807 halaman; sekarang semuanya bisa diambil dan disimpan di perangkat.
