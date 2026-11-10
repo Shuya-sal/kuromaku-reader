@@ -187,12 +187,17 @@ public final class SectionDrawer {
         if (drawer.getWindow() != null) {
             Window window2 = drawer.getWindow();
             window2.setLayout((int) (activity.getResources().getDisplayMetrics().widthPixels * 0.82f), -1);
-            View panelView = window2.getDecorView();
-            boolean slide = Motion.enabled(activity);
-            panelView.setTranslationX(slide ? -activity.getResources().getDisplayMetrics().widthPixels : 0f);
-            if (slide) {
-                panelView.animate().translationX(0).setDuration(Motion.DURATION_MS).start();
-            }
+            // Panel tidak pernah digeser lewat translationX.
+            //
+            // Sebelumnya panel digeser keluar layar lalu dianimasikan masuk.
+            // Bila animasinya tidak berjalan (pengaturan animasi perangkat
+            // dimatikan, jendela belum terpasang, atau animator dibatalkan
+            // sistem), panel tetap berada di luar layar: dialognya menangkap
+            // sentuhan dan meredupkan layar, tetapi pengguna tidak melihat menu
+            // apa pun — persis terasa seperti "tombol menu tidak bisa diklik".
+            // Menu yang muncul seketika selalu lebih baik daripada menu yang
+            // mungkin tidak pernah terlihat.
+            window2.getDecorView().setTranslationX(0f);
         }
 
         return drawer;

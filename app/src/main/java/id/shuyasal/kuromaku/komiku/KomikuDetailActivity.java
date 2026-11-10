@@ -349,6 +349,18 @@ public class KomikuDetailActivity extends AppCompatActivity {
         row.addView(texts, new LinearLayout.LayoutParams(0,
                 ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        // Status unduhan lebih dulu: inilah yang menentukan apakah chapter
+        // bisa dibaca tanpa jaringan.
+        KomikuDownloads local = new KomikuDownloads(this);
+        int saved = local.savedPages(chapter.url, expectedPages(chapter));
+        if (saved > 0) {
+            String label = local.isDownloaded(chapter.url, expectedPages(chapter))
+                    ? "✓ offline" : saved + "/" + expectedPages(chapter) + " offline";
+            TextView mark = Ui.label(this, label, 11, palette.accent);
+            mark.setTag("komiku_chapter_offline");
+            row.addView(mark);
+        }
+
         double progress = store.progress(chapter.url);
         if (progress > 0.01) {
             TextView mark = Ui.label(this, Math.round(progress * 100) + "%", 11, palette.accent);
@@ -363,8 +375,76 @@ public class KomikuDetailActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.bottomMargin = Ui.dp(this, 6);
         row.setLayoutParams(params);
+        android.widget.ImageButton download = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_download, "Unduh chapter", palette);
+        download.setTag("komiku_chapter_download");
+        download.setOnClickListener(v -> toggleDownload(chapter));
+        row.addView(download, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+
         row.setOnClickListener(v -> openChapter(chapter));
         return row;
+    }
+
+
+    /** Jumlah halaman yang diharapkan untuk satu chapter, dari catatan unduhan. */
+    private int expectedPages(KomikuChapter chapter) {
+        for (KomikuDownloads.Entry entry : new KomikuDownloads(this).entries()) {
+            if (entry.chapterKey.equals(chapter.url)) return entry.pages;
+        }
+        return 0;
+    }
+
+    /**
+     * Unduh atau hapus satu chapter.
+     *
+     * <p>Yang sudah lengkap ditawari hapus; yang belum diantrekan. Tidak ada
+     * tombol yang menampilkan "Unduh" untuk chapter yang sudah tersimpan, dan
+     * tidak ada klaim tersimpan sebelum halaman benar-benar lolos validasi.
+     */
+    private void toggleDownload(KomikuChapter chapter) {
+        KomikuDownloads local = new KomikuDownloads(this);
+        int expected = expectedPages(chapter);
+        if (expected > 0 && local.isDownloaded(chapter.url, expected)) {
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Hapus unduhan")
+                    .setMessage("Hapus berkas offline " + chapter.title + "?\n\n"
+                            + "Progres membaca tidak ikut terhapus, jadi chapter ini tetap "
+                            + "tercatat di riwayat dan kembali dibaca dari posisi terakhir.")
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Hapus", (dialog, which) -> {
+                        KomikuDownloadQueue.deleteChapter(this, chapter.url);
+                        renderChapters();
+                        android.widget.Toast.makeText(this,
+                                "Unduhan dihapus. Progres membaca tetap tersimpan.",
+                                android.widget.Toast.LENGTH_SHORT).show();
+                    })
+                    .show();
+            return;
+        }
+        boolean queued = KomikuDownloadQueue.enqueueChapter(this, chapter.url,
+                detail == null ? "" : detail.id, detail == null ? "" : detail.title,
+                chapter.title);
+        android.widget.Toast.makeText(this,
+                queued ? "Chapter masuk antrean unduhan."
+                        : "Chapter tidak dapat diantrekan.",
+                android.widget.Toast.LENGTH_SHORT).show();
+        renderChapters();
+    }
+
+    /** Unduh semua chapter yang belum tersimpan. */
+    private void downloadAll() {
+        if (detail == null) return;
+        java.util.Map<String, String> chapters = new java.util.LinkedHashMap<>();
+        for (KomikuChapter chapter : detail.chapters) {
+            chapters.put(chapter.url, chapter.title);
+        }
+        int queued = KomikuDownloadQueue.enqueue(this, detail.id, detail.title, chapters);
+        android.widget.Toast.makeText(this, queued > 0
+                ? queued + " chapter masuk antrean unduhan."
+                : "Semua chapter sudah tersimpan offline.",
+                android.widget.Toast.LENGTH_SHORT).show();
+        renderChapters();
     }
 
     private void openChapter(KomikuChapter chapter) {

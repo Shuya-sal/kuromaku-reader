@@ -319,39 +319,25 @@ public class SectionDrawerTest {
 
     // ------------------------------------------------------------------- motion
 
-    /**
-     * The drawer slides in, starting off screen and ending at rest.
-     *
-     * <p>A drawer that starts at zero never appears to open; one that is left
-     * off screen is invisible. Both are single-character mistakes, so the start
-     * position and the rest position are checked separately. The duration check
-     * reads the animator the code actually started: a test of the constant alone
-     * stays green when the call site hardcodes a different number.
-     */
-    @Test
-    public void theDrawerSlidesInFromTheLeftEdge() {
-        android.provider.Settings.Global.putFloat(context.getContentResolver(),
-                android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+        public void theDrawerIsOnScreenImmediately() {
+        // Panel tidak pernah digeser lewat translationX.
+        //
+        // Dulu panel digeser keluar layar lalu dianimasikan masuk. Bila
+        // animasinya tidak berjalan di perangkat (animasi sistem dimatikan,
+        // jendela belum terpasang, animator dibatalkan), panel tetap di luar
+        // layar: dialognya meredupkan layar dan menangkap sentuhan, tetapi
+        // pengguna tidak melihat menu apa pun — persis terasa seperti tombol
+        // menu mati. Menu yang muncul seketika selalu lebih baik daripada menu
+        // yang mungkin tidak pernah terlihat.
         MainActivity host = open();
-
         View decor = openDrawerDecorBeforeIdle(host);
-        // The animation has been started but not run: the panel is still off screen.
-        assertTrue("drawer harus mulai di luar layar, dapat " + decor.getTranslationX(),
-                decor.getTranslationX() < 0f);
-
-        // `view.animate()` hands back the same animator the drawer just configured,
-        // so this reads the duration the call site really used. Robolectric runs the
-        // animation to completion, so a mid-flight position cannot be observed; the
-        // configured duration is the honest thing to assert.
-        long duration = decor.animate().getDuration();
-        assertEquals("durasi geser drawer harus Motion.DURATION_MS",
-                (long) id.shuyasal.kuromaku.ui.Motion.DURATION_MS, duration);
-        assertTrue("durasi " + duration + " ms di luar jendela 180-250 ms",
-                duration >= 180 && duration <= 250);
+        assertEquals("panel harus langsung di posisi akhir",
+                0f, decor.getTranslationX(), 0.5f);
 
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(
-                java.time.Duration.ofMillis(id.shuyasal.kuromaku.ui.Motion.DURATION_MS + 60L));
-        assertEquals("drawer harus berhenti di posisi diam", 0f, decor.getTranslationX(), 0.5f);
+                java.time.Duration.ofMillis(300));
+        assertEquals("panel tetap di posisi diam sesudah looper berjalan",
+                0f, decor.getTranslationX(), 0.5f);
     }
 
     /**

@@ -83,6 +83,9 @@ public class KomikuActivity extends AppCompatActivity {
      */
     private static final int FEED_MAX_EMPTY_PAGES = 6;
 
+    /** Katalog dianggap perlu diperbarui setelah selama ini. */
+    private static final long CATALOG_MAX_AGE_MS = 12 * 60 * 60 * 1000L;
+
     private static final int CONTINUE_LIMIT = 12;
     private static final int CHROME_ANIM_MS = 180;
     private static final int CONTINUE_TEXT_DP = 150;
@@ -881,6 +884,7 @@ public class KomikuActivity extends AppCompatActivity {
                             : "Daftar kosong dari sumber.");
                 } else if (which == Tab.NEW_CHAPTERS) {
                     statusLine.setText(loaded.size() + " chapter terbaru");
+                    ensureCatalog();
                     // Beranda hanya 40 judul: lanjutkan sendiri. Katalog
                     // tersimpan (bila ada) dipakai lebih dulu supaya daftar
                     // langsung berisi ribuan judul tanpa menunggu jaringan.
@@ -978,16 +982,14 @@ public class KomikuActivity extends AppCompatActivity {
     }
 
     private void showOverflowMenu() {
-        KomikuCatalog.Stats stats = catalog == null ? null : catalog.stats();
-        String catalogLine = stats == null || stats.isEmpty()
-                ? "Ambil seluruh katalog"
-                : "Perbarui katalog (" + stats.titles + " judul)";
-        String[] options = {catalogLine, "Pengaturan", "Muat ulang"};
+        // Tidak ada lagi "Ambil/Perbarui katalog": katalog berjalan sendiri di
+        // latar, jadi tombol itu hanya membebani pengguna dengan keputusan yang
+        // tidak perlu.
+        String[] options = opsiMenuUntukTes();
         new AlertDialog.Builder(this)
                 .setTitle("Menu Manga Server 3")
                 .setItems(options, (dialog, which) -> {
-                    if (which == 0) fetchWholeCatalog();
-                    else if (which == 1) showPreferences();
+                    if (which == 0) showPreferences();
                     else {
                         searchField.setText("");
                         loadTab(tab);
@@ -1000,34 +1002,18 @@ public class KomikuActivity extends AppCompatActivity {
     /**
      * Ambil seluruh katalog, halaman demi halaman, lalu simpan.
      *
-     * <p>Kemajuan terlihat pada baris status dan bisa dihentikan dari menu yang
-     * sama. Katalog lama tetap dipakai sampai pengambilan baru selesai, jadi
-     * beranda tidak pernah kosong karena pengambilan ulang.
+     * <p>Berjalan sendiri: dipanggil saat beranda dibuka bila katalog belum ada
+     * atau sudah lama. Tidak ada tombol dan tidak ada dialog — pengguna tetap
+     * bisa membaca daftar yang sudah tampil sambil menunggu.
      */
     private void fetchWholeCatalog() {
-        if (catalogFetching) {
-            catalogStop = true;
-            Toast.makeText(this, "Menghentikan pengambilan katalog…", Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (catalogFetching) return;
         catalogFetching = true;
         catalogStop = false;
-        // Tanpa spinner penuh: pengambilan ratusan halaman berjalan di latar,
-        // dan pengguna tetap bisa membaca daftar yang sudah ada sambil menunggu.
-        errorBox.setVisibility(View.GONE);
-        statusLine.setText("Mengambil katalog lengkap…");
         catalogWorker.execute(() -> {
             KomikuCatalog.Result result = catalog.fetchAll(source,
                     (page, collected, hasNext) -> {
                         if (catalogStop || isFinishing()) return false;
-                        final int titles = collected.size();
-                        main.post(() -> {
-                            if (isFinishing()) return;
-                            statusLine.setText("Mengambil katalog… " + titles
-                                    + " judul (halaman " + page + ")");
-                        });
-                        // Simpan tiap 20 halaman: pengambilan yang terputus
-                        // tidak membuang ratusan judul yang sudah terkumpul.
                         if (page % 20 == 0) {
                             try {
                                 catalog.save(collected, page);
@@ -1037,31 +1023,38 @@ public class KomikuActivity extends AppCompatActivity {
                         }
                         return true;
                     });
-            String saved = null;
             try {
                 if (!result.items.isEmpty()) catalog.save(result.items, result.pagesRead);
-            } catch (Exception failure) {
-                saved = failure.getMessage();
+            } catch (Exception ignored) {
+                // Katalog lama tetap dipakai bila penyimpanan gagal.
             }
-            final String saveError = saved;
             main.post(() -> {
                 catalogFetching = false;
                 if (isFinishing()) return;
-                if (saveError != null) {
-                    statusLine.setText("Katalog gagal disimpan: " + saveError);
-                    return;
+                feedSource = null;
+                if (tab == Tab.NEW_CHAPTERS) {
+                    statusLine.setText(items.size() + " chapter terbaru");
+                    prefillFeed();
                 }
-                if (result.items.isEmpty()) {
-                    statusLine.setText("Katalog tidak berisi judul: " + result.stoppedBecause);
-                    return;
-                }
-                statusLine.setText(result.complete
-                        ? result.items.size() + " judul tersimpan dari " + result.pagesRead + " halaman"
-                        : result.items.size() + " judul tersimpan (belum lengkap: "
-                                + result.stoppedBecause + ")");
-                if (tab == Tab.NEW_TITLES) loadTab(tab);
             });
         });
+    }
+
+    /**
+     * Mulai pengambilan katalog bila perlu.
+     *
+     * <p>Perlu bila belum ada, atau bila berkasnya lebih tua dari
+     * {@link #CATALOG_MAX_AGE_MS}. Berjalan di latar dan tidak pernah
+     * menghalangi tampilan.
+     */
+    private void ensureCatalog() {
+        if (catalog == null || catalogFetching) return;
+        KomikuCatalog.Stats stats = catalog.stats();
+        if (!stats.isEmpty() && System.currentTimeMillis() - stats.updatedAt
+                < CATALOG_MAX_AGE_MS) {
+            return;
+        }
+        fetchWholeCatalog();
     }
 
     private void showPreferences() {
@@ -1532,6 +1525,22 @@ public class KomikuActivity extends AppCompatActivity {
         Set<String> ids = new HashSet<>();
         for (KomikuManga manga : items) ids.add(manga.id);
         return ids.size();
+    }
+
+
+    /** Hanya untuk pengujian: daftar opsi menu titik tiga. */
+    static String[] opsiMenuUntukTes() {
+        return new String[]{"Pengaturan", "Muat ulang"};
+    }
+
+    /** Hanya untuk pengujian: ketik di kolom pencarian seperti pengguna. */
+    void ketikUntukTes(String query) {
+        if (searchField != null) searchField.setText(query);
+    }
+
+    /** Hanya untuk pengujian: palet yang sedang dipakai. */
+    Palette paletteUntukTes() {
+        return palette;
     }
 
     /** Hanya untuk pengujian: pilih tab menurut urutan chip. */

@@ -215,10 +215,25 @@ public class KomikuReaderActivity extends AppCompatActivity {
         worker.execute(() -> {
             List<String> images = new ArrayList<>();
             String error = null;
-            try {
-                images = source.images(chapterUrl);
-            } catch (Throwable failure) {
-                error = failure.getMessage();
+            // Berkas offline lebih dulu: chapter yang sudah tersimpan harus bisa
+            // dibaca dalam mode pesawat, tanpa menyentuh jaringan sama sekali.
+            KomikuDownloads local = new KomikuDownloads(this);
+            int expected = 0;
+            for (KomikuDownloads.Entry entry : local.entries()) {
+                if (chapterUrl.equals(entry.chapterKey)) expected = entry.pages;
+            }
+            if (expected > 0 && local.isDownloaded(chapterUrl, expected)) {
+                for (int index = 0; index < expected; index++) {
+                    java.io.File file = local.pageFile(chapterUrl, index);
+                    if (file != null) images.add(file.getAbsolutePath());
+                }
+            }
+            if (images.isEmpty()) {
+                try {
+                    images = source.images(chapterUrl);
+                } catch (Throwable failure) {
+                    error = failure.getMessage();
+                }
             }
             final List<String> result = images;
             final String message = error;
@@ -255,6 +270,20 @@ public class KomikuReaderActivity extends AppCompatActivity {
             pages.addView(view, new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             pageViews.add(view);
+            if (url.startsWith("/")) {
+                // Halaman dari berkas offline.
+                Bitmap bitmap = android.graphics.BitmapFactory.decodeFile(url);
+                if (bitmap != null) {
+                    view.setImageBitmap(bitmap);
+                    loadedCount++;
+                    statusView.setText(loadedCount + "/" + totalCount + " halaman");
+                } else {
+                    loadedCount++;
+                    statusView.setText("Sebagian gambar gagal dimuat ("
+                            + loadedCount + "/" + totalCount + ")");
+                }
+                continue;
+            }
             KomikuImages.fetch(url, width, new KomikuImages.Callback() {
                 @Override public void onBitmap(Bitmap bitmap) {
                     view.setImageBitmap(bitmap);

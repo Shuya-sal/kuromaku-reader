@@ -1,3 +1,16 @@
+## 2.60.0 — Manga Server 3: menu, katalog otomatis, pencarian langsung, unduhan offline
+
+* **Menu garis tiga diperbaiki.** Panel menu tidak lagi digeser keluar layar sebelum dianimasikan masuk. Bila animasinya tidak berjalan di perangkat (animasi sistem dimatikan atau jendela belum siap), panel tetap di luar layar sementara dialognya menangkap sentuhan dan meredupkan layar — itulah sebabnya tombol terasa mati. Sekarang menu muncul seketika.
+* **Tidak ada lagi "Ambil/Perbarui katalog" di menu.** Katalog berjalan sendiri di latar saat beranda dibuka, dan diperbarui bila berkasnya lebih tua dari 12 jam. Pengguna tidak perlu memutuskan apa pun.
+* **Pencarian langsung bekerja saat mengetik** — tanpa menekan tombol. Katalog tersimpan dicari lebih dulu (tanpa jaringan), lalu hasil situs digabung tanpa judul ganda.
+* **Unduhan manga Manga Server 3, mengikuti Manga Server 2:**
+  * Tombol unduh per chapter di layar detail; chapter tersimpan menampilkan "✓ offline", sebagian menampilkan "n/m offline".
+  * WorkManager dengan nama pekerjaan stabil per chapter — menekan Unduh dua kali tidak pernah menghasilkan dua unduhan.
+  * Halaman yang sudah valid dilewati (resume); tiap gambar divalidasi sebelum disimpan, dan berkas ditulis lewat nama sementara agar unduhan terputus tidak meninggalkan berkas setengah jadi yang terlihat sah.
+  * Hanya chapter yang SEMUA halamannya lolos yang ditandai tersimpan; status "Tersimpan offline" tidak pernah diklaim dari catatan memori.
+  * Reader memakai berkas offline lebih dulu — chapter tersimpan bisa dibaca dalam mode pesawat.
+  * Menghapus unduhan tidak menghapus progres baca.
+
 ## 2.59.0 — "Chapter Terbaru" Manga Server 3 tidak lagi berhenti di 40
 
 * **Daftar "Chapter Terbaru" kini mengalir terus.** Beranda Komiku hanya memuat 40 judul; setelah 40 itu tampil, daftar dilanjutkan sendiri dari halaman katalog berikutnya, baik saat digulir maupun langsung sampai sekitar seratus baris agar terlihat bahwa sumbernya jauh lebih besar.
