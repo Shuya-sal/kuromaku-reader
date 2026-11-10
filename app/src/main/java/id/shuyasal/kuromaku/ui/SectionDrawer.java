@@ -24,6 +24,7 @@ public final class SectionDrawer {
         NOVEL,
         MANGA_VORATON,
         MANGA_SHINIGAMI,
+        MANGA_KOMIKU,
         ANIME_OTAKUDESU
     }
 
@@ -32,6 +33,10 @@ public final class SectionDrawer {
         void onMangaVoratoon();
         void onShinigami();
         void onBackup();
+
+        /** Manga Komiku (Server 3); implementasi lama boleh mengabaikan. */
+        default void onKomiku() {
+        }
 
         /** Anime Otakudesu; implementasi lama boleh mengabaikan. */
         default void onAnimeOtakudesu() {
@@ -118,6 +123,14 @@ public final class SectionDrawer {
                 currentSection == Section.MANGA_SHINIGAMI, palette, () -> {
             drawer.dismiss();
             if (listener != null) listener.onShinigami();
+        });
+
+        String komikuLabel = currentSection == Section.MANGA_KOMIKU
+                ? "Manga Server 3  ✓" : "Manga Server 3";
+        addDrawerItem(activity, panel, komikuLabel, "drawer_manga_komiku",
+                currentSection == Section.MANGA_KOMIKU, palette, () -> {
+            drawer.dismiss();
+            if (listener != null) listener.onKomiku();
         });
 
         String animeLabel = currentSection == Section.ANIME_OTAKUDESU

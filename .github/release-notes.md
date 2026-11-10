@@ -1,3 +1,11 @@
+* **@VERSION@ — Beranda Manga Server 3 disamakan dengan Manga Server 2.**
+  - Kerangkanya sekarang identik: bar atas dengan menu samping, judul, tombol unduhan, dan menu titik tiga; kolom pencarian "Cari judul manga" dengan tombol **Cari**; chip **Chapter Terbaru / Terpopuler / Manga Terbaru / Riwayat / Favorit** yang bisa digeser; baris jumlah; rail **Lanjutkan Membaca**; lalu satu daftar.
+  - Chapter Terbaru dan Riwayat tampil sebagai **baris** (cover 48x70, judul, "Ch. N · waktu") seperti di Manga Server 2. Terpopuler, Manga Terbaru, dan hasil pencarian tampil sebagai **grid** dengan rasio cover yang sama.
+  - Rail **Lanjutkan Membaca** berisi kartu ringkas cover 64x90, judul, "Ch. N · Y%", dan bar progres — persis bentuk kartu di Manga Server 2. Rail menjadi item pertama daftar sehingga ikut tergulir, dan hilang sama sekali saat belum ada riwayat.
+  - Pencarian menunggu 350 ms setelah berhenti mengetik, dan pencarian yang masih berjalan dikalahkan oleh yang lebih baru.
+  - Bagian pencarian, chip, dan baris jumlah menyusut saat menggulir turun lalu kembali saat naik, dengan ambang asimetris dan penguncian animasi supaya tidak berkedip.
+  - Menu samping sekarang memuat **Manga Server 3**, dan tema Light/Dark/Sepia/System berlaku langsung tanpa memuat ulang daftar.
+  - Ikon unduhan ditampilkan redup dengan penjelasan jujur bahwa unduhan offline Komiku belum tersedia; tidak ada tombol yang terlihat berfungsi padahal tidak.
 * **@VERSION@ — Progres baca Manga Server 2 dan Manga Server 3 kini tersinkron dua arah.**
   - Tautkan judul yang sama lewat bar **"Cari pasangan di Manga Server 2/3"** di layar detail. Saran diambil dari riwayat dan favorit, atau dicari langsung ke sumber lain; setiap saran menyebut tingkat kemiripannya, dan penautan tetap menunggu konfirmasi Master — judul yang hanya mirip nama tidak pernah digabung otomatis.
   - Setelah tertaut, membaca chapter di satu server langsung menandai chapter yang sama di server lain (`✓ selesai di Manga Server 3`), termasuk saat chapter dibuka dari daftar. Status selesai hanya ditambahkan — membuka chapter lama tidak pernah mencabutnya.
