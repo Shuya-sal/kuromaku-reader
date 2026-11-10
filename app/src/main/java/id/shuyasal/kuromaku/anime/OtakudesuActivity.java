@@ -1067,6 +1067,14 @@ public class OtakudesuActivity extends AppCompatActivity {
                         finish();
                     }
 
+                    @Override public void onKomiku() {
+                        startActivity(new Intent(OtakudesuActivity.this,
+                                id.shuyasal.kuromaku.komiku.KomikuActivity.class)
+                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                        finish();
+                    }
+
                     @Override public void onAnimeOtakudesu() {
                         // Sudah di halaman ini.
                     }

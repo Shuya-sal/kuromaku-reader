@@ -124,6 +124,8 @@ public class KomikuActivity extends AppCompatActivity {
     private final ExecutorService catalogWorker = Executors.newSingleThreadExecutor();
     private volatile boolean catalogFetching;
     private volatile boolean catalogStop;
+    /** Benar bila daftar yang tampil adalah hasil pencarian. */
+    private boolean searchMode;
     /** Halaman katalog berikutnya yang akan ditambahkan ke umpan. */
     private int feedNextPage = 1;
     private boolean feedLoading;
@@ -610,10 +612,15 @@ public class KomikuActivity extends AppCompatActivity {
             main.post(() -> {
                 if (request != generation || isFinishing()) return;
                 hideLoading();
-                mode = Mode.GRID;
+                // Hasil pencarian memakai daftar baris — sama seperti daftar
+                // chapter terbaru, bukan grid kartu besar. Judul yang panjang
+                // tetap terbaca dua baris, dan keterangan chapter/waktu ada di
+                // bawahnya.
+                mode = Mode.ROWS;
                 items.clear();
                 items.addAll(result);
-                switchContent(gridAdapter);
+                searchMode = true;
+                switchContent(rowAdapter);
                 publishItems();
                 refreshContinueRail();
                 if (message != null) {
@@ -868,6 +875,7 @@ public class KomikuActivity extends AppCompatActivity {
                 if (request != generation || isFinishing()) return;
                 hideLoading();
                 mode = which.usesRows() ? Mode.ROWS : Mode.GRID;
+                searchMode = false;
                 items.clear();
                 items.addAll(loaded);
                 if (which == Tab.NEW_CHAPTERS) resetFeed();
@@ -948,6 +956,12 @@ public class KomikuActivity extends AppCompatActivity {
 
     private void open(KomikuManga manga) {
         KomikuStore.Entry last = store.lastFor(manga.id);
+        // Hasil pencarian selalu membuka halaman detail: pengguna sedang
+        // mencari judul, bukan melanjutkan chapter yang pernah dibaca.
+        if (searchMode) {
+            openDetailFor(manga);
+            return;
+        }
         if (tab.usesRows() && last != null && !last.chapterUrl.isEmpty()) {
             openChapterDirect(manga, last.chapterUrl, last.chapterLabel);
             return;
@@ -1527,6 +1541,11 @@ public class KomikuActivity extends AppCompatActivity {
         return ids.size();
     }
 
+
+    /** Hanya untuk pengujian: apakah daftar memakai mode baris. */
+    boolean modeBarisUntukTes() {
+        return mode == Mode.ROWS;
+    }
 
     /** Hanya untuk pengujian: daftar opsi menu titik tiga. */
     static String[] opsiMenuUntukTes() {

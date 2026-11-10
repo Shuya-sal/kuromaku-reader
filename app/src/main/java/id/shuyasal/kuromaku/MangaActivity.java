@@ -348,6 +348,13 @@ public class MangaActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onKomiku() {
+                startActivity(new Intent(MangaActivity.this,
+                        id.shuyasal.kuromaku.komiku.KomikuActivity.class));
+                finish();
+            }
+
+            @Override
             public void onBackup() {
                 openNovelDataAction("backup");
             }

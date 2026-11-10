@@ -1,3 +1,8 @@
+## 2.61.0 — Hasil pencarian Manga Server 3 jadi daftar baris, menu "Manga Server 3" bisa dibuka
+
+* **Hasil pencarian Manga Server 3 sekarang memakai daftar baris**, sama seperti daftar "Chapter Terbaru": cover kecil di kiri, judul dua baris, chapter dan waktu di bawahnya — bukan grid kartu besar. Mengetuk hasil membuka halaman detail judul, bukan melanjutkan chapter lama.
+* **Menu samping "Manga Server 3" kini berfungsi dari layar mana pun.** Sebelumnya hanya layar Server 3 sendiri yang menangani pilihan itu; di layar Novel, Manga Server 1, dan Anime Streaming itemnya tampil tetapi tidak membuka apa pun. Ketiga layar itu sekarang membuka Manga Server 3.
+
 ## 2.60.0 — Manga Server 3: menu, katalog otomatis, pencarian langsung, unduhan offline
 
 * **Menu garis tiga diperbaiki.** Panel menu tidak lagi digeser keluar layar sebelum dianimasikan masuk. Bila animasinya tidak berjalan di perangkat (animasi sistem dimatikan atau jendela belum siap), panel tetap di luar layar sementara dialognya menangkap sentuhan dan meredupkan layar — itulah sebabnya tombol terasa mati. Sekarang menu muncul seketika.

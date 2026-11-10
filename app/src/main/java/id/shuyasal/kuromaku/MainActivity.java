@@ -383,6 +383,13 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
+            public void onKomiku() {
+                startActivity(new Intent(MainActivity.this,
+                        id.shuyasal.kuromaku.komiku.KomikuActivity.class));
+                finish();
+            }
+
+            @Override
             public void onBackup() {
                 Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
