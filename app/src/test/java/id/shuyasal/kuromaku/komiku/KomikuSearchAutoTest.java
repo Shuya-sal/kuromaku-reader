@@ -51,18 +51,29 @@ public class KomikuSearchAutoTest {
         new KomikuCatalog(context).save(items, 1);
     }
 
-    private static void tunggu(Runnable aksi) {
-        aksi.run();
-        for (int i = 0; i < 100; i++) {
+    /**
+     * Jalankan aksi lalu tunggu hasilnya muncul.
+     *
+     * <p>Menunggu dengan jumlah putaran tetap membuat tes gagal acak saat
+     * mesin sedang sibuk: pencarian berjalan di thread latar, dan di suite
+     * penuh thread itu bisa lebih lambat daripada jatah putaran. Yang benar
+     * adalah menunggu kondisinya, dengan batas waktu yang lapang.
+     */
+    private static void tungguSampai(java.util.function.BooleanSupplier kondisi) {
+        long deadline = System.currentTimeMillis() + 15000L;
+        while (System.currentTimeMillis() < deadline) {
             ShadowLooper.idleMainLooper();
+            if (kondisi.getAsBoolean()) return;
             try {
-                Thread.sleep(20);
+                Thread.sleep(25);
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
                 return;
             }
-            ShadowLooper.idleMainLooper();
+            org.robolectric.shadows.ShadowSystemClock.advanceBy(
+                    java.time.Duration.ofMillis(50));
         }
+        ShadowLooper.idleMainLooper();
     }
 
     @Test public void menuTidakLagiMemuatPerintahKatalog() {
@@ -84,13 +95,7 @@ public class KomikuSearchAutoTest {
             KomikuActivity activity = controller.get();
             // Mengetik saja — tidak ada klik tombol "Cari".
             activity.ketikUntukTes("Judul Otomatis 44");
-            ShadowLooper.idleMainLooper();
-            for (int i = 0; i < 60; i++) {
-                org.robolectric.shadows.ShadowSystemClock.advanceBy(
-                        java.time.Duration.ofMillis(50));
-                ShadowLooper.idleMainLooper();
-            }
-            tunggu(() -> { });
+            tungguSampai(() -> activity.jumlahItemUntukTes() == 1);
 
             assertEquals("hasil pencarian otomatis muncul",
                     1, activity.jumlahItemUntukTes());
@@ -105,12 +110,7 @@ public class KomikuSearchAutoTest {
                      Robolectric.buildActivity(KomikuActivity.class).setup()) {
             KomikuActivity activity = controller.get();
             activity.ketikUntukTes("Judul Otomatis 7");
-            for (int i = 0; i < 60; i++) {
-                org.robolectric.shadows.ShadowSystemClock.advanceBy(
-                        java.time.Duration.ofMillis(50));
-                ShadowLooper.idleMainLooper();
-            }
-            tunggu(() -> { });
+            tungguSampai(() -> activity.jumlahItemUntukTes() >= 1);
             assertTrue("judul dari katalog ditemukan",
                     activity.jumlahItemUntukTes() >= 1);
         }
@@ -122,22 +122,13 @@ public class KomikuSearchAutoTest {
                      Robolectric.buildActivity(KomikuActivity.class).setup()) {
             KomikuActivity activity = controller.get();
             activity.ketikUntukTes("Judul Otomatis 5");
-            for (int i = 0; i < 40; i++) {
-                org.robolectric.shadows.ShadowSystemClock.advanceBy(
-                        java.time.Duration.ofMillis(50));
-                ShadowLooper.idleMainLooper();
-            }
-            tunggu(() -> { });
+            tungguSampai(() -> activity.jumlahItemUntukTes() >= 1);
             int hasil = activity.jumlahItemUntukTes();
             assertTrue("ada hasil", hasil >= 1);
 
             activity.ketikUntukTes("");
-            for (int i = 0; i < 40; i++) {
-                org.robolectric.shadows.ShadowSystemClock.advanceBy(
-                        java.time.Duration.ofMillis(50));
-                ShadowLooper.idleMainLooper();
-            }
-            tunggu(() -> activity.muatUmpanUntukTes());
+            activity.muatUmpanUntukTes();
+            tungguSampai(() -> activity.jumlahItemUntukTes() > 40);
             assertTrue("kembali ke daftar umpan",
                     activity.jumlahItemUntukTes() != hasil
                             || activity.jumlahItemUntukTes() > 40);

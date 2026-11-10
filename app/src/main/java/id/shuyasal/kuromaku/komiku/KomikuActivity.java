@@ -668,6 +668,11 @@ public class KomikuActivity extends AppCompatActivity {
                 }
             }
         }
+        // Katalog tersimpan sudah punya hasil: jangan menunggu jaringan.
+        // Selain lebih cepat, ini membuat pencarian tetap bekerja saat sinyal
+        // buruk — dan tidak menggantungkan hasil pada permintaan yang bisa
+        // lambat atau gagal.
+        if (!merged.isEmpty()) return new ArrayList<>(merged.values());
         try {
             for (KomikuManga manga : source.search(query)) merged.putIfAbsent(manga.id, manga);
         } catch (KomikuSource.SourceException failure) {
@@ -1046,6 +1051,14 @@ public class KomikuActivity extends AppCompatActivity {
                 catalogFetching = false;
                 if (isFinishing()) return;
                 feedSource = null;
+                // Saat pengguna sedang mencari, daftar berisi hasil pencarian.
+                // Menulis baris status di sini akan menimpanya menjadi
+                // "N chapter terbaru" padahal yang tampil adalah hasil
+                // pencarian.
+                if (searchField != null
+                        && !searchField.getText().toString().trim().isEmpty()) {
+                    return;
+                }
                 if (tab == Tab.NEW_CHAPTERS) {
                     statusLine.setText(items.size() + " chapter terbaru");
                     prefillFeed();

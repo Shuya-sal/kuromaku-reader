@@ -111,19 +111,25 @@ public final class KomikuSource {
     /**
      * Pencarian judul.
      *
-     * <p>Komiku mengirim hasil pencarian di halaman {@code /?s=}. Bila hasilnya
-     * tidak memuat tautan manga (mis. karena situs mengubah cara menampilkan),
-     * daftar kosong dikembalikan — layar akan mengatakan tidak ditemukan,
-     * bukan menampilkan hasil karangan.
+     * <p>Hasil pencarian dimuat dari {@code api.komiku.org/?s=...&post_type=manga}
+     * — alamat yang dipakai halaman pencarian situs untuk memuat hasilnya.
+     *
+     * <p>Halaman {@code komiku.org/?s=...} sendiri tidak memuat hasil apa pun:
+     * yang ada hanya kerangka halaman beserta atribut {@code hx-get} yang
+     * memerintahkan peramban memuat hasil dari alamat itu. Tanpa
+     * {@code post_type=manga}, alamat itu mengembalikan daftar CHAPTER (judul
+     * "Untitled", tautan ke halaman chapter), bukan judul manga — jadi tanpa
+     * parameter tersebut pencarian selalu tampak kosong.
      */
     public List<KomikuManga> search(String query) throws SourceException {
         String q = query == null ? "" : query.trim();
         if (q.isEmpty()) return new ArrayList<>();
-        String url = KomikuConfig.BASE + "/?s=" + java.net.URLEncoder.encode(q,
-                java.nio.charset.StandardCharsets.UTF_8);
-        Document doc = Jsoup.parse(html(url));
-        List<KomikuManga> found = parseList(doc, "article.ls2");
-        if (found.isEmpty()) found = parseList(doc, "article.ls4");
+        String url = KomikuConfig.API + "/?s="
+                + java.net.URLEncoder.encode(q, java.nio.charset.StandardCharsets.UTF_8)
+                + "&post_type=manga";
+        Document doc = Jsoup.parseBodyFragment(html(url));
+        List<KomikuManga> found = parseCatalogFragment(doc);
+        if (found.isEmpty()) found = parseList(doc, "article.ls2, article.ls4");
         if (found.isEmpty()) found = parseAnchors(doc);
         return found;
     }
@@ -297,18 +303,29 @@ public final class KomikuSource {
     }
 
     private KomikuManga fromCatalogCard(Element card) {
-        Element link = card.selectFirst("div.kan a[href^=https://komiku.org/manga/], "
-                + "div.bgei a[href^=https://komiku.org/manga/]");
-        if (link == null) link = card.selectFirst("a[href^=https://komiku.org/manga/]");
-        if (link == null) return null;
-        String url = KomikuConfig.absolute(link.attr("href"));
+        // Judul diambil dari blok teks (div.kan), bukan dari tautan cover
+        // (div.bgei): tautan cover tidak punya judul, dan bila dipilih lebih
+        // dulu yang terbaca justru badge tipe seperti "Manhwa Aksi".
+        Element heading = card.selectFirst("div.kan h3, div.kan h4");
+        Element titleLink = card.selectFirst("div.kan a[href*=manga]");
+        Element anyLink = card.selectFirst("a[href*=manga]");
+        Element anchor = titleLink != null ? titleLink : anyLink;
+        if (anchor == null) return null;
+
+        String url = KomikuConfig.absolute(anchor.attr("href"));
         if (url == null) return null;
         String id = KomikuConfig.mangaId(url);
         if (id.isEmpty()) return null;
 
-        Element heading = card.selectFirst("div.kan h3, div.kan h4");
-        String title = heading != null ? heading.text() : link.attr("title");
-        if (title == null || title.trim().isEmpty()) title = id.replace('-', ' ');
+        String title = heading != null ? heading.text() : "";
+        if (title.trim().isEmpty() && titleLink != null) title = titleLink.attr("title");
+        if (title.trim().isEmpty()) title = anchor.attr("title");
+        if (title.trim().isEmpty()) {
+            Element image = card.selectFirst("img[alt]");
+            if (image != null) title = image.attr("alt");
+        }
+        if (title.trim().isEmpty()) title = id.replace('-', ' ');
+        if (title.equalsIgnoreCase("Untitled")) title = id.replace('-', ' ');
 
         Element image = card.selectFirst("img[data-src], img[src]");
         String cover = "";
@@ -319,6 +336,7 @@ public final class KomikuSource {
         }
 
         // "Manhwa Drama" pada tpe1_inf, lalu "Drama | 4 jam lalu | Berwarna".
+        // Pada hasil pencarian situs hanya ada <p>Update 6 jam lalu.</p>.
         String type = "";
         String updated = "";
         Element badge = card.selectFirst("div.tpe1_inf");
@@ -329,12 +347,39 @@ public final class KomikuSource {
             if (parts.length > 0 && !parts[0].trim().isEmpty()) type = parts[0].trim();
             if (parts.length > 1) updated = parts[1].trim();
         }
+        if (updated.isEmpty()) {
+            Element paragraph = card.selectFirst("div.kan p");
+            if (paragraph != null) updated = updateFrom(paragraph.text());
+        }
 
         String latest = "";
         Element newest = card.selectFirst("div.new1 a[title*=Chapter], div.new1 a");
-        if (newest != null) latest = newest.text().replace("Terbaru:", "").replace("Awal:", "").trim();
+        if (newest != null) {
+            latest = newest.text().replace("Terbaru:", "").replace("Awal:", "").trim();
+        } else {
+            Element chapter = card.selectFirst("div.new1 a");
+            if (chapter != null) latest = chapter.text().trim();
+        }
 
         return new KomikuManga(id, title, url, cover, type, latest, updated);
+    }
+
+    /**
+     * Ambil keterangan waktu dari paragraf kartu.
+     *
+     * <p>Situs menulis "Update 6 jam lalu." pada hasil pencarian dan
+     * "Drama | 4 jam lalu | Berwarna" pada katalog. Yang diambil hanya bagian
+     * waktu, supaya baris daftar menampilkan "Chapter 26 · 6 jam lalu".
+     */
+    static String updateFrom(String text) {
+        if (text == null) return "";
+        String cleaned = text.trim().replace("Update", "").replace(".", "").trim();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("([0-9]+\\s*(?:menit|jam|hari|minggu|bulan|tahun)\\s*lalu)",
+                        java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(cleaned);
+        if (matcher.find()) return matcher.group(1).trim();
+        return "";
     }
 
     private static String firstWord(String text) {
