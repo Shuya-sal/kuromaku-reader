@@ -21,6 +21,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.ConcatAdapter;
@@ -28,7 +29,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -90,6 +93,11 @@ public class KomikuActivity extends AppCompatActivity {
     private Palette palette;
     private KomikuSource source;
     private KomikuStore store;
+    private KomikuCatalog catalog;
+    /** Thread khusus katalog: pengambilan 800+ halaman tidak boleh menahan tab lain. */
+    private final ExecutorService catalogWorker = Executors.newSingleThreadExecutor();
+    private volatile boolean catalogFetching;
+    private volatile boolean catalogStop;
     private id.shuyasal.kuromaku.sync.SyncBridge syncBridge;
     private int activeTheme;
 
@@ -162,6 +170,7 @@ public class KomikuActivity extends AppCompatActivity {
         activeTheme = new Prefs(this).resolvedTheme();
         source = new KomikuSource();
         store = new KomikuStore(this);
+        catalog = new KomikuCatalog(this);
         syncBridge = new id.shuyasal.kuromaku.sync.SyncBridge(this);
         buildUi();
         loadTab(tab);
@@ -550,7 +559,7 @@ public class KomikuActivity extends AppCompatActivity {
             List<KomikuManga> found;
             String error = null;
             try {
-                found = source.search(query);
+                found = searchEverything(query);
             } catch (Throwable failure) {
                 found = new ArrayList<>();
                 error = failure.getMessage();
@@ -577,6 +586,48 @@ public class KomikuActivity extends AppCompatActivity {
         });
     }
 
+
+    /**
+     * Judul untuk tab "Manga Terbaru".
+     *
+     * <p>Bila katalog lengkap sudah pernah diambil, seluruh katalog dipakai —
+     * bukan hanya 40 judul beranda. Bila belum, beranda tetap dipakai supaya
+     * tab ini tidak kosong sebelum pengambilan pertama.
+     */
+    private List<KomikuManga> catalogTitles() throws KomikuSource.SourceException {
+        if (catalog != null && catalog.exists()) {
+            List<KomikuManga> all = catalog.load();
+            if (!all.isEmpty()) return all;
+        }
+        return source.newest();
+    }
+
+    /**
+     * Cari di katalog tersimpan lebih dulu, lalu di situs.
+     *
+     * <p>Katalog memuat ribuan judul yang tidak ada di beranda, jadi pencarian
+     * yang hanya memakai halaman {@code ?s=} akan melewatkan banyak judul.
+     * Hasil katalog dan hasil situs digabung tanpa judul ganda; bila katalog
+     * belum ada, hasil situs tetap dipakai.
+     */
+    private List<KomikuManga> searchEverything(String query) throws KomikuSource.SourceException {
+        Map<String, KomikuManga> merged = new LinkedHashMap<>();
+        String needle = query.toLowerCase(java.util.Locale.ROOT);
+        if (catalog != null && catalog.exists()) {
+            for (KomikuManga manga : catalog.load()) {
+                if (manga.title.toLowerCase(java.util.Locale.ROOT).contains(needle)) {
+                    merged.put(manga.id, manga);
+                }
+            }
+        }
+        try {
+            for (KomikuManga manga : source.search(query)) merged.putIfAbsent(manga.id, manga);
+        } catch (KomikuSource.SourceException failure) {
+            if (merged.isEmpty()) throw failure;
+        }
+        return new ArrayList<>(merged.values());
+    }
+
     private void loadTab(Tab which) {
         String query = searchField == null ? "" : searchField.getText().toString().trim();
         if (!query.isEmpty()) {
@@ -590,7 +641,7 @@ public class KomikuActivity extends AppCompatActivity {
             String error = null;
             try {
                 if (which == Tab.POPULAR) result = source.popular();
-                else if (which == Tab.NEW_TITLES) result = source.newest();
+                else if (which == Tab.NEW_TITLES) result = catalogTitles();
                 else if (which == Tab.FAVORITES) result = store.favorites();
                 else if (which == Tab.HISTORY) result = historyItems();
                 else result = source.latest();
@@ -617,7 +668,12 @@ public class KomikuActivity extends AppCompatActivity {
                             : which == Tab.HISTORY ? "Belum ada riwayat baca."
                             : "Daftar kosong dari sumber.");
                 } else if (which == Tab.NEW_CHAPTERS) {
-                    statusLine.setText(loaded.size() + " chapter terbaru");
+                    int total = catalog == null ? 0 : catalog.stats().titles;
+                    statusLine.setText(total > loaded.size()
+                            ? loaded.size() + " chapter terbaru · " + total + " judul di katalog"
+                            : loaded.size() + " chapter terbaru");
+                } else if (which == Tab.NEW_TITLES && catalog != null && catalog.exists()) {
+                    statusLine.setText(loaded.size() + " judul dari katalog lengkap");
                 } else if (which == Tab.FAVORITES) {
                     statusLine.setText(loaded.size() + " manga favorit");
                 } else if (which == Tab.HISTORY) {
@@ -709,11 +765,16 @@ public class KomikuActivity extends AppCompatActivity {
     }
 
     private void showOverflowMenu() {
-        String[] options = {"Pengaturan", "Muat ulang"};
+        KomikuCatalog.Stats stats = catalog == null ? null : catalog.stats();
+        String catalogLine = stats == null || stats.isEmpty()
+                ? "Ambil seluruh katalog"
+                : "Perbarui katalog (" + stats.titles + " judul)";
+        String[] options = {catalogLine, "Pengaturan", "Muat ulang"};
         new AlertDialog.Builder(this)
                 .setTitle("Menu Manga Server 3")
                 .setItems(options, (dialog, which) -> {
-                    if (which == 0) showPreferences();
+                    if (which == 0) fetchWholeCatalog();
+                    else if (which == 1) showPreferences();
                     else {
                         searchField.setText("");
                         loadTab(tab);
@@ -721,6 +782,73 @@ public class KomikuActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Tutup", null)
                 .show();
+    }
+
+    /**
+     * Ambil seluruh katalog, halaman demi halaman, lalu simpan.
+     *
+     * <p>Kemajuan terlihat pada baris status dan bisa dihentikan dari menu yang
+     * sama. Katalog lama tetap dipakai sampai pengambilan baru selesai, jadi
+     * beranda tidak pernah kosong karena pengambilan ulang.
+     */
+    private void fetchWholeCatalog() {
+        if (catalogFetching) {
+            catalogStop = true;
+            Toast.makeText(this, "Menghentikan pengambilan katalog…", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        catalogFetching = true;
+        catalogStop = false;
+        // Tanpa spinner penuh: pengambilan ratusan halaman berjalan di latar,
+        // dan pengguna tetap bisa membaca daftar yang sudah ada sambil menunggu.
+        errorBox.setVisibility(View.GONE);
+        statusLine.setText("Mengambil katalog lengkap…");
+        catalogWorker.execute(() -> {
+            KomikuCatalog.Result result = catalog.fetchAll(source,
+                    (page, collected, hasNext) -> {
+                        if (catalogStop || isFinishing()) return false;
+                        final int titles = collected.size();
+                        main.post(() -> {
+                            if (isFinishing()) return;
+                            statusLine.setText("Mengambil katalog… " + titles
+                                    + " judul (halaman " + page + ")");
+                        });
+                        // Simpan tiap 20 halaman: pengambilan yang terputus
+                        // tidak membuang ratusan judul yang sudah terkumpul.
+                        if (page % 20 == 0) {
+                            try {
+                                catalog.save(collected, page);
+                            } catch (Exception ignored) {
+                                // Percobaan simpan berikutnya akan menggantinya.
+                            }
+                        }
+                        return true;
+                    });
+            String saved = null;
+            try {
+                if (!result.items.isEmpty()) catalog.save(result.items, result.pagesRead);
+            } catch (Exception failure) {
+                saved = failure.getMessage();
+            }
+            final String saveError = saved;
+            main.post(() -> {
+                catalogFetching = false;
+                if (isFinishing()) return;
+                if (saveError != null) {
+                    statusLine.setText("Katalog gagal disimpan: " + saveError);
+                    return;
+                }
+                if (result.items.isEmpty()) {
+                    statusLine.setText("Katalog tidak berisi judul: " + result.stoppedBecause);
+                    return;
+                }
+                statusLine.setText(result.complete
+                        ? result.items.size() + " judul tersimpan dari " + result.pagesRead + " halaman"
+                        : result.items.size() + " judul tersimpan (belum lengkap: "
+                                + result.stoppedBecause + ")");
+                if (tab == Tab.NEW_TITLES) loadTab(tab);
+            });
+        });
     }
 
     private void showPreferences() {
@@ -789,7 +917,9 @@ public class KomikuActivity extends AppCompatActivity {
     @Override protected void onDestroy() {
         main.removeCallbacks(searchRunnable);
         main.removeCallbacks(chromeRelease);
+        catalogStop = true;
         worker.shutdownNow();
+        catalogWorker.shutdownNow();
         super.onDestroy();
     }
 
@@ -1137,6 +1267,37 @@ public class KomikuActivity extends AppCompatActivity {
         }
     }
 
+
+
+    // ------------------------------------------------ kait pengujian
+
+    /** Hanya untuk pengujian: pilih tab menurut urutan chip. */
+    void pilihTabUntukTes(int index) {
+        Tab[] all = Tab.values();
+        if (index < 0 || index >= all.length) return;
+        selectTab(all[index]);
+    }
+
+    /** Hanya untuk pengujian: jumlah baris yang sedang tampil. */
+    int jumlahItemUntukTes() {
+        return shownContent == null ? 0 : shownContent.getItemCount();
+    }
+
+    /** Hanya untuk pengujian: teks baris status. */
+    String statusUntukTes() {
+        return statusLine == null ? "" : statusLine.getText().toString();
+    }
+
+    /** Hanya untuk pengujian: jalankan pencarian seperti pengguna mengetik. */
+    void cariUntukTes(String query) {
+        if (searchField != null) searchField.setText(query);
+        runSearch();
+    }
+
+    /** Hanya untuk pengujian: daftar beranda. */
+    RecyclerView cariDaftarUntukTes() {
+        return list;
+    }
 
     /** Hanya untuk pengujian: terbitkan daftar seperti hasil jaringan. */
     void publishForTest(List<KomikuManga> data, boolean rows) {

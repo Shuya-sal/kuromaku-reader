@@ -15,8 +15,12 @@ public final class KomikuConfig {
 
     public static final String HOST = "komiku.org";
     public static final String BASE = "https://komiku.org";
+    /** Alamat pengambilan potongan halaman katalog yang dipakai situs sendiri. */
+    public static final String API = "https://api.komiku.org";
     public static final String IMAGE_HOST = "img.komiku.org";
-    public static final String THUMB_HOST = "thumbnail.komiku.to";
+    /** Cover katalog memakai dua host ini; keduanya milik situs yang sama. */
+    public static final String THUMB_HOST = "thumbnail.komiku.org";
+    public static final String THUMB_HOST_LEGACY = "thumbnail.komiku.to";
 
     private KomikuConfig() {
     }
@@ -29,7 +33,9 @@ public final class KomikuConfig {
         try {
             String host = URI.create(lower).getHost();
             if (host == null) return false;
-            return host.equals(HOST) || host.equals(IMAGE_HOST) || host.equals(THUMB_HOST);
+            return host.equals(HOST) || host.equals("api." + HOST)
+                    || host.equals(IMAGE_HOST) || host.equals(THUMB_HOST)
+                    || host.equals(THUMB_HOST_LEGACY);
         } catch (IllegalArgumentException error) {
             return false;
         }

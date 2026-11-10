@@ -205,6 +205,145 @@ public final class KomikuSource {
         return out;
     }
 
+
+    // ------------------------------------------------- katalog lengkap
+
+    /** Batas aman jumlah halaman katalog; situs kini berhenti di 807. */
+    static final int CATALOG_MAX_PAGES = 1200;
+
+    /**
+     * Satu halaman katalog beserta nomor halaman berikutnya.
+     *
+     * <p>Keduanya dibaca dari satu permintaan: situs menaruh tautan "berikutnya"
+     * di ekor fragmen yang sama, jadi meminta halaman dua kali hanya untuk
+     * mengetahui nomor berikutnya akan menggandakan beban ke sumber.
+     */
+    public static final class CatalogPage {
+        public final List<KomikuManga> items;
+        /** Nomor halaman berikutnya, atau {@code 0} bila sudah halaman terakhir. */
+        public final int nextPage;
+
+        CatalogPage(List<KomikuManga> items, int nextPage) {
+            this.items = items;
+            this.nextPage = nextPage;
+        }
+    }
+
+    /** Alamat satu halaman katalog; halaman 1 tidak memakai akhiran page. */
+    static String catalogPageUrl(int page) {
+        int safe = Math.max(1, page);
+        return safe == 1
+                ? KomikuConfig.API + "/manga/"
+                : KomikuConfig.API + "/manga/page/" + safe + "/";
+    }
+
+    /**
+     * Satu halaman katalog lengkap (10 judul per halaman).
+     *
+     * <p>Alamat ini adalah bagian dari situs Komiku sendiri (dipakai halaman
+     * pustaka untuk memuat berikutnya), bukan endpoint karangan. Fragmen yang
+     * datang berupa potongan HTML tanpa {@code <html>}, jadi diurai langsung
+     * sebagai fragmen.
+     */
+    public List<KomikuManga> catalogPage(int page) throws SourceException {
+        return catalogPageWithNext(page).items;
+    }
+
+    /**
+     * Satu halaman katalog sekaligus nomor halaman berikutnya.
+     *
+     * <p>Fragmen yang datang berupa potongan HTML tanpa {@code <html>}, jadi
+     * diurai sebagai fragmen. Alamat ini bagian dari situs Komiku sendiri
+     * (dipakai halaman pustaka untuk memuat berikutnya), bukan endpoint
+     * karangan.
+     */
+    public CatalogPage catalogPageWithNext(int page) throws SourceException {
+        String fragment = html(catalogPageUrl(page));
+        Document doc = Jsoup.parseBodyFragment(fragment);
+        List<KomikuManga> parsed = parseCatalogFragment(doc);
+        if (parsed.isEmpty()) parsed = parseAnchors(doc);
+        return new CatalogPage(parsed, nextPageIn(fragment, page));
+    }
+
+    /** Nomor halaman berikutnya di dalam satu fragmen, atau {@code 0}. */
+    static int nextPageIn(String fragment, int page) {
+        if (fragment == null) return 0;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("manga/page/([0-9]+)/\"").matcher(fragment);
+        int highest = 0;
+        while (matcher.find()) {
+            try {
+                int found = Integer.parseInt(matcher.group(1));
+                if (found > highest) highest = found;
+            } catch (NumberFormatException ignored) {
+                // Angka yang tidak terbaca dilewati.
+            }
+        }
+        if (highest <= page) return 0;
+        return Math.min(highest, CATALOG_MAX_PAGES);
+    }
+
+    /** Kartu katalog: {@code div.bge} berisi tautan judul, cover, dan tipe. */
+    private List<KomikuManga> parseCatalogFragment(Document doc) {
+        List<KomikuManga> out = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Element card : doc.select("div.bge")) {
+            KomikuManga manga = fromCatalogCard(card);
+            if (manga == null) continue;
+            if (!seen.add(manga.id)) continue;
+            out.add(manga);
+        }
+        return out;
+    }
+
+    private KomikuManga fromCatalogCard(Element card) {
+        Element link = card.selectFirst("div.kan a[href^=https://komiku.org/manga/], "
+                + "div.bgei a[href^=https://komiku.org/manga/]");
+        if (link == null) link = card.selectFirst("a[href^=https://komiku.org/manga/]");
+        if (link == null) return null;
+        String url = KomikuConfig.absolute(link.attr("href"));
+        if (url == null) return null;
+        String id = KomikuConfig.mangaId(url);
+        if (id.isEmpty()) return null;
+
+        Element heading = card.selectFirst("div.kan h3, div.kan h4");
+        String title = heading != null ? heading.text() : link.attr("title");
+        if (title == null || title.trim().isEmpty()) title = id.replace('-', ' ');
+
+        Element image = card.selectFirst("img[data-src], img[src]");
+        String cover = "";
+        if (image != null) {
+            cover = KomikuConfig.absolute(image.hasAttr("data-src")
+                    ? image.attr("data-src") : image.attr("src"));
+            if (cover == null) cover = "";
+        }
+
+        // "Manhwa Drama" pada tpe1_inf, lalu "Drama | 4 jam lalu | Berwarna".
+        String type = "";
+        String updated = "";
+        Element badge = card.selectFirst("div.tpe1_inf");
+        if (badge != null) type = firstWord(badge.text());
+        Element meta = card.selectFirst("span.judul2");
+        if (meta != null) {
+            String[] parts = meta.text().split("\\|");
+            if (parts.length > 0 && !parts[0].trim().isEmpty()) type = parts[0].trim();
+            if (parts.length > 1) updated = parts[1].trim();
+        }
+
+        String latest = "";
+        Element newest = card.selectFirst("div.new1 a[title*=Chapter], div.new1 a");
+        if (newest != null) latest = newest.text().replace("Terbaru:", "").replace("Awal:", "").trim();
+
+        return new KomikuManga(id, title, url, cover, type, latest, updated);
+    }
+
+    private static String firstWord(String text) {
+        if (text == null) return "";
+        String trimmed = text.trim();
+        int space = trimmed.indexOf(' ');
+        return space < 0 ? trimmed : trimmed.substring(0, space);
+    }
+
     // -------------------------------------------------------------- detail
 
     /** Detail satu judul beserta daftar chapter (urut seperti di halaman). */

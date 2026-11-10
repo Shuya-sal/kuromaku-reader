@@ -1,3 +1,11 @@
+## 2.58.0 — Manga Server 3 mengambil seluruh katalog
+
+* **Seluruh katalog Komiku kini diambil, bukan hanya 40 judul beranda.** Katalog situs berisi sekitar 8.000 judul dalam 807 halaman; sekarang semuanya bisa diambil dan disimpan di perangkat.
+* **Menu ⋮ → "Ambil seluruh katalog"** menjalankan pengambilan halaman demi halaman di latar. Kemajuan terlihat di baris status ("… judul (halaman N)"), hasil disimpan tiap 20 halaman, dan bisa dihentikan dari menu yang sama. Katalog lama tetap dipakai sampai pengambilan baru selesai, jadi beranda tidak pernah kosong.
+* **Tab "Manga Terbaru" memakai seluruh katalog** bila sudah pernah diambil, dan tetap memakai beranda situs bila belum.
+* **Pencarian menjangkau seluruh katalog**: judul yang tidak pernah muncul di 40 beranda tetap ditemukan. Hasil katalog dan hasil situs digabung tanpa judul ganda.
+* Tidak ada angka total halaman yang dikarang: situs hanya menyebut halaman berikutnya, jadi yang ditampilkan hanya halaman yang sedang dibaca.
+
 ## 2.57.0 — Perbaikan crash beranda Manga Server 3
 
 * **Crash `IndexOutOfBoundsException` saat membuka beranda Manga Server 3 diperbaiki.** Adapter daftar kini memegang salinan datanya sendiri, jadi tidak ada lagi saat di mana RecyclerView meminta posisi yang datanya sudah dikosongkan. Data diserahkan ke adapter sebelum adapter dipasang.
