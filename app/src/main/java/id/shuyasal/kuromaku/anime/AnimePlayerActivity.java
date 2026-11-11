@@ -1927,6 +1927,53 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 || player.getPlaybackState() == Player.STATE_BUFFERING;
     }
 
+    /**
+     * Tombol remote untuk pemutar video.
+     *
+     * <p>Menonton di televisi berarti semua kendali datang dari remote, bukan
+     * dari menyentuh layar. Yang dipasang di sini hanya yang benar-benar dipakai
+     * saat menonton: putar/jeda, menggeser 10 detik, dan layar penuh.
+     */
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)
+                && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            switch (event.getKeyCode()) {
+                case android.view.KeyEvent.KEYCODE_DPAD_CENTER:
+                case android.view.KeyEvent.KEYCODE_ENTER:
+                case android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                    // Satu tekanan = putar atau jeda. Remote televisi kelas 32
+                    // inci umumnya tidak punya tombol khusus putar/jeda, jadi
+                    // tombol tengah harus langsung bekerja tanpa tekanan kedua.
+                    if (player != null) {
+                        if (player.isPlaying()) player.pause(); else player.play();
+                    }
+                    showControls();
+                    return true;
+                case android.view.KeyEvent.KEYCODE_DPAD_LEFT:
+                case android.view.KeyEvent.KEYCODE_MEDIA_REWIND: {
+                    if (player == null) return true;
+                    long target = Math.max(0, player.getCurrentPosition() - 10_000L);
+                    player.seekTo(target);
+                    showControls();
+                    return true;
+                }
+                case android.view.KeyEvent.KEYCODE_DPAD_RIGHT:
+                case android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: {
+                    if (player == null) return true;
+                    long duration = player.getDuration();
+                    long target = player.getCurrentPosition() + 10_000L;
+                    if (duration > 0) target = Math.min(duration, target);
+                    player.seekTo(target);
+                    showControls();
+                    return true;
+                }
+                default:
+                    break;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     @Override protected void onStart() {
         super.onStart();
         playerForeground = true;

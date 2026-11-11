@@ -54,7 +54,11 @@ public class GlassCard extends FrameLayout {
         setClipToOutline(true);
         setElevation(Ui.dp(context, 6));
 
-        boolean blurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S;
+        // Televisi: blur 18 px per kartu sangat mahal di GPU kotak TV kelas
+        // 32 inci, dan hasilnya tidak terlihat dari jarak tonton. Kaca tetap
+        // dipakai (warna + border), hanya efek blur-nya yang dilewati.
+        boolean blurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                && !TvMode.isTelevision(context);
         backdrop = blurSupported ? new ImageView(context) : null;
         if (backdrop != null) {
             backdrop.setTag("glass_backdrop");

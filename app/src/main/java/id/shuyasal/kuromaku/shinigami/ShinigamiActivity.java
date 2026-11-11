@@ -634,11 +634,17 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 params = new RecyclerView.LayoutParams(params);
             }
             continueRail.setLayoutParams(params);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(continueRail, palette);
             return new Holder(continueRail);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
             // Isi rail diperbarui lewat refreshContinueRail().
+            //
+            // Rail SENGAJA tidak disorot sebagai satu kotak: isinya daftar
+            // horizontal yang harus bisa dipilih satu per satu dengan remote.
+            // Kalau rail diblokir, seluruh judul di dalamnya menjadi tidak bisa
+            // dijangkau.
         }
 
         @Override public int getItemCount() {
@@ -733,11 +739,15 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                     Ui.dp(ShinigamiActivity.this, CONTINUE_TEXT_DP),
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             card.addView(text, textParams);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             ShinigamiStore.HistoryEntry entry = entries.get(position);
             holder.title.setText(entry.title);
             holder.title.setTextColor(palette.text);
@@ -1597,11 +1607,15 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             info.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(info);
 
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             ShinigamiManga manga = items.get(position);
             holder.title.setText(manga.title);
             holder.title.setTextColor(palette.text);
@@ -1685,11 +1699,15 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             info.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(info);
 
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             ShinigamiDownloads.Manga manga = downloads.get(position);
             holder.title.setText(manga.title.isEmpty() ? "Tanpa judul" : manga.title);
             holder.subtitle.setText(manga.chapters.size() + " chapter offline - "
@@ -1765,11 +1783,15 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
             row.addView(text, new LinearLayout.LayoutParams(0,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(row, palette);
             return new Holder(row);
         }
 
         @Override
         public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             Row row = rows.get(position);
             holder.title.setText(row.title);
             StringBuilder info = new StringBuilder();

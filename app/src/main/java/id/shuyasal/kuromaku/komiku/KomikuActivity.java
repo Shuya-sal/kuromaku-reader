@@ -298,6 +298,12 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         list.setBackgroundColor(palette.background);
         list.setClipToPadding(false);
         list.setItemAnimator(null);
+        // Televisi: kartu dibuat lebih besar, jadi jumlah yang terlihat di layar
+        // sedikit. Menyimpan tampilan item di luar layar hanya menghabiskan
+        // memori tanpa mempercepat apa pun yang terlihat dari sofa.
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)) {
+            list.setItemViewCacheSize(2);
+        }
         rowAdapter = new RowAdapter();
         gridAdapter = new GridAdapter();
         list.setLayoutManager(new LinearLayoutManager(this));
@@ -1174,11 +1180,17 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                     ViewGroup.LayoutParams.WRAP_CONTENT)
                     : new RecyclerView.LayoutParams(params);
             continueRail.setLayoutParams(params);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(continueRail, palette);
             return new Holder(continueRail);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
             // Isi rail diperbarui lewat refreshContinueRail().
+            //
+            // Rail SENGAJA tidak disorot sebagai satu kotak: isinya daftar
+            // horizontal yang harus bisa dipilih satu per satu dengan remote.
+            // Kalau rail diblokir, seluruh judul di dalamnya menjadi tidak bisa
+            // dijangkau.
         }
 
         @Override public int getItemCount() {
@@ -1269,10 +1281,14 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             card.addView(text, new LinearLayout.LayoutParams(
                     Ui.dp(KomikuActivity.this, CONTINUE_TEXT_DP),
                     ViewGroup.LayoutParams.WRAP_CONTENT));
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             if (position < 0 || position >= entries.size()) return;
             ContinueItem entry = entries.get(position);
             holder.title.setText(entry.title);
@@ -1400,10 +1416,14 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
             row.addView(text, new LinearLayout.LayoutParams(0,
                     ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(row, palette);
             return new Holder(row);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             if (position < 0 || position >= entries.size()) return;
             KomikuManga manga = entries.get(position);
             holder.title.setText(manga.title);
@@ -1496,10 +1516,14 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             info.setMaxLines(3);
             info.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(info);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             if (position < 0 || position >= entries.size()) return;
             KomikuManga manga = entries.get(position);
             holder.title.setText(manga.title);

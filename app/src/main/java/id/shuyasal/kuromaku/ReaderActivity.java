@@ -793,6 +793,42 @@ public class ReaderActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         }
     }
 
+    /**
+     * Tombol remote untuk pembaca Novel.
+     *
+     * <p>Isi novel adalah daftar paragraf yang digulir, jadi tombol atas/bawah
+     * dipakai menggulir. Ketika sudah di ujung atas atau bawah, tombol yang sama
+     * dipakai berpindah chapter — supaya membaca berturut-turut tetap bisa
+     * dilakukan hanya dengan remote, tanpa perlu mencari tombol di layar.
+     */
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)
+                && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+            int key = event.getKeyCode();
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (id.shuyasal.kuromaku.ui.TvRemote.scroll(list, true)) return true;
+                navigate(1);
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_DPAD_UP) {
+                if (id.shuyasal.kuromaku.ui.TvRemote.scroll(list, false)) return true;
+                navigate(-1);
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_MEDIA_NEXT
+                    || key == android.view.KeyEvent.KEYCODE_DPAD_RIGHT) {
+                navigate(1);
+                return true;
+            }
+            if (key == android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS
+                    || key == android.view.KeyEvent.KEYCODE_DPAD_LEFT) {
+                navigate(-1);
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     private void navigate(int direction) {
         if (catalog == null) return;
         int index = catalog.indexOf(chapterUrl);

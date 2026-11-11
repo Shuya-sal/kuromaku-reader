@@ -9,6 +9,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
@@ -200,7 +201,34 @@ public final class SectionDrawer {
             window2.getDecorView().setTranslationX(0f);
         }
 
+        // Televisi: sorotan harus langsung berada di dalam menu. Tanpa titik
+        // mulai, tombol arah tidak punya tempat berangkat dan pengguna tidak
+        // bisa masuk ke menu sama sekali.
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(activity)) {
+            Window jendela = drawer.getWindow();
+            if (jendela != null) {
+                jendela.getDecorView().post(() -> {
+                    View pertama = firstFocusable(panel);
+                    if (pertama != null) pertama.requestFocus();
+                });
+            }
+        }
+
         return drawer;
+    }
+
+    /** Baris menu pertama yang bisa dipilih, untuk sorotan awal. */
+    private static View firstFocusable(View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE) return null;
+        if (view.isFocusable() && view.isEnabled()) return view;
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int index = 0; index < group.getChildCount(); index++) {
+                View found = firstFocusable(group.getChildAt(index));
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     private static void addDrawerItem(Context context, LinearLayout panel, String title, String tag,
@@ -216,6 +244,11 @@ public final class SectionDrawer {
             item.setBackground(Ui.rounded(bg, border, 8, context));
         }
         item.setOnClickListener(v -> action.run());
+        // Televisi: menu samping dibangun sendiri (bukan menu bawaan Android),
+        // jadi tanpa ini seluruh pilihan menu tidak bisa dijangkau dengan remote
+        // — teks hanya bisa diketuk, dan di televisi tidak ada yang bisa
+        // mengetuk. Sorotan dipasang supaya tiap baris bisa dipilih.
+        id.shuyasal.kuromaku.ui.TvFocus.focusable(item, palette);
         panel.addView(item, new LinearLayout.LayoutParams(-1, Ui.dp(context, 64)));
     }
 }

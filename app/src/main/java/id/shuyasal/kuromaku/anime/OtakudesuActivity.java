@@ -234,6 +234,10 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         // mengubah ukuran RecyclerView (tidak ada tata ulang, tidak ada lompatan).
         list.setClipToPadding(false);
         list.setItemAnimator(null);
+        // Televisi: cukup simpan satu baris di luar layar.
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)) {
+            list.setItemViewCacheSize(2);
+        }
         adapter = new AnimeAdapter();
         list.setLayoutManager(new GridLayoutManager(this, gridSpan()));
         list.setAdapter(adapter);
@@ -1239,10 +1243,14 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             meta.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(meta);
 
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             OtakudesuAnime anime = items.get(position);
             holder.title.setText(anime.title);
             StringBuilder meta = new StringBuilder();
@@ -1337,10 +1345,14 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
             card.addView(text, new LinearLayout.LayoutParams(
                     Ui.dp(OtakudesuActivity.this, 132), ViewGroup.LayoutParams.WRAP_CONTENT));
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
             return new Holder(card);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
+            // Televisi: sorotan dipasang lagi setelah latar kartu diganti
+            // saat item dipakai ulang, supaya tidak pernah hilang.
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
             OtakudesuStore.HistoryEntry entry = history.get(position);
             holder.title.setText(entry.title.isEmpty() ? entry.animeId : entry.title);
             StringBuilder meta = new StringBuilder();

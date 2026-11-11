@@ -200,6 +200,8 @@ public class SourceHubActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         if (card.backdropView() != null) {
+            // Di televisi backdropView() memang null: lapisan buram dilewati
+            // karena terlalu mahal untuk GPU kotak TV.
             card.backdropView().setImageResource(R.drawable.source_hub_background);
         }
 

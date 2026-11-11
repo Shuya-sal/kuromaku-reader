@@ -1,3 +1,15 @@
+## 2.65.0 — Kendali remote benar-benar tersambung, dan lebih ringan di TV
+
+Rilis ini memperbaiki hal-hal yang di 2.64.0 **belum** terbukti, bukan sekadar merapikan.
+
+* **Seluruh kartu daftar kini bisa dipilih.** Di 2.64.0 hanya satu jenis daftar per layar yang diberi fokus — Server 2 baru 1 dari 5 daftar, Server 3 1 dari 4, Anime 1 dari 2. Artinya daftar judul dan chapter, justru bagian yang paling sering dibuka, masih tidak bisa dijelajahi dengan remote. Sekarang semuanya.
+* **Sorotan tidak hilang saat daftar menggulir.** Daftar mengganti latar kartunya sendiri saat item dipakai ulang, dan itu menghapus sorotan yang sudah dipasang. Sorotan sekarang bertahan terhadap penggantian latar.
+* **Menu garis tiga bisa dibuka dengan remote.** Baris menunya teks biasa yang hanya bisa diketuk; di televisi seluruh isi menu mustahil dijangkau. Sekarang setiap baris bisa dipilih, dan sorotan langsung berada di baris pertama saat menu terbuka.
+* **Pembaca Novel punya kendali remote.** Sebelumnya layar ini sama sekali tidak menangani tombol remote. Sekarang atas/bawah menggulir isi; di ujung atas/bawah tombol yang sama pindah chapter.
+* **Pemutar Anime bisa dikendalikan dari remote.** Tombol tengah = putar/jeda (satu tekanan, tanpa perlu dua kali), kiri/kanan menggeser 10 detik. Sebelumnya tidak ada penanganan apa pun.
+* **Lebih ringan di televisi.** Efek blur pada lapisan kaca dilewati (18 px per kartu sangat mahal untuk GPU kotak TV, dan tidak terlihat dari jarak tonton); gambar halaman chapter dipotong ke lebar layar, bukan dibiarkan 1600 px; perangkat beram kecil memakai setengah memori per gambar; dan tampilan item di luar layar yang disimpan dikurangi.
+* Ponsel dan tablet **tidak berubah**: seluruh perilaku televisi dilewati di perangkat sentuh, dan itu ikut diuji.
+
 ## 2.64.0 — Bisa dipasang dan dipakai di Android TV (mis. Xiaomi TV 32")
 
 * **Bisa dipasang di televisi.** Sebelumnya aplikasi menyatakan layar sentuh sebagai fitur **wajib** — itu sebabnya perangkat TV menolaknya. Sekarang sentuh bersifat opsional, dan aplikasi mendaftar sebagai peluncur Android TV (`LEANBACK_LAUNCHER`) sehingga muncul di deretan aplikasi TV.

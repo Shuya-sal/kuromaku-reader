@@ -121,6 +121,7 @@ public class TvSupportTest {
     }
 
     @Test public void kartuTidakMembiarkanAnaknyaMencuriFokus() {
+        jadikanTelevisi();
         // Satu kartu adalah satu tujuan. Kalau teks di dalamnya ikut bisa
         // difokus, pengguna harus menekan tombol arah berkali-kali hanya untuk
         // melewati satu kartu.
@@ -150,6 +151,7 @@ public class TvSupportTest {
     }
 
     @Test public void sorotanMunculSaatDipilih() {
+        jadikanTelevisi();
         LinearLayout kartu = new LinearLayout(context);
         kartu.setOnClickListener(v -> { });
         TvFocus.focusable(kartu, Palette.of(Prefs.THEME_DARK));
