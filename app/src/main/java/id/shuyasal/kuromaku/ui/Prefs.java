@@ -223,6 +223,39 @@ public final class Prefs {
         if (removed > 0) editor.apply();
     }
 
+    // ------------------------------------------------------- pengaturan umum
+
+    /**
+     * Nilai preferensi di luar novel (pengaturan aplikasi).
+     *
+     * <p>Disimpan tanpa awalan novel supaya berlaku untuk seluruh aplikasi, dan
+     * memakai {@code commit()} agar perubahan langsung terbaca oleh pemeriksaan
+     * berikutnya — termasuk saat aplikasi sedang menggambar ui.
+     */
+    public int getInt(String key, int fallback) {
+        return prefs.getInt(key, fallback);
+    }
+
+    public void setInt(String key, int value) {
+        prefs.edit().putInt(key, value).commit();
+    }
+
+    public boolean getBoolean(String key, boolean fallback) {
+        return prefs.getBoolean(key, fallback);
+    }
+
+    public void setBoolean(String key, boolean value) {
+        prefs.edit().putBoolean(key, value).commit();
+    }
+
+    public String getString(String key, String fallback) {
+        return prefs.getString(key, fallback);
+    }
+
+    public void setString(String key, String value) {
+        prefs.edit().putString(key, value == null ? "" : value).commit();
+    }
+
     /** True when this scoped store holds any reading state for its novel. */
     public boolean hasNovelData() {
         if (prefix.isEmpty()) return false;

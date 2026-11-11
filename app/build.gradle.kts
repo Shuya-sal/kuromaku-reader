@@ -8,8 +8,8 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 99
-        versionName = "2.63.0"
+        versionCode = 100
+        versionName = "2.64.0"
     }
 
     // One checked-in debug keystore, used by both CI and local builds.

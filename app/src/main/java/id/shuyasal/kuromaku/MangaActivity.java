@@ -42,7 +42,7 @@ import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.SectionDrawer;
 
-public class MangaActivity extends AppCompatActivity {
+public class MangaActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private static final String LANDING = "https://voratoon.id/";
     private WebView web;
     private ProgressBar progress;

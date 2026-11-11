@@ -57,7 +57,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * pagination, dan posisi scroll sendiri sehingga berpindah tab tidak memuat
  * ulang data yang masih valid.
  */
-public class OtakudesuActivity extends AppCompatActivity {
+public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private static final long SEARCH_DEBOUNCE_MS = 350L;
 
@@ -999,12 +999,8 @@ public class OtakudesuActivity extends AppCompatActivity {
     // --------------------------------------------------------------- adapter
 
     private int gridSpan() {
-        int widthDp = getResources().getConfiguration().screenWidthDp;
-        if (widthDp <= 0) {
-            widthDp = getResources().getDisplayMetrics().widthPixels
-                    / Math.max(1, getResources().getDisplayMetrics().densityDpi / 160);
-        }
-        return Math.max(2, Math.min(4, widthDp / 150));
+        // Sama seperti Server 2: televisi memakai kartu lebih besar.
+        return id.shuyasal.kuromaku.ui.TvMode.gridColumns(this);
     }
 
     private int coverPx() {
@@ -1296,6 +1292,11 @@ public class OtakudesuActivity extends AppCompatActivity {
                     Ui.dp(OtakudesuActivity.this, 8), Ui.dp(OtakudesuActivity.this, 6));
             card.setBackground(Ui.ripple(OtakudesuActivity.this, palette.surface,
                     palette.divider, 14, palette.ripple));
+            // Televisi: kartu adalah tujuan fokus, bukan teks di dalamnya.
+            card.setFocusable(true);
+            card.setFocusableInTouchMode(false);
+            card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
 
             FrameLayout box = new FrameLayout(OtakudesuActivity.this);
             box.setBackground(Ui.rounded(palette.surface, palette.divider, 10,

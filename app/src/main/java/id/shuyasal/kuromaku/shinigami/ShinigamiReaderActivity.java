@@ -31,7 +31,7 @@ import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
-public class ShinigamiReaderActivity extends AppCompatActivity {
+public class ShinigamiReaderActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     public static final String EXTRA_MANGA_ID = "manga_id";
     public static final String EXTRA_MANGA_TITLE = "manga_title";
@@ -584,6 +584,35 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
      * Pindah ke chapter tujuan bila bisa dibuka; kalau tidak, halaman yang
      * sedang dibaca tidak disentuh sama sekali.
      */
+    /**
+     * Kendali remote televisi.
+     *
+     * <p>Tombol atas/bawah menggulir gambar halaman. Bila sudah di ujung bawah,
+     * tombol bawah dipakai untuk pindah ke chapter berikutnya, dan di ujung atas
+     * untuk kembali ke chapter sebelumnya — sama seperti menggulir terus sampai
+     * habis saat membaca di ponsel.
+     */
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)
+                && event.getAction() == android.view.KeyEvent.ACTION_DOWN && list != null) {
+            int code = event.getKeyCode();
+            if (code == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (id.shuyasal.kuromaku.ui.TvRemote.scroll(list, true)) return true;
+                if (nextChapter != null) {
+                    navigateTo(nextChapter);
+                    return true;
+                }
+            } else if (code == android.view.KeyEvent.KEYCODE_DPAD_UP) {
+                if (id.shuyasal.kuromaku.ui.TvRemote.scroll(list, false)) return true;
+                if (previousChapter != null) {
+                    navigateTo(previousChapter);
+                    return true;
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
     private void navigateTo(ShinigamiChapter target) {
         if (target == null || switching) return;
         switching = true;

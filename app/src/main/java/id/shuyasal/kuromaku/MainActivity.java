@@ -82,7 +82,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * novel's own source shape and chapters are extracted by {@code ChapterParser},
  * so there is no Blogspot chrome and no advertising.
  */
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private static final String TAG = "KuromakuLibrary";
 

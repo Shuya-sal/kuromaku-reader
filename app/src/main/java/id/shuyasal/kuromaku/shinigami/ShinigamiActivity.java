@@ -41,7 +41,7 @@ import id.shuyasal.kuromaku.ui.SectionDrawer;
 import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
-public class ShinigamiActivity extends AppCompatActivity {
+public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private static final String STATE_QUERY = "shinigami_query";
     private static final String STATE_PAGE = "shinigami_page";
@@ -680,6 +680,11 @@ public class ShinigamiActivity extends AppCompatActivity {
                     Ui.dp(ShinigamiActivity.this, 8), Ui.dp(ShinigamiActivity.this, 6));
             card.setBackground(Ui.ripple(ShinigamiActivity.this, palette.surface,
                     palette.divider, 14, palette.ripple));
+            // Televisi: kartu adalah tujuan fokus, bukan teks di dalamnya.
+            card.setFocusable(true);
+            card.setFocusableInTouchMode(false);
+            card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
 
             FrameLayout box = new FrameLayout(ShinigamiActivity.this);
             box.setBackground(Ui.rounded(palette.surface, palette.divider, 10,
@@ -1803,12 +1808,9 @@ public class ShinigamiActivity extends AppCompatActivity {
      * tidak menampilkan dua kartu raksasa.
      */
     private int gridSpan() {
-        int widthDp = getResources().getConfiguration().screenWidthDp;
-        if (widthDp <= 0) {
-            widthDp = getResources().getDisplayMetrics().widthPixels
-                    / Math.max(1, getResources().getDisplayMetrics().densityDpi / 160);
-        }
-        return Math.max(2, Math.min(4, widthDp / 150));
+        // Di televisi kartu dibuat lebih besar: kendalinya tombol arah dan
+        // sorotan harus terlihat dari jarak tonton, jadi kolom lebih sedikit.
+        return id.shuyasal.kuromaku.ui.TvMode.gridColumns(this);
     }
 
     /** Lebar satu kartu dalam piksel, dipakai agar cover tidak didekode penuh. */

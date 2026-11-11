@@ -59,7 +59,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * <p>Semua isi berasal dari halaman Komiku yang benar-benar dibaca saat itu.
  * Tidak ada katalog contoh yang ditanam di aplikasi.
  */
-public class KomikuActivity extends AppCompatActivity {
+public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private static final int SEARCH_DEBOUNCE_MS = 350;
     /** Jumlah baris yang ditambahkan sekali gulir. */
@@ -1219,6 +1219,11 @@ public class KomikuActivity extends AppCompatActivity {
                     Ui.dp(KomikuActivity.this, 8), Ui.dp(KomikuActivity.this, 6));
             card.setBackground(Ui.ripple(KomikuActivity.this, palette.surface,
                     palette.divider, 14, palette.ripple));
+            // Televisi: kartu adalah tujuan fokus, bukan teks di dalamnya.
+            card.setFocusable(true);
+            card.setFocusableInTouchMode(false);
+            card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
 
             FrameLayout box = new FrameLayout(KomikuActivity.this);
             box.setBackground(Ui.rounded(palette.surface, palette.divider, 10,

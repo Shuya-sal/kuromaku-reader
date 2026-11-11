@@ -36,7 +36,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * <p>Daftar chapter default terbaru → terlama, bisa dibalik, dan bisa dicari.
  * Urutan berlaku untuk seluruh daftar, bukan hanya halaman yang sedang tampil.
  */
-public class KomikuDetailActivity extends AppCompatActivity {
+public class KomikuDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     public static final String EXTRA_URL = "komiku_url";
     public static final String EXTRA_TITLE = "komiku_title";

@@ -1,3 +1,12 @@
+## 2.64.0 — Bisa dipasang dan dipakai di Android TV (mis. Xiaomi TV 32")
+
+* **Bisa dipasang di televisi.** Sebelumnya aplikasi menyatakan layar sentuh sebagai fitur **wajib** — itu sebabnya perangkat TV menolaknya. Sekarang sentuh bersifat opsional, dan aplikasi mendaftar sebagai peluncur Android TV (`LEANBACK_LAUNCHER`) sehingga muncul di deretan aplikasi TV.
+* **Banner TV 320×180** ditambahkan; Android TV tidak menampilkan aplikasi tanpa banner.
+* **Bisa dijalankan dengan remote.** Seluruh layar dibangun dari kode dan tidak satu pun elemen bisa menerima fokus, jadi tombol arah tidak punya tujuan. Sekarang setiap tombol dan kartu bisa dipilih, sorotan berwarna aksen terlihat dari jauh, dan satu kartu tidak membiarkan teks di dalamnya mencuri fokus.
+* **Tombol arah menggulir halaman baca.** Di layar baca (Novel, Server 2, Server 3) tombol atas/bawah menggulir isi halaman; di ujung bawah tombol bawah lanjut ke chapter berikutnya, di ujung atas kembali ke sebelumnya. Tombol media (maju/mundur) diperlakukan sama.
+* **Tata letak menyesuaikan televisi**: kartu lebih lebar (±240 dp) agar terbaca dari sofa, bukan lebih kecil seperti kalau kolomnya dihitung dengan ukuran ponsel.
+* Ponsel dan tablet **tidak berubah**: pemasangan fokus dilewati sepenuhnya di perangkat sentuh.
+
 ## 2.63.0 — Manga Server 2: satu gambar bermasalah tidak lagi menghapus seluruh chapter
 
 * **Halaman yang alamatnya rusak dilewati, bukan membatalkan chapter.** Sebelumnya satu entri rusak membuat seluruh chapter gagal dibuka: pembaca melihat pesan galat dan tidak satu pun halaman muncul. Sekarang halaman itu dilewati, halaman lain tetap ditampilkan sesuai urutan aslinya, dan pembaca diberi tahu berapa halaman yang dilewati.

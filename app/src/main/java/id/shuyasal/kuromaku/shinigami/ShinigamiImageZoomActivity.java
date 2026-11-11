@@ -28,7 +28,7 @@ import java.util.concurrent.Executors;
  * cubit dua jari dan geser tetap didukung. Reset zoom tidak menyentuh progres
  * membaca karena activity ini tidak menulis progres apa pun.
  */
-public class ShinigamiImageZoomActivity extends AppCompatActivity {
+public class ShinigamiImageZoomActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private ShinigamiZoomView image;

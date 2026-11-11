@@ -36,7 +36,27 @@ import id.shuyasal.kuromaku.ui.Ui;
  * <p>Ketuk sekali untuk menyembunyikan/menampilkan kontrol. Progres disimpan
  * per alamat chapter, dan riwayat judul ikut diperbarui saat halaman dibuka.
  */
-public class KomikuReaderActivity extends AppCompatActivity {
+public class KomikuReaderActivity extends id.shuyasal.kuromaku.ui.TvActivity {
+
+    /**
+     * Kendali remote televisi: tombol arah menggulir gambar chapter.
+     *
+     * <p>Di ponsel halaman digulir dengan jari; di televisi tidak ada jari, jadi
+     * tombol arah atas/bawah melakukan hal yang sama.
+     */
+    @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)
+                && event.getAction() == android.view.KeyEvent.ACTION_DOWN
+                && scroll != null) {
+            int code = event.getKeyCode();
+            if (code == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (id.shuyasal.kuromaku.ui.TvRemote.scroll(scroll, true)) return true;
+            } else if (code == android.view.KeyEvent.KEYCODE_DPAD_UP) {
+                if (id.shuyasal.kuromaku.ui.TvRemote.scroll(scroll, false)) return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
 
     public static final String EXTRA_CHAPTER_URL = "komiku_chapter_url";
     public static final String EXTRA_CHAPTER_LABEL = "komiku_chapter_label";

@@ -69,7 +69,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * atau tombol mirror. Seluruh kontrol digambar aplikasi.
  */
 @UnstableApi
-public class AnimePlayerActivity extends AppCompatActivity {
+public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     /** Sumber halaman episode; bisa diganti pengujian dengan data offline. */
     protected OtakudesuSource createSource() {

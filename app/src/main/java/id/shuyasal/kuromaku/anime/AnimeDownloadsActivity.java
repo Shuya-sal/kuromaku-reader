@@ -51,7 +51,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * manga. Menghapus unduhan tidak menyentuh riwayat/progres menonton di
  * {@link OtakudesuStore}.
  */
-public class AnimeDownloadsActivity extends AppCompatActivity {
+public class AnimeDownloadsActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());

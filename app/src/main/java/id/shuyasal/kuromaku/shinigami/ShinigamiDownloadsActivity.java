@@ -46,7 +46,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * unduhan hanya menghapus berkas halaman; progres membaca, riwayat, dan favorit
  * tidak disentuh.
  */
-public class ShinigamiDownloadsActivity extends AppCompatActivity {
+public class ShinigamiDownloadsActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());

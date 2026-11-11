@@ -55,7 +55,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * Tombol menonton membuka halaman episode resmi di browser, dan riwayat
  * menonton dicatat secara lokal.
  */
-public class OtakudesuDetailActivity extends AppCompatActivity {
+public class OtakudesuDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     public static final String EXTRA_ANIME_ID = "anime_id";
     public static final String EXTRA_ANIME_TITLE = "anime_title";

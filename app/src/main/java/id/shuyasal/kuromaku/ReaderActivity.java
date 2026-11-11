@@ -49,7 +49,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * extra bottom padding plus the system navigation inset so the final paragraph
  * can always be scrolled above the panel.
  */
-public class ReaderActivity extends AppCompatActivity {
+public class ReaderActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     public static final String EXTRA_URL = "chapter_url";
     /** Which novel this chapter belongs to, so navigation never crosses books. */

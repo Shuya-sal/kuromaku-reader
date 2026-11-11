@@ -38,7 +38,7 @@ import id.shuyasal.kuromaku.ui.ZoomableImageView;
  * <p>Loading failures are reported on screen with the stage that failed and a
  * retry button, matching the inline cell inside the reader.
  */
-public class ImageViewerActivity extends AppCompatActivity {
+public class ImageViewerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     public static final String EXTRA_URL = "image_url";
     public static final String EXTRA_CAPTION = "image_caption";

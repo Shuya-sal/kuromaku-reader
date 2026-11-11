@@ -37,7 +37,7 @@ import id.shuyasal.kuromaku.ui.Ui;
  * Latar memakai gambar lokal dengan {@code centerCrop} dan lapisan gelap agar
  * teks tetap terbaca di mode terang maupun gelap.
  */
-public class SourceHubActivity extends AppCompatActivity {
+public class SourceHubActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private Palette palette;
     private ImageView background;
@@ -135,6 +135,7 @@ public class SourceHubActivity extends AppCompatActivity {
         });
 
         setContentView(root);
+
     }
 
     private void open(Class<?> target) {

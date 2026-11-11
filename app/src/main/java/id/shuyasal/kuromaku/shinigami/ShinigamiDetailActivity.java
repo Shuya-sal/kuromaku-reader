@@ -51,7 +51,7 @@ import id.shuyasal.kuromaku.ui.RatioFrameLayout;
 import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
-public class ShinigamiDetailActivity extends AppCompatActivity {
+public class ShinigamiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     public static final String EXTRA_MANGA_ID = "manga_id";
     public static final String EXTRA_MANGA_TITLE = "manga_title";
