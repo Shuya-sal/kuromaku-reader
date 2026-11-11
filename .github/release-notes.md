@@ -1,3 +1,12 @@
+## 2.62.0 — Pencarian Manga Server 3 akhirnya menemukan judul
+
+* **Pencarian Manga Server 3 sudah mengembalikan hasil.** Sebelumnya selalu "Tidak ada hasil", karena dua sebab sekaligus:
+  * Halaman `komiku.org/?s=...` tidak memuat hasil apa pun — yang ada hanya penunjuk ke alamat yang memuat hasilnya. Parser membaca halaman itu dan selalu menemukan nol judul.
+  * Tanpa penanda `post_type=manga`, alamat hasil mengembalikan daftar **chapter** (semua berjudul "Untitled"), bukan judul manga.
+* **Judul tidak lagi terbaca sebagai badge tipe.** Judul dibaca dari heading kartu, bukan dari tautan cover yang isinya "Manhwa Aksi".
+* **Waktu update ikut terbaca** ("6 jam lalu") sehingga baris hasil menampilkan chapter dan waktu.
+* Baris status tidak lagi tertimpa "N chapter terbaru" bila pengambilan katalog selesai saat pengguna sedang mencari.
+
 ## 2.61.0 — Hasil pencarian Manga Server 3 jadi daftar baris, menu "Manga Server 3" bisa dibuka
 
 * **Hasil pencarian Manga Server 3 sekarang memakai daftar baris**, sama seperti daftar "Chapter Terbaru": cover kecil di kiri, judul dua baris, chapter dan waktu di bawahnya — bukan grid kartu besar. Mengetuk hasil membuka halaman detail judul, bukan melanjutkan chapter lama.
