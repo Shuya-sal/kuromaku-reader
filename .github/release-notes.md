@@ -1,3 +1,12 @@
+## 2.63.0 — Manga Server 2: satu gambar bermasalah tidak lagi menghapus seluruh chapter
+
+* **Halaman yang alamatnya rusak dilewati, bukan membatalkan chapter.** Sebelumnya satu entri rusak membuat seluruh chapter gagal dibuka: pembaca melihat pesan galat dan tidak satu pun halaman muncul. Sekarang halaman itu dilewati, halaman lain tetap ditampilkan sesuai urutan aslinya, dan pembaca diberi tahu berapa halaman yang dilewati.
+* **Urutan gambar dijaga.** Urutan asli dari sumber dipertahankan (sudah diperiksa pada chapter nyata: array sudah urut terhadap nomor halaman). Pengurutan hanya dijalankan sebagai jaring pengaman bila nomor halaman membentuk deret lengkap tetapi datang tidak urut — dan tidak menebak bila penomorannya tidak lengkap atau ada nomor ganda.
+* **Gambar yang gagal dicoba ulang** sebelum ditandai gagal, dan halaman berikutnya tetap diproses sehingga satu gambar bermasalah tidak menahan sisanya.
+* **Kesalahan yang menetap tidak diulang**: 4xx (kecuali 408 dan 429) tidak dicoba lagi, supaya halaman berikutnya tidak menunggu tanpa manfaat.
+* Kotak gagal dibuat ringkas agar tidak menutupi halaman lain.
+* Penolakan alamat (host tidak sah, bukan HTTPS, traversal) tetap dilaporkan sebagai penolakan, tidak disamarkan menjadi "chapter kosong".
+
 ## 2.62.0 — Pencarian Manga Server 3 akhirnya menemukan judul
 
 * **Pencarian Manga Server 3 sudah mengembalikan hasil.** Sebelumnya selalu "Tidak ada hasil", karena dua sebab sekaligus:

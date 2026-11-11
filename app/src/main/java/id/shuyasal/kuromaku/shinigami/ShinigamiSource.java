@@ -79,8 +79,13 @@ public final class ShinigamiSource {
     public static final class ChapterImages {
         public final String chapterId;
         public final List<String> urls;
+        /** Jumlah entri yang dilewati karena alamatnya tidak bisa dipakai. */
+        public final int skipped;
         ChapterImages(String chapterId, List<String> urls) {
-            this.chapterId = chapterId; this.urls = urls;
+            this(chapterId, urls, 0);
+        }
+        ChapterImages(String chapterId, List<String> urls, int skipped) {
+            this.chapterId = chapterId; this.urls = urls; this.skipped = skipped;
         }
     }
 
@@ -294,6 +299,66 @@ public final class ShinigamiSource {
         }
     }
 
+    /**
+     * Pastikan urutan halaman mengikuti nomor berkas.
+     *
+     * <p>Urutan asli dari sumber biasanya sudah benar (diperiksa pada beberapa
+     * chapter: array sudah urut terhadap nomor halaman). Pengurutan di sini
+     * hanya jaring pengaman untuk respons yang datang tidak urut — dan hanya
+     * dijalankan bila nomor halaman membentuk deret lengkap 1..N tanpa
+     * pengulangan. Bila nomornya tidak membentuk deret seperti itu (misalnya
+     * penomoran ulang di tengah chapter), urutan sumber dipertahankan apa
+     * adanya: menebak urutan lebih buruk daripada mengikuti sumber.
+     *
+     * @return jumlah posisi yang benar-benar berubah
+     */
+    static int reorderByPageNumber(List<String> names, List<String> urls) {
+        int count = names.size();
+        if (count < 2 || urls.size() != count) return 0;
+        int[] numbers = new int[count];
+        boolean[] seen = new boolean[count + 1];
+        for (int i = 0; i < count; i++) {
+            int number = leadingPageNumber(names.get(i));
+            if (number < 1 || number > count || seen[number]) return 0;
+            seen[number] = true;
+            numbers[i] = number;
+        }
+        boolean sorted = true;
+        for (int i = 1; i < count; i++) {
+            if (numbers[i] <= numbers[i - 1]) {
+                sorted = false;
+                break;
+            }
+        }
+        if (sorted) return 0;
+        List<String> sortedUrls = new ArrayList<>(urls);
+        List<String> sortedNames = new ArrayList<>(names);
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < count; i++) order.add(i);
+        // Urutkan indeks menurut nomor halaman; stabil karena nomornya unik.
+        order.sort((left, right) -> Integer.compare(numbers[left], numbers[right]));
+        urls.clear();
+        names.clear();
+        for (int index : order) {
+            urls.add(sortedUrls.get(index));
+            names.add(sortedNames.get(index));
+        }
+        return count;
+    }
+
+    /** Nomor halaman dari nama berkas, mis. "12-abc.jpg" → 12. */
+    static int leadingPageNumber(String name) {
+        if (name == null) return 0;
+        int end = 0;
+        while (end < name.length() && Character.isDigit(name.charAt(end))) end++;
+        if (end == 0) return 0;
+        try {
+            return Integer.parseInt(name.substring(0, end));
+        } catch (NumberFormatException tooLong) {
+            return 0;
+        }
+    }
+
     public ChapterImages chapterImages(String chapterId) throws SourceException {
         requireId(chapterId, "chapter");
         JSONObject chapter = firstObject(getJson(config.apiBase() + "/chapter/detail/" + encode(chapterId)));
@@ -306,20 +371,48 @@ public final class ShinigamiSource {
         if (files == null || files.length() == 0) {
             throw new SourceException("Gambar chapter tidak tersedia. Sumber mungkin berubah atau membatasi akses.");
         }
+        // Satu alamat yang cacat tidak boleh membatalkan seluruh chapter:
+        // sebelumnya satu entri rusak membuat chapter tidak bisa dibaca sama
+        // sekali, padahal halaman lain sehat. Entri yang tidak bisa dipakai
+        // dilewati, sisanya tetap ditampilkan pada urutan aslinya.
+        List<String> names = new ArrayList<>();
         List<String> urls = new ArrayList<>();
+        int skipped = 0;
+        int rejected = 0;
         for (int i = 0; i < files.length(); i++) {
-            if (!(files.opt(i) instanceof String)) throw changedShape();
+            if (!(files.opt(i) instanceof String)) {
+                skipped++;
+                continue;
+            }
             String name = files.optString(i, "");
             String url = joinUrl(base, path, name);
-            if (name.isEmpty() || name.contains(":") || !ShinigamiConfig.isValidResource(url)) {
-                throw new SourceException("Alamat gambar ditolak: HTTPS atau host sumber tidak valid.");
+            if (name.isEmpty() || name.contains(":")
+                    || !ShinigamiConfig.isValidResource(url)) {
+                skipped++;
+                rejected++;
+                continue;
             }
+            names.add(name);
             urls.add(url);
         }
+        if (urls.isEmpty()) {
+            // Bedakan dua hal yang berbeda: alamat yang ditolak (host tidak
+            // sah, traversal, bukan HTTPS) harus tetap dilaporkan sebagai
+            // penolakan — sinyal keamanan yang tidak boleh disamarkan menjadi
+            // "chapter kosong".
+            if (rejected > 0) {
+                throw new SourceException(
+                        "Alamat gambar ditolak: HTTPS atau host sumber tidak valid.");
+            }
+            throw new SourceException(
+                    "Gambar chapter tidak tersedia. Sumber mungkin berubah atau membatasi akses.");
+        }
+        int reordered = reorderByPageNumber(names, urls);
         store.mergeChapterMetadata(chapterId, chapter);
         store.setChapterPages(chapterId, urls);
-        android.util.Log.i("ShinigamiSource", "Chapter image metadata validated; pages=" + urls.size());
-        return new ChapterImages(chapterId, urls);
+        android.util.Log.i("ShinigamiSource", "Chapter image metadata validated; pages=" + urls.size()
+                + " skipped=" + skipped + " reordered=" + reordered);
+        return new ChapterImages(chapterId, urls, skipped);
     }
 
     public List<Genre> genres() throws SourceException {

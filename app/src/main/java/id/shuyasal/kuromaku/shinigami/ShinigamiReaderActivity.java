@@ -645,8 +645,11 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             List<String> urls = new ArrayList<>();
             String failure = null;
             boolean usedCache = false;
+            int skipped = 0;
             try {
-                urls.addAll(source.chapterImages(chapterId).urls);
+                ShinigamiSource.ChapterImages images = source.chapterImages(chapterId);
+                urls.addAll(images.urls);
+                skipped = images.skipped;
             } catch (ShinigamiSource.SourceException error) {
                 failure = error.getCause() instanceof java.io.IOException
                         ? null
@@ -661,6 +664,7 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             final List<String> result = urls;
             final String message = failure;
             final boolean cached = usedCache;
+            final int missingFromSource = skipped;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (message != null) {
@@ -697,6 +701,11 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 if (cached) {
                     showNoticeOnce("Koneksi bermasalah. Chapter ini belum tersimpan lengkap, "
                             + "jadi sebagian gambar mungkin belum bisa dibuka offline.");
+                } else if (missingFromSource > 0) {
+                    // Halaman yang alamatnya rusak dilewati, bukan membatalkan
+                    // chapter: sisanya tetap ditampilkan pada urutan aslinya.
+                    showNoticeOnce(missingFromSource + " halaman tidak tersedia di sumber "
+                            + "dan dilewati. Halaman lain tetap ditampilkan.");
                 }
                 recordOpen();
                 restorePosition();
@@ -729,6 +738,79 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                 + "Unduh chapter saat online untuk membacanya offline. Progres membaca tetap "
                 + "tersimpan, jadi posisi terakhir tidak hilang.";
     }
+
+    /** Satu percobaan memuat gambar halaman. */
+    interface PageFetch {
+        java.io.File call() throws java.io.IOException;
+    }
+
+    /**
+     * Coba muat gambar beberapa kali sebelum menyerah.
+     *
+     * <p>Gangguan sesaat (koneksi putus sebentar, server sibuk) tidak boleh
+     * meninggalkan halaman kosong permanen. Jeda naik pada setiap percobaan
+     * supaya tidak menabrak server berulang kali tanpa jeda.
+     *
+     * @param attempts jumlah percobaan ulang, jadi total percobaan = attempts + 1
+     * @throws java.io.IOException kegagalan terakhir bila semua percobaan gagal
+     */
+    static java.io.File fetchPage(int attempts, long delayMs, PageFetch fetch)
+            throws java.io.IOException {
+        return fetchPage(attempts, delayMs, fetch, error -> true);
+    }
+
+    /**
+     * Sama seperti {@link #fetchPage(int, long, PageFetch)}, tetapi percobaan
+     * ulang dihentikan lebih awal untuk kegagalan yang jelas menetap.
+     *
+     * <p>Pemuatan halaman berjalan pada satu antrean: mengulang kesalahan yang
+     * tidak akan berubah (mis. alamatnya memang tidak ada) hanya membuat
+     * halaman berikutnya menunggu tanpa manfaat. Karena itu 4xx tidak diulang,
+     * kecuali 408 dan 429 yang memang berarti "coba lagi nanti".
+     */
+    static java.io.File fetchPage(int attempts, long delayMs, PageFetch fetch,
+            java.util.function.Predicate<java.io.IOException> worthRetrying)
+            throws java.io.IOException {
+        java.io.IOException last = null;
+        for (int attempt = 0; attempt <= Math.max(0, attempts); attempt++) {
+            try {
+                return fetch.call();
+            } catch (java.io.IOException error) {
+                last = error;
+                if (!worthRetrying.test(error)) break;
+            }
+            if (attempt < attempts) {
+                try {
+                    Thread.sleep(delayMs * (attempt + 1L));
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        throw last != null ? last : new java.io.IOException("Gambar gagal dimuat.");
+    }
+
+    /**
+     * Apakah kegagalan ini masuk akal untuk dicoba ulang.
+     *
+     * <p>Kesalahan 4xx (kecuali 408 dan 429) menandakan halaman itu memang tidak
+     * akan tersedia, jadi tidak diulang.
+     */
+    static boolean worthRetrying(java.io.IOException error) {
+        String message = error == null ? null : error.getMessage();
+        if (message == null) return true;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("HTTP (\\d{3})").matcher(message);
+        if (!matcher.find()) return true;
+        int code = Integer.parseInt(matcher.group(1));
+        return !(code >= 400 && code < 500) || code == 408 || code == 429;
+    }
+
+    /** Berapa kali gambar yang gagal diulang sebelum ditandai gagal. */
+    private static final int PAGE_RETRY = 1;
+    /** Jeda antar percobaan; naik untuk percobaan berikutnya. */
+    private static final long PAGE_RETRY_DELAY_MS = 400;
 
     private void recordOpen() {
         store.recordRead(mangaId, mangaTitle, mangaCover, chapterId, chapterNumber);
@@ -1045,10 +1127,17 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
             worker.execute(() -> {
                 File file = null;
                 String failure = null;
+                // Satu gambar yang gagal tidak boleh menyisakan halaman kosong
+                // permanen hanya karena gangguan sesaat. Dicoba beberapa kali
+                // dengan jeda pendek; bila tetap gagal, halaman itu ditandai
+                // gagal dan halaman berikutnya tetap diproses seperti biasa.
                 try {
-                    file = cache.fetch(url, referer);
+                    file = fetchPage(PAGE_RETRY, PAGE_RETRY_DELAY_MS,
+                            () -> cache.fetch(url, referer),
+                            ShinigamiReaderActivity::worthRetrying);
                 } catch (java.io.IOException error) {
-                    failure = error.getMessage() == null ? "Gambar gagal dimuat." : error.getMessage();
+                    failure = error.getMessage() == null
+                            ? "Gambar gagal dimuat." : error.getMessage();
                 }
                 final File ready = file;
                 final String reason = failure;
@@ -1071,7 +1160,12 @@ public class ShinigamiReaderActivity extends AppCompatActivity {
                                 + " quality=" + quality.name());
                     } else {
                         holder.shownKey = null;
-                        holder.cell.showFailure("Halaman " + (position + 1) + ": " + reason);
+                        holder.cell.showFailure("Halaman " + (position + 1) + " gagal dimuat. "
+                                + "Ketuk untuk mencoba lagi.");
+                        // Halaman berikutnya tetap disiapkan walau halaman ini
+                        // gagal, jadi satu gambar bermasalah tidak menahan
+                        // sisanya.
+                        prefetch(position + 1);
                     }
                 });
             });

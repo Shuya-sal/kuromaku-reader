@@ -132,4 +132,65 @@ public class ShinigamiPageViewTest {
         cell.findViewWithTag("shinigami_page_retry").performClick();
         assertEquals(1, retries[0]);
     }
+
+    /**
+     * Kotak gagal dibuat ringkas.
+     *
+     * <p>Halaman yang gagal tidak perlu setinggi halaman aslinya: kalau setinggi
+     * itu, satu gambar bermasalah menutupi hampir seluruh layar dan halaman
+     * lain seolah hilang.
+     */
+    @Test public void kotakGagalRingkasTidakSetinggiHalamanPenuh() {
+        Context context = ApplicationProvider.getApplicationContext();
+        ShinigamiPageView cell = new ShinigamiPageView(context);
+        int width = View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY);
+        int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+
+        cell.setPlaceholderRatio(1.5);
+        cell.measure(width, height);
+        int tinggiHalaman = cell.getMeasuredHeight();
+
+        cell.showFailure("Halaman 2 gagal dimuat.");
+        cell.measure(width, height);
+        int tinggiGagal = cell.getMeasuredHeight();
+
+        assertTrue("kotak gagal lebih pendek (" + tinggiGagal + " < " + tinggiHalaman + ")",
+                tinggiGagal < tinggiHalaman);
+        assertTrue("kotak gagal tetap terbaca", tinggiGagal > 0);
+        assertTrue("tidak melebihi setengah tinggi halaman",
+                tinggiGagal <= Math.ceil(320 * 0.5) + 1);
+    }
+
+    /**
+     * Setelah gagal, halaman yang sama harus bisa menampilkan gambar lagi.
+     *
+     * <p>Ini jalur pulihnya: satu percobaan gagal, percobaan berikutnya berhasil
+     * — dan tinggi kotak kembali seperti halaman biasa.
+     */
+    @Test public void halamanBisaTampilLagiSetelahSempatGagal() throws Exception {
+        Context context = ApplicationProvider.getApplicationContext();
+        File file = new File(context.getCacheDir(), "page-pulih.png");
+        Bitmap bitmap = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+        }
+        ShinigamiPageView cell = new ShinigamiPageView(context);
+        int width = View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY);
+        int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+
+        cell.showFailure("Halaman 1 gagal dimuat.");
+        cell.measure(width, height);
+        int tinggiGagal = cell.getMeasuredHeight();
+
+        cell.showFile(file, ShinigamiQuality.AUTO);
+        assertTrue("gambar benar-benar tampil", cell.hasContent());
+        cell.measure(width, height);
+        int tinggiPulih = cell.getMeasuredHeight();
+
+        assertEquals(View.GONE,
+                cell.findViewWithTag("shinigami_page_error").getVisibility());
+        assertTrue("tinggi kembali seperti halaman biasa (" + tinggiPulih
+                        + " > " + tinggiGagal + ")", tinggiPulih > tinggiGagal);
+        assertEquals(320, cell.getMeasuredWidth());
+    }
 }

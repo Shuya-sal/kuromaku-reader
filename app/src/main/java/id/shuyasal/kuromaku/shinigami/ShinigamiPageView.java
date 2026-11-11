@@ -104,6 +104,14 @@ public final class ShinigamiPageView extends FrameLayout {
     private final LinearLayout errorBox;
     private final TextView error;
     private double ratio;
+    /**
+     * Halaman ini gagal dimuat.
+     *
+     * <p>Dipakai hanya untuk mengatur tinggi kotak: halaman gagal tidak perlu
+     * setinggi halaman aslinya, jadi halaman lain tetap terlihat dan bisa
+     * digulir seperti biasa.
+     */
+    private boolean failed;
     private Runnable retryAction;
 
     public ShinigamiPageView(Context context) {
@@ -360,6 +368,7 @@ public final class ShinigamiPageView extends FrameLayout {
      * @param quality lebar target; tidak pernah melebihi lebar sumber
      */
     public void showFile(File file, ShinigamiQuality quality) {
+        failed = false;
         int[] size = ShinigamiPageTiles.bounds(file);
         if (size == null) {
             showFailure("Gambar halaman tidak dapat dibaca.");
@@ -387,6 +396,7 @@ public final class ShinigamiPageView extends FrameLayout {
         loading.setVisibility(GONE);
         error.setText(reason);
         errorBox.setVisibility(VISIBLE);
+        failed = true;
         requestLayout();
     }
 
@@ -397,6 +407,9 @@ public final class ShinigamiPageView extends FrameLayout {
         // manga pada umumnya (bukan setinggi layar). Pergeseran saat gambar
         // akhirnya tampil menjadi jauh lebih kecil.
         double known = ratio > 0 ? ratio : 1.45;
+        // Kotak gagal dibuat ringkas: cukup untuk pesan dan tombol coba lagi,
+        // tidak setinggi halaman penuh.
+        if (failed) known = Math.min(known, 0.5);
         int height = Math.max(1, (int) Math.ceil(width * known));
         super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
