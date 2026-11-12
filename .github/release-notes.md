@@ -1,3 +1,13 @@
+## 2.66.0 — Pemutar Anime: server bisa dipilih dari remote, kontrol tidak hilang sendiri
+
+* **Server sekarang bisa dipilih dengan remote.** Panel "Pilih Server" adalah popup berjendela sendiri, jadi rantai fokus layar induk tidak menjangkaunya; baris servernya pun hanya punya klik pada tombol kecil "Putar" di dalamnya. Di televisi itu berarti tidak ada satu pun server yang bisa dipilih. Sekarang seluruh baris server bisa dipilih — cukup tekan OK, tanpa perlu mendaratkan sorotan tepat di tombol. Server yang masih diperiksa juga bisa dipilih ("pakai begitu siap"), dan tombol "Periksa ulang" ikut terjangkau.
+* **Sorotan tidak melompat saat panel diperbarui.** Panel digambar ulang setiap ada hasil pemeriksaan; sorotan sekarang kembali ke baris yang sama, bukan ke awal daftar.
+* **Kontrol tidak lagi hilang sendiri di televisi.** Sebelumnya bilah kontrol (putar, pilih server, kualitas) menghilang setelah 5 detik. Di ponsel itu masuk akal — satu ketukan memunculkannya lagi — tetapi di televisi tidak ada ketukan: begitu kontrol hilang, tombolnya tidak bisa dipanggil kembali. Di televisi kontrol sekarang tetap ada selama menonton.
+* **Kontrol juga tidak disembunyikan saat sorotan sedang di tombolnya.** Bila Master sedang menavigasi tombol dengan remote, kontrol tidak akan menghilang di tengah jalan.
+* **Tombol arah tidak pernah ditelan.** Saat kontrol tersembunyi, tombol arah pertama memunculkannya dan langsung menaruh sorotan di tombol pertama; saat kontrol tampil, tombol arah selalu diteruskan ke sistem sehingga sorotan bisa berpindah.
+* Kiri/kanan tetap menggeser 10 detik dan tengah tetap putar/jeda, sama seperti 2.65.0.
+* Ponsel dan tablet **tidak berubah**: seluruh penyesuaian ini hanya aktif di televisi, dan itu ikut diuji.
+
 ## 2.65.0 — Kendali remote benar-benar tersambung, dan lebih ringan di TV
 
 Rilis ini memperbaiki hal-hal yang di 2.64.0 **belum** terbukti, bukan sekadar merapikan.

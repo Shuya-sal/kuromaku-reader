@@ -124,6 +124,11 @@ final class OtakudesuServerPanel {
                 Listener listener) {
         if (column == null) return;
         int anchor = scroll == null ? 0 : scroll.getScrollY();
+        // Sorotan pada baris server harus bertahan saat panel digambar ulang.
+        // Panel diperbarui setiap ada hasil pemeriksaan; tanpa mengingat baris
+        // yang sedang tersorot, sorotan melompat ke awal dan pengguna harus
+        // mencari ulang server yang tadi hendak ditekan.
+        String sorot = tagTersorot();
         column.removeAllViews();
 
         if (mirrors.isEmpty()) {
@@ -174,6 +179,27 @@ final class OtakudesuServerPanel {
             column.addView(emptyState(listener));
         }
         if (scroll != null) scroll.scrollTo(0, anchor);
+        pulihkanSorotan(sorot);
+    }
+
+    /** Tag baris yang sedang tersorot, bila ada. */
+    private String tagTersorot() {
+        if (column == null) return null;
+        View fokus = column.findFocus();
+        Object tag = fokus == null ? null : fokus.getTag();
+        return tag instanceof String ? (String) tag : null;
+    }
+
+    /** Kembalikan sorotan ke baris yang sama setelah panel digambar ulang. */
+    private void pulihkanSorotan(String tag) {
+        if (tag == null || column == null) return;
+        View baris = column.findViewWithTag(tag);
+        if (baris == null) return;
+        baris.post(() -> {
+            if (baris.isFocusable() && baris.getVisibility() == View.VISIBLE) {
+                baris.requestFocus();
+            }
+        });
     }
 
     /** Bagian lipat berisi mirror yang tidak bisa diputar, beserta alasannya. */
@@ -372,6 +398,9 @@ final class OtakudesuServerPanel {
             spinner.setIndeterminate(true);
             spinner.setLayoutParams(new LinearLayout.LayoutParams(dp(20), dp(20)));
             row.addView(spinner);
+            // Baris tetap bisa dipilih: menekan OK pada server yang sedang
+            // diperiksa berarti "pakai server ini begitu siap", bukan diam.
+            pilihkanBaris(row, mirror, listener);
             return row;
         }
 
@@ -392,7 +421,30 @@ final class OtakudesuServerPanel {
             action.setOnClickListener(v -> listener.onPick(mirror));
             row.addView(action);
         }
+
+        pilihkanBaris(row, mirror, listener);
         return row;
+    }
+
+    /**
+     * Jadikan satu baris server bisa dipilih dengan remote.
+     *
+     * <p>Di televisi tidak ada sentuhan, jadi baris yang hanya punya
+     * {@code setOnClickListener} pada tombol kecil di dalamnya praktis tidak
+     * bisa dipakai — inilah sebab "tidak bisa memilih server". Baris dibuat
+     * sebagai satu tujuan utuh: cukup tekan OK pada barisnya, tanpa harus
+     * mendaratkan sorotan tepat di tombol Putar.
+     */
+    private void pilihkanBaris(LinearLayout row, OtakudesuPlayback.Mirror mirror,
+                               Listener listener) {
+        // Hanya di televisi. Di ponsel tombol "Putar" sudah menjadi satu-satunya
+        // sasaran klik, dan memasang click pada barisnya juga akan membuat satu
+        // sentuhan bisa memilih dua kali. Di televisi kebalikannya: tombol di
+        // dalam baris tidak bisa difokus, jadi barisnya yang harus menjadi
+        // sasaran tunggal.
+        if (!id.shuyasal.kuromaku.ui.TvMode.isTelevision(context)) return;
+        row.setOnClickListener(v -> listener.onPick(mirror));
+        id.shuyasal.kuromaku.ui.TvFocus.emphasize(row, palette.accent, 12);
     }
 
     /**

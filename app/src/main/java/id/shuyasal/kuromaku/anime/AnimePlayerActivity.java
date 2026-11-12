@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
@@ -224,9 +225,50 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private final Runnable hideControlsTask = new Runnable() {
         @Override public void run() {
             if (panelOpen || scrubbing || controlsPinned()) return;
+            // Televisi: jangan sembunyikan kontrol saat sorotan sedang berada di
+            // salah satu tombolnya. Pengguna yang sedang menavigasi dengan
+            // remote akan kehilangan tombol yang hendak ditekan, dan sorotan
+            // yang berada di view tak terlihat membuat tombol arah tidak punya
+            // tempat berangkat lagi.
+            if (controlsFocused()) {
+                uiHandler.postDelayed(this, CONTROLS_TIMEOUT_MS);
+                return;
+            }
             setControlsVisible(false);
         }
     };
+
+    /**
+     * Pindahkan sorotan ke tombol kontrol pertama.
+     *
+     * <p>Dipakai saat kontrol baru dimunculkan: tanpa titik mulai, tombol arah
+     * berikutnya tidak punya tempat berangkat.
+     */
+    private void focusFirstControl() {
+        if (getCurrentFocus() != null) return;
+        View pertama = id.shuyasal.kuromaku.ui.TvFocus.firstFocusable(bottomBar);
+        if (pertama == null) pertama = id.shuyasal.kuromaku.ui.TvFocus.firstFocusable(topBar);
+        if (pertama != null) pertama.requestFocus();
+    }
+
+    /** Sorotan sedang berada di salah satu tombol kontrol? */
+    private boolean controlsFocused() {
+        View fokus = getCurrentFocus();
+        if (fokus == null) return false;
+        return (topBar != null && isInside(topBar, fokus))
+                || (bottomBar != null && isInside(bottomBar, fokus));
+    }
+
+    /** {@code view} berada di dalam {@code ancestor}? */
+    private static boolean isInside(View ancestor, View view) {
+        View sekarang = view;
+        while (sekarang != null) {
+            if (sekarang == ancestor) return true;
+            ViewParent induk = sekarang.getParent();
+            sekarang = induk instanceof View ? (View) induk : null;
+        }
+        return false;
+    }
 
     private final Runnable saveTick = new Runnable() {
         @Override public void run() {
@@ -877,6 +919,18 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         serverPanel.setBackgroundDrawable(Ui.rounded(0xF0111318, 0x33FFFFFF, 18, this));
         serverPanel.setOutsideTouchable(true);
         serverPanel.showAtLocation(playerView, Gravity.CENTER, 0, 0);
+
+        // Televisi: popup punya jendelanya sendiri, jadi rantai fokus layar
+        // induk tidak menjangkaunya. Tanpa langkah ini panel server terbuka
+        // tetapi tidak satu pun baris bisa dipilih dengan remote.
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)) {
+            content.post(() -> {
+                id.shuyasal.kuromaku.ui.TvFocus.prepare(content,
+                        Palette.of(new Prefs(this).resolvedTheme()));
+                View pertama = id.shuyasal.kuromaku.ui.TvFocus.firstFocusable(content);
+                if (pertama != null) pertama.requestFocus();
+            });
+        }
     }
 
     /**
@@ -1572,8 +1626,25 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         uiHandler.removeCallbacks(hideControlsTask);
         uiHandler.removeCallbacks(applyHiddenTask);
         if (!fullscreen) return;
+        if (!autoHideAllowed()) return;
         if (panelOpen || scrubbing || controlsPinned()) return;
         uiHandler.postDelayed(hideControlsTask, CONTROLS_TIMEOUT_MS);
+    }
+
+    /**
+     * Bolehkah kontrol disembunyikan sendiri setelah beberapa detik?
+     *
+     * <p>Di ponsel: ya — satu ketukan memunculkannya lagi. Di televisi: tidak.
+     * Tidak ada ketukan di sana; begitu kontrol hilang, tombol putar dan tombol
+     * pilih server ikut hilang dan tidak bisa dipanggil kembali, sehingga
+     * menonton dengan remote menjadi mustahil.
+     *
+     * <p>Dipisah sebagai keputusan tersendiri supaya bisa diuji langsung:
+     * menguji lewat timer tidak mungkin di pengujian unit, karena tidak ada
+     * video yang benar-benar berputar di sana.
+     */
+    protected boolean autoHideAllowed() {
+        return !id.shuyasal.kuromaku.ui.TvMode.isTelevision(this);
     }
 
     private void cancelHideControls() {
@@ -1949,8 +2020,27 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                     }
                     showControls();
                     return true;
+                case android.view.KeyEvent.KEYCODE_DPAD_UP:
+                case android.view.KeyEvent.KEYCODE_DPAD_DOWN:
+                    // Kontrol sedang tersembunyi: tombol arah pertama harus
+                    // memunculkannya kembali, bukan menggeser video. Tanpa ini
+                    // kontrol yang sudah hilang tidak bisa dipanggil lagi sama
+                    // sekali dari remote — pengguna terpaku tanpa tombol.
+                    if (!controlsVisible) {
+                        showControls();
+                        focusFirstControl();
+                        return true;
+                    }
+                    // Saat kontrol sudah tampil, tombol arah SELALU diteruskan ke
+                    // sistem. Jangan pernah menelannya: tombol yang ditelan
+                    // membuat sorotan tidak bisa berpindah dan pengguna terjebak
+                    // di satu tombol.
+                    return super.dispatchKeyEvent(event);
                 case android.view.KeyEvent.KEYCODE_DPAD_LEFT:
                 case android.view.KeyEvent.KEYCODE_MEDIA_REWIND: {
+                    // Kiri/kanan selalu menggeser waktu, bahkan saat sorotan
+                    // sedang di tombol: itulah yang diharapkan saat menonton.
+                    // Berpindah antar tombol memakai atas/bawah.
                     if (player == null) return true;
                     long target = Math.max(0, player.getCurrentPosition() - 10_000L);
                     player.seekTo(target);

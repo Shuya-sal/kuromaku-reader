@@ -171,6 +171,47 @@ public final class TvFocus {
         view.setBackground(ring);
     }
 
+    /**
+     * Pasang sorotan pada satu baris yang bisa diketuk, memakai satu warna aksen.
+     *
+     * <p>Dipakai panel yang punya palet sendiri (mis. panel server pemutar
+     * Anime), sehingga tidak perlu menerjemahkan seluruh palet hanya untuk
+     * mendapat warna sorotan.
+     */
+    public static void emphasize(View view, int accent, int radiusDp) {
+        if (!tv(view)) return;
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(false);
+        if (view instanceof ViewGroup) {
+            ((ViewGroup) view).setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        }
+        Drawable current = view.getBackground();
+        if (current instanceof RingBackground) return;
+        RingBackground ring = new RingBackground(current, accent, radiusDp, view.getContext());
+        ring.attach(view);
+        view.setBackground(ring);
+    }
+
+    /**
+     * Cari view pertama yang bisa dipilih di dalam pohon.
+     *
+     * <p>Dipakai untuk menaruh sorotan awal saat sebuah panel atau menu baru
+     * terbuka — tanpa itu, tombol arah tidak punya tempat berangkat dan
+     * pengguna tidak bisa masuk ke panel tersebut sama sekali.
+     */
+    public static View firstFocusable(View root) {
+        if (root == null || root.getVisibility() != View.VISIBLE) return null;
+        if (root.isFocusable() && root.isEnabled()) return root;
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int index = 0; index < group.getChildCount(); index++) {
+                View found = firstFocusable(group.getChildAt(index));
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     /** Kunci tag untuk menyimpan sudut kartu. */
     private static final int R_ID_RADIUS = "kuromaku_tv_radius".hashCode();
 
