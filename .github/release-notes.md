@@ -1,3 +1,14 @@
+## 2.67.0 — Pemutar Anime di TV: kontrol menghilang sendiri DAN bisa dikendalikan
+
+Ini memperbaiki 2.66.0. Di rilis itu Shuvi mematikan penghilangan kontrol otomatis di televisi — terlalu jauh. Yang benar: kontrol tetap menghilang sendiri saat menonton, tetapi selalu bisa dipanggil dan dikendalikan dengan remote.
+
+* **Kontrol menghilang lagi saat menonton.** Penyebab sebenarnya: penghilangan otomatis hanya berjalan dalam mode layar penuh, dan di televisi mode itu tidak pernah aktif — jadi bilah kontrol menutupi gambar terus. Pemutar sekarang langsung dalam mode layar penuh di televisi, sehingga kontrol muncul saat dibutuhkan lalu pergi sendiri.
+* **Tombol kontrol sekarang benar-benar bisa ditekan.** Tombol tengah dulu selalu dipakai putar/jeda dan menelan tekanannya, sehingga tombol yang sedang tersorot (server, kualitas, kembali) tidak pernah bisa dijalankan. Sekarang tombol tengah menjalankan tombol yang tersorot; putar/jeda berlaku saat sorotan berada di gambar video.
+* **Semua tombol di bilah bisa dicapai.** Kiri/kanan dulu selalu menggeser waktu, jadi hanya tombol pertama di bilah yang bisa kena sorotan. Sekarang kiri/kanan berpindah tombol saat sorotan berada di bilah, dan tetap menggeser 10 detik saat sorotan berada di gambar.
+* **Kontrol tersembunyi selalu punya jalan masuk.** Tekanan pertama tombol arah memunculkan kontrol dan langsung menaruh sorotan di tombol pertama — tanpa mengubah pemutaran.
+* **Kontrol tidak menghilang saat Master sedang menavigasinya.** Selama sorotan berada di salah satu tombol, penghilangan otomatis ditunda.
+* Ponsel dan tablet **tidak berubah**: tidak dipaksa layar penuh, dan seluruh perilaku remote tetap hanya aktif di televisi.
+
 ## 2.66.0 — Pemutar Anime: server bisa dipilih dari remote, kontrol tidak hilang sendiri
 
 * **Server sekarang bisa dipilih dengan remote.** Panel "Pilih Server" adalah popup berjendela sendiri, jadi rantai fokus layar induk tidak menjangkaunya; baris servernya pun hanya punya klik pada tombol kecil "Putar" di dalamnya. Di televisi itu berarti tidak ada satu pun server yang bisa dipilih. Sekarang seluruh baris server bisa dipilih — cukup tekan OK, tanpa perlu mendaratkan sorotan tepat di tombol. Server yang masih diperiksa juga bisa dipilih ("pakai begitu siap"), dan tombol "Periksa ulang" ikut terjangkau.

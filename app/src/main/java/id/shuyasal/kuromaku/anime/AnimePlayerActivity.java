@@ -238,6 +238,22 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         }
     };
 
+    /** Tombol yang boleh memunculkan kontrol saat sedang tersembunyi. */
+    private static boolean isControlKey(int kode) {
+        switch (kode) {
+            case android.view.KeyEvent.KEYCODE_DPAD_UP:
+            case android.view.KeyEvent.KEYCODE_DPAD_DOWN:
+            case android.view.KeyEvent.KEYCODE_DPAD_LEFT:
+            case android.view.KeyEvent.KEYCODE_DPAD_RIGHT:
+            case android.view.KeyEvent.KEYCODE_DPAD_CENTER:
+            case android.view.KeyEvent.KEYCODE_ENTER:
+            case android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     /**
      * Pindahkan sorotan ke tombol kontrol pertama.
      *
@@ -245,18 +261,22 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * berikutnya tidak punya tempat berangkat.
      */
     private void focusFirstControl() {
-        if (getCurrentFocus() != null) return;
         View pertama = id.shuyasal.kuromaku.ui.TvFocus.firstFocusable(bottomBar);
         if (pertama == null) pertama = id.shuyasal.kuromaku.ui.TvFocus.firstFocusable(topBar);
         if (pertama != null) pertama.requestFocus();
     }
 
-    /** Sorotan sedang berada di salah satu tombol kontrol? */
+    /**
+     * Sorotan sedang berada di salah satu tombol kontrol?
+     *
+     * <p>Dibaca langsung dari kedua bilah lewat {@code findFocus()}, bukan dari
+     * {@code getCurrentFocus()}: yang terakhir bergantung pada jendela aktif dan
+     * bisa kosong walau sebuah tombol benar-benar sedang tersorot.
+     */
     private boolean controlsFocused() {
-        View fokus = getCurrentFocus();
-        if (fokus == null) return false;
-        return (topBar != null && isInside(topBar, fokus))
-                || (bottomBar != null && isInside(bottomBar, fokus));
+        if (topBar != null && topBar.findFocus() != null) return true;
+        if (bottomBar != null && bottomBar.findFocus() != null) return true;
+        return false;
     }
 
     /** {@code view} berada di dalam {@code ancestor}? */
@@ -305,6 +325,15 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             firstSource = false;
         }
         buildUi();
+
+        // Televisi: pemutar langsung dalam mode layar penuh. Di televisi video
+        // memang mengisi layar, dan tanpa ini seluruh perilaku layar penuh —
+        // termasuk kontrol yang menghilang sendiri saat menonton — tidak pernah
+        // aktif sama sekali, sehingga bilah kontrol menutupi gambar terus.
+        if (state == null && id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)) {
+            setFullscreen(true);
+        }
+
         if (state != null) {
             // Terapkan tanpa mengubah state yang sudah dipulihkan.
             applyOrientation();
@@ -1628,6 +1657,10 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         if (!fullscreen) return;
         if (!autoHideAllowed()) return;
         if (panelOpen || scrubbing || controlsPinned()) return;
+        // Sorotan yang sedang berada di tombol menahan penyembunyian: kalau
+        // kontrol hilang di tengah navigasi, tombol yang hendak ditekan ikut
+        // menghilang.
+        if (controlsFocused()) return;
         uiHandler.postDelayed(hideControlsTask, CONTROLS_TIMEOUT_MS);
     }
 
@@ -1644,7 +1677,32 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * video yang benar-benar berputar di sana.
      */
     protected boolean autoHideAllowed() {
-        return !id.shuyasal.kuromaku.ui.TvMode.isTelevision(this);
+        // Kontrol boleh menghilang sendiri di semua perangkat: itulah yang
+        // diinginkan saat menonton. Yang membuatnya aman di televisi adalah
+        // tombol arah memunculkannya kembali dan menaruh sorotan di tombol
+        // pertama, bukan menahan kontrol tetap terlihat selamanya.
+        return true;
+    }
+
+    /**
+     * Apakah tombol tengah berarti putar/jeda?
+     *
+     * <p>Hanya bila sorotan tidak sedang berada di sebuah tombol. Kalau sorotan
+     * ada di tombol kontrol, tombol tengah harus menjalankan tombol itu —
+     * kalau tidak, tidak satu pun tombol pemutar bisa ditekan dengan remote.
+     */
+    /** Kiri/kanan berpindah tombol (bukan menggeser waktu)? */
+    protected boolean navigatesBetweenControls() {
+        return controlsFocused();
+    }
+
+    /** Keadaan layar penuh, untuk pengujian perilaku televisi. */
+    protected boolean isFullscreenForTest() {
+        return fullscreen;
+    }
+
+    protected boolean centerTogglesPlayback() {
+        return !controlsFocused();
     }
 
     private void cancelHideControls() {
@@ -2008,39 +2066,50 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     @Override public boolean dispatchKeyEvent(android.view.KeyEvent event) {
         if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)
                 && event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
-            switch (event.getKeyCode()) {
+            int kode = event.getKeyCode();
+            // Kontrol tersembunyi: tekanan pertama selalu memunculkannya dan
+            // menaruh sorotan di tombol pertama — tanpa mengubah pemutaran.
+            // Dengan begitu menonton dengan remote selalu punya jalan masuk.
+            if (!controlsVisible && isControlKey(kode)) {
+                showControls();
+                focusFirstControl();
+                return true;
+            }
+            switch (kode) {
                 case android.view.KeyEvent.KEYCODE_DPAD_CENTER:
                 case android.view.KeyEvent.KEYCODE_ENTER:
                 case android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                    // Satu tekanan = putar atau jeda. Remote televisi kelas 32
-                    // inci umumnya tidak punya tombol khusus putar/jeda, jadi
-                    // tombol tengah harus langsung bekerja tanpa tekanan kedua.
-                    if (player != null) {
-                        if (player.isPlaying()) player.pause(); else player.play();
-                    }
-                    showControls();
-                    return true;
-                case android.view.KeyEvent.KEYCODE_DPAD_UP:
-                case android.view.KeyEvent.KEYCODE_DPAD_DOWN:
-                    // Kontrol sedang tersembunyi: tombol arah pertama harus
-                    // memunculkannya kembali, bukan menggeser video. Tanpa ini
-                    // kontrol yang sudah hilang tidak bisa dipanggil lagi sama
-                    // sekali dari remote — pengguna terpaku tanpa tombol.
-                    if (!controlsVisible) {
+                    // Tombol tengah hanya berarti putar/jeda bila sorotan TIDAK
+                    // sedang berada di sebuah tombol. Kalau sorotan ada di tombol
+                    // (Pilih Server, kualitas, kembali), tombol itu yang harus
+                    // dijalankan. Sebelumnya tombol tengah selalu menelan
+                    // tekanan dan hanya memutar/menjeda, sehingga tidak satu pun
+                    // tombol kontrol bisa ditekan dengan remote.
+                    if (centerTogglesPlayback()) {
+                        if (player != null) {
+                            if (player.isPlaying()) player.pause(); else player.play();
+                        }
                         showControls();
-                        focusFirstControl();
                         return true;
                     }
-                    // Saat kontrol sudah tampil, tombol arah SELALU diteruskan ke
+                    return super.dispatchKeyEvent(event);
+                case android.view.KeyEvent.KEYCODE_DPAD_UP:
+                case android.view.KeyEvent.KEYCODE_DPAD_DOWN:
+                    // Saat kontrol tampil, tombol arah SELALU diteruskan ke
                     // sistem. Jangan pernah menelannya: tombol yang ditelan
                     // membuat sorotan tidak bisa berpindah dan pengguna terjebak
                     // di satu tombol.
                     return super.dispatchKeyEvent(event);
                 case android.view.KeyEvent.KEYCODE_DPAD_LEFT:
                 case android.view.KeyEvent.KEYCODE_MEDIA_REWIND: {
-                    // Kiri/kanan selalu menggeser waktu, bahkan saat sorotan
-                    // sedang di tombol: itulah yang diharapkan saat menonton.
-                    // Berpindah antar tombol memakai atas/bawah.
+                    // Sorotan sedang di tombol: kiri/kanan berpindah tombol,
+                    // bukan menggeser waktu. Tanpa ini hanya tombol pertama di
+                    // bilah yang bisa dicapai — tombol sebelahnya tidak pernah
+                    // kena sorotan, dan bilahnya terasa tidak bisa dikendalikan.
+                    if (kode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                            && controlsFocused()) {
+                        return super.dispatchKeyEvent(event);
+                    }
                     if (player == null) return true;
                     long target = Math.max(0, player.getCurrentPosition() - 10_000L);
                     player.seekTo(target);
@@ -2049,6 +2118,10 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 }
                 case android.view.KeyEvent.KEYCODE_DPAD_RIGHT:
                 case android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: {
+                    if (kode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                            && controlsFocused()) {
+                        return super.dispatchKeyEvent(event);
+                    }
                     if (player == null) return true;
                     long duration = player.getDuration();
                     long target = player.getCurrentPosition() + 10_000L;

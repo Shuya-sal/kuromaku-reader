@@ -67,18 +67,158 @@ public class AnimePlayerTvControlsTest {
         return activity.getWindow().getDecorView().findViewWithTag(tag);
     }
 
-    @Test public void diTelevisiKontrolTidakBolehHilangSendiri() {
-        // Ini keputusan yang sebenarnya: di televisi auto-hide dimatikan.
-        // Tidak diuji lewat timer karena di pengujian unit tidak ada video yang
-        // benar-benar berputar, sehingga timer auto-hide tidak pernah berjalan —
-        // tes berbasis waktu di sini akan selalu lulus dan tidak menguji apa pun.
+    /**
+     * Benarkah view ini terlihat pengguna?
+     *
+     * <p>{@code getVisibility()} hanya membaca view itu sendiri: tombol di dalam
+     * bilah yang disembunyikan tetap melaporkan VISIBLE. Pemeriksaan harus ikut
+     * menelusuri induknya, kalau tidak tes akan lulus padahal layarnya kosong.
+     */
+    private static boolean terlihat(View view) {
+        View sekarang = view;
+        while (sekarang != null) {
+            if (sekarang.getVisibility() != View.VISIBLE) return false;
+            android.view.ViewParent induk = sekarang.getParent();
+            sekarang = induk instanceof View ? (View) induk : null;
+        }
+        return view != null;
+    }
+
+    @Test public void kontrolBolehHilangSendiriSaatMenonton() {
+        // Saat menonton, kontrol memang harus menghilang sendiri — termasuk di
+        // televisi. Yang membuatnya aman bukan menahan kontrol selamanya, tapi
+        // tombol arah memunculkannya kembali.
         jadikanTelevisi();
         try (ActivityController<AnimePlayerActivity> controller =
                      Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
             AnimePlayerActivity activity = controller.get();
             ShadowLooper.idleMainLooper();
-            assertFalse("televisi: kontrol tidak pernah hilang sendiri",
-                    activity.autoHideAllowed());
+            assertTrue("kontrol boleh menghilang sendiri", activity.autoHideAllowed());
+        }
+    }
+
+    @Test public void tombolTengahMenjalankanTombolYangTersorot() {
+        // Inti keluhan "tidak bisa control UI": tombol tengah dulu selalu
+        // menelan tekanan untuk putar/jeda, sehingga tombol yang sedang
+        // tersorot tidak pernah bisa ditekan.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+
+            // Tombol "Putar" di bilah bawah — ini tombol kontrol sungguhan.
+            View tombolPlay = bilah(activity, "anime_player_play");
+            assertNotNull("tombol putar ada di bilah bawah", tombolPlay);
+            tombolPlay.requestFocus();
+            ShadowLooper.idleMainLooper();
+
+            assertFalse("sorotan di tombol: tengah TIDAK memutar/menjeda",
+                    activity.centerTogglesPlayback());
+        }
+    }
+
+    @Test public void diTelevisiPemutarLangsungLayarPenuh() {
+        // Tanpa ini, auto-hide tidak pernah aktif di televisi karena auto-hide
+        // hanya berjalan dalam mode layar penuh — bilah kontrol menutupi gambar
+        // terus dan Master merasa "UI belum otomatis menghilang".
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            assertTrue("televisi mulai dalam layar penuh",
+                    activity.isFullscreenForTest());
+        }
+    }
+
+    @Test public void padaPonselPemutarTidakDipaksaLayarPenuh() {
+        new Prefs(context).setInt(TvMode.PREF_FORCE, 0);
+        Shadows.shadowOf(context.getPackageManager())
+                .setSystemFeature(PackageManager.FEATURE_LEANBACK, false);
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            assertFalse("ponsel tidak dipaksa layar penuh",
+                    activity.isFullscreenForTest());
+        }
+    }
+
+    @Test public void kiriKananMenggeserWaktuSaatSorotanDiVideo() {
+        // Seek harus tetap bekerja saat sorotan tidak di bilah tombol.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            View permukaan = bilah(activity, "anime_player_surface");
+            assertNotNull(permukaan);
+            permukaan.requestFocus();
+            ShadowLooper.idleMainLooper();
+
+            assertFalse("sorotan di video: kiri/kanan menggeser waktu",
+                    activity.navigatesBetweenControls());
+        }
+    }
+
+    @Test public void kiriKananBerpindahTombolSaatSorotanDiBilah() {
+        // Kalau tidak, tombol kedua dan seterusnya tidak akan pernah tercapai.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            View tombolPlay = bilah(activity, "anime_player_play");
+            assertNotNull(tombolPlay);
+            tombolPlay.requestFocus();
+            ShadowLooper.idleMainLooper();
+
+            assertTrue("sorotan di bilah: kiri/kanan berpindah tombol",
+                    activity.navigatesBetweenControls());
+        }
+    }
+
+    @Test public void tombolTengahMemutarMenjedaSaatSorotanDiVideo() {
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            View permukaan = bilah(activity, "anime_player_surface");
+            assertNotNull(permukaan);
+            permukaan.requestFocus();
+            ShadowLooper.idleMainLooper();
+
+            assertTrue("sorotan di video: tengah memutar/menjeda",
+                    activity.centerTogglesPlayback());
+        }
+    }
+
+    @Test public void saatTersembunyiTombolArahMemunculkanKontrol() throws Exception {
+        // Tanpa ini, kontrol yang sudah hilang tidak bisa dipanggil kembali.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+
+            // Sembunyikan kontrol seperti auto-hide melakukannya.
+            java.lang.reflect.Method sembunyikan = AnimePlayerActivity.class
+                    .getDeclaredMethod("setControlsVisible", boolean.class);
+            sembunyikan.setAccessible(true);
+            sembunyikan.invoke(activity, false);
+            ShadowLooper.getShadowMainLooper().idleFor(java.time.Duration.ofSeconds(1));
+            ShadowLooper.idleMainLooper();
+
+            activity.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN,
+                    KeyEvent.KEYCODE_DPAD_DOWN));
+            ShadowLooper.idleMainLooper();
+
+            // Diperiksa pada tombol yang benar-benar berada di bilah kontrol.
+            View tombolPlay = bilah(activity, "anime_player_play");
+            assertNotNull("tombol putar ada", tombolPlay);
+            assertTrue("kontrol muncul lagi setelah tombol arah", terlihat(tombolPlay));
         }
     }
 
