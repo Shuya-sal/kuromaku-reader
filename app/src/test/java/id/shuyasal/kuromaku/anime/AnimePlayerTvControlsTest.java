@@ -118,6 +118,83 @@ public class AnimePlayerTvControlsTest {
         }
     }
 
+    @Test public void majuMundurSaatTersembunyiTidakMengambilSorotan() {
+        // Sorotan tidak boleh dipindah ke bilah tombol saat maju/mundur ditekan,
+        // karena tekanan berikutnya akan hanya berpindah tombol dan video tidak
+        // pernah benar-benar dimajukan.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            activity.hideControlsForTest();
+            assertFalse("prasyarat: kontrol tersembunyi", activity.controlsVisibleForTest());
+
+            activity.tekan(KeyEvent.KEYCODE_DPAD_RIGHT);
+
+            assertTrue("maju memunculkan kontrol", activity.controlsVisibleForTest());
+            assertFalse("sorotan tidak diambil bilah, jadi maju menggeser waktu",
+                    activity.controlsHaveFocusForTest());
+        }
+    }
+
+    @Test public void tombolTengahSaatTersembunyiMenaruhSorotanDiTombolPertama() {
+        // Lewat OK, Master memang ingin masuk ke bilah tombol.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            activity.hideControlsForTest();
+
+            activity.tekan(KeyEvent.KEYCODE_DPAD_CENTER);
+
+            assertTrue("tengah memunculkan kontrol", activity.controlsVisibleForTest());
+            assertTrue("tengah menaruh sorotan di bilah",
+                    activity.controlsHaveFocusForTest());
+        }
+    }
+
+    @Test public void fokusDiBilahTidakMenahanPenyembunyian() {
+        // Inilah bug "auto hide 1x saja": sorotan selalu ditaruh di bilah saat
+        // kontrol dimunculkan, dan dulu sorotan dijadikan penahan penyembunyian
+        // — jadi kontrol menghilang sekali, lalu tidak pernah lagi.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            View tombolPlay = bilah(activity, "anime_player_play");
+            assertNotNull(tombolPlay);
+            tombolPlay.requestFocus();
+            ShadowLooper.idleMainLooper();
+
+            assertTrue("sorotan di bilah tetap boleh hilang sendiri",
+                    activity.shouldHideAfterIdle());
+        }
+    }
+
+    @Test public void menyembunyikanKontrolMelepaskanSorotanDariBilah() {
+        // Kalau sorotan tertinggal di bilah tersembunyi, tombol arah berikutnya
+        // mendarat di view tak terlihat dan remote terasa mati.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            View tombolPlay = bilah(activity, "anime_player_play");
+            assertNotNull(tombolPlay);
+            tombolPlay.requestFocus();
+            ShadowLooper.idleMainLooper();
+            assertTrue("prasyarat: sorotan di bilah", activity.controlsHaveFocusForTest());
+
+            activity.hideControlsForTest();
+
+            assertFalse("sorotan dilepas dari bilah",
+                    activity.controlsHaveFocusForTest());
+        }
+    }
+
     @Test public void diTelevisiPemutarLangsungLayarPenuh() {
         // Tanpa ini, auto-hide tidak pernah aktif di televisi karena auto-hide
         // hanya berjalan dalam mode layar penuh — bilah kontrol menutupi gambar

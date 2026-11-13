@@ -1,3 +1,14 @@
+## 2.68.0 — Auto-hide pemutar TV: hilang berulang, bukan sekali saja
+
+Memperbaiki 2.67.0. Keluhannya tepat: di 2.67.0 kontrol menghilang sekali lalu tidak pernah lagi.
+
+* **Penyebabnya kode Shuvi sendiri.** Saat kontrol dimunculkan, sorotan ditaruh di bilah tombol — dan Shuvi juga menulis aturan "jangan sembunyikan kontrol selama sorotan ada di bilah". Dua aturan itu bertabrakan: begitu sorotan masuk bilah, penyembunyian ditolak selamanya. Itulah "hilangnya cuma sekali". Aturan penahan itu dibuang.
+* **Setiap tekanan tombol mengulang hitungan mundur.** Sebelumnya hanya sebagian tombol yang mengulang, sehingga setelah majukan video hitungan tidak pernah dimulai lagi. Sekarang semua tombol remote mengulang hitungan.
+* **Maju/mundur langsung menggeser waktu.** Dulu, saat kontrol tersembunyi, menekan kiri/kanan hanya memunculkan kontrol dan menaruh sorotan di tombol — video tidak pernah benar-benar dimajukan, dan tekanan berikutnya hanya berpindah tombol. Sekarang kiri/kanan langsung menggeser 10 detik; OK yang dipakai untuk masuk ke bilah tombol.
+* **Sorotan dilepas saat kontrol disembunyikan.** Sorotan yang tertinggal di bilah tersembunyi membuat tombol arah berikutnya mendarat di tempat tak terlihat dan remote terasa mati.
+* **Berpindah tombol tidak memicu penyembunyian di tengah jalan.** Sorotan di bilah tetap boleh hilang setelah Master berhenti menekan; timer diulang setiap tekanan.
+* Ponsel dan tablet tidak berubah.
+
 ## 2.67.0 — Pemutar Anime di TV: kontrol menghilang sendiri DAN bisa dikendalikan
 
 Ini memperbaiki 2.66.0. Di rilis itu Shuvi mematikan penghilangan kontrol otomatis di televisi — terlalu jauh. Yang benar: kontrol tetap menghilang sendiri saat menonton, tetapi selalu bisa dipanggil dan dikendalikan dengan remote.

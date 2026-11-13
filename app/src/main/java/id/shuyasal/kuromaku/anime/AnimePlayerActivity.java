@@ -225,15 +225,6 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private final Runnable hideControlsTask = new Runnable() {
         @Override public void run() {
             if (panelOpen || scrubbing || controlsPinned()) return;
-            // Televisi: jangan sembunyikan kontrol saat sorotan sedang berada di
-            // salah satu tombolnya. Pengguna yang sedang menavigasi dengan
-            // remote akan kehilangan tombol yang hendak ditekan, dan sorotan
-            // yang berada di view tak terlihat membuat tombol arah tidak punya
-            // tempat berangkat lagi.
-            if (controlsFocused()) {
-                uiHandler.postDelayed(this, CONTROLS_TIMEOUT_MS);
-                return;
-            }
             setControlsVisible(false);
         }
     };
@@ -1656,12 +1647,23 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         uiHandler.removeCallbacks(applyHiddenTask);
         if (!fullscreen) return;
         if (!autoHideAllowed()) return;
-        if (panelOpen || scrubbing || controlsPinned()) return;
-        // Sorotan yang sedang berada di tombol menahan penyembunyian: kalau
-        // kontrol hilang di tengah navigasi, tombol yang hendak ditekan ikut
-        // menghilang.
-        if (controlsFocused()) return;
+        if (!shouldHideAfterIdle()) return;
+        if (controlsPinned()) return;
         uiHandler.postDelayed(hideControlsTask, CONTROLS_TIMEOUT_MS);
+    }
+
+    /**
+     * Apakah kontrol boleh disembunyikan setelah pengguna berhenti menekan?
+     *
+     * <p>PENTING: sorotan yang berada di bilah tombol <b>tidak</b> boleh
+     * menahan penyembunyian. Dulu ia dijadikan penahan, dan karena sorotan
+     * selalu ditaruh di bilah saat kontrol dimunculkan, akibatnya kontrol
+     * menghilang sekali lalu tidak pernah lagi.
+     */
+    protected boolean shouldHideAfterIdle() {
+        if (!fullscreen) return false;
+        if (!autoHideAllowed()) return false;
+        return !panelOpen && !scrubbing;
     }
 
     /**
@@ -1691,9 +1693,39 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * ada di tombol kontrol, tombol tengah harus menjalankan tombol itu —
      * kalau tidak, tidak satu pun tombol pemutar bisa ditekan dengan remote.
      */
+    /** Pindahkan sorotan ke permukaan video, meninggalkan bilah kontrol. */
+    private void focusSurface() {
+        if (playerView != null && playerView.isFocusable()) {
+            playerView.requestFocus();
+        }
+    }
+
     /** Kiri/kanan berpindah tombol (bukan menggeser waktu)? */
     protected boolean navigatesBetweenControls() {
         return controlsFocused();
+    }
+
+    /** Keadaan tampil bilah kontrol, untuk pengujian. */
+    protected boolean controlsVisibleForTest() {
+        return controlsVisible;
+    }
+
+    /** Kirim satu tekanan tombol seperti remote sungguhan. */
+    protected void tekan(int kode) {
+        dispatchKeyEvent(new android.view.KeyEvent(
+                android.view.KeyEvent.ACTION_DOWN, kode));
+        dispatchKeyEvent(new android.view.KeyEvent(
+                android.view.KeyEvent.ACTION_UP, kode));
+    }
+
+    /** Apakah sorotan sedang berada di salah satu bilah kontrol? */
+    protected boolean controlsHaveFocusForTest() {
+        return controlsFocused();
+    }
+
+    /** Sembunyikan kontrol seperti yang dilakukan penghilangan otomatis. */
+    protected void hideControlsForTest() {
+        setControlsVisible(false);
     }
 
     /** Keadaan layar penuh, untuk pengujian perilaku televisi. */
@@ -1778,6 +1810,10 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             // berjalan (animasi bisa dimatikan sistem atau tidak mendapat frame),
             // dan pengujian pun tidak bergantung pada frame animasi.
             uiHandler.postDelayed(applyHiddenTask, CONTROLS_FADE_MS);
+            // Sorotan tidak boleh tertinggal di bilah yang sedang disembunyikan.
+            // View tak terlihat yang menyimpan sorotan membuat tombol arah
+            // berikutnya mendarat di tempat yang tidak terlihat.
+            if (controlsFocused()) focusSurface();
         }
     }
 
@@ -2070,10 +2106,27 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             // Kontrol tersembunyi: tekanan pertama selalu memunculkannya dan
             // menaruh sorotan di tombol pertama — tanpa mengubah pemutaran.
             // Dengan begitu menonton dengan remote selalu punya jalan masuk.
-            if (!controlsVisible && isControlKey(kode)) {
+            if (isControlKey(kode)) {
+                if (!controlsVisible) {
+                    showControls();
+                    // Maju/mundur harus langsung menggeser waktu, bukan masuk
+                    // ke bilah tombol. Kalau sorotan ditaruh di bilah, tekanan
+                    // berikutnya hanya berpindah tombol dan video tidak pernah
+                    // benar-benar dimajukan.
+                    boolean majuMundur = kode == android.view.KeyEvent.KEYCODE_DPAD_LEFT
+                            || kode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT
+                            || kode == android.view.KeyEvent.KEYCODE_MEDIA_REWIND
+                            || kode == android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD;
+                    if (!majuMundur) {
+                        focusFirstControl();
+                        return true;
+                    }
+                }
+                // Setiap tekanan tombol mengulang hitungan mundur. Tanpa ini
+                // hitungan hanya berjalan sekali: setelah majukan/mundur video
+                // atau setelah berpindah tombol, kontrol tidak pernah
+                // dijadwalkan untuk hilang lagi.
                 showControls();
-                focusFirstControl();
-                return true;
             }
             switch (kode) {
                 case android.view.KeyEvent.KEYCODE_DPAD_CENTER:
