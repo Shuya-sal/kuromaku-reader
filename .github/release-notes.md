@@ -1,3 +1,9 @@
+## 2.69.0 — Pemutar TV: UI tidak lagi menempel setelah buka menu tiga titik, dan tombol kembali jadi dua langkah
+
+* **Akar "buka titik tiga lalu UI tidak menghilang":** panel server dibuat sebagai popup tanpa pendengar "sudah ditutup". Sekali Master membuka panel itu — lewat menu tiga titik atau tombol Server — penanda "panel terbuka" menyala selamanya, dan selama menyala auto-hide sengaja ditahan. Akibatnya kontrol menutupi gambar terus sampai pemutar ditutup. Penanda itu sekarang padam begitu panel ditutup, dan hitungan 5 detik langsung berjalan lagi.
+* **Tombol kembali sekarang dua langkah, sesuai permintaan:** tekanan pertama menyembunyikan kontrol (video tetap berjalan), tekanan kedua meninggalkan pemutar.
+* Ponsel dan tablet tidak berubah: urutan kembali di sana tetap keluar dari rotasi paksa, lalu layar penuh, lalu keluar.
+
 ## 2.68.0 — Auto-hide pemutar TV: hilang berulang, bukan sekali saja
 
 Memperbaiki 2.67.0. Keluhannya tepat: di 2.67.0 kontrol menghilang sekali lalu tidak pernah lagi.

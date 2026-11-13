@@ -938,6 +938,16 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 (int) (getResources().getDisplayMetrics().heightPixels * 0.6f), true);
         serverPanel.setBackgroundDrawable(Ui.rounded(0xF0111318, 0x33FFFFFF, 18, this));
         serverPanel.setOutsideTouchable(true);
+        // Tanpa pendengar ini, panelOpen tetap true selamanya setelah panel
+        // ditutup: auto-hide tidak pernah dijadwalkan lagi dan bilah kontrol
+        // menutupi gambar terus — persis keluhan "buka menu tiga titik lalu
+        // UI tidak menghilang".
+        serverPanel.setOnDismissListener(() -> {
+            serverPanel = null;
+            serverPanelView = null;
+            setPanelOpen(false);
+            showControls();
+        });
         serverPanel.showAtLocation(playerView, Gravity.CENTER, 0, 0);
 
         // Televisi: popup punya jendelanya sendiri, jadi rantai fokus layar
@@ -1705,6 +1715,30 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         return controlsFocused();
     }
 
+    /** Apakah penanda panel terbuka sedang menyala? (pengujian) */
+    protected boolean panelOpenForTest() {
+        return panelOpen;
+    }
+
+    /** Tampilkan panel server seperti biasa, tanpa memeriksa mirror. (pengujian) */
+    protected void showServerPanelForTest() {
+        OtakudesuServerPanel.Palette colors = new OtakudesuServerPanel.Palette(
+                palette.surface, palette.text, palette.muted, palette.accent, palette.ripple);
+        OtakudesuServerPanel panel = new OtakudesuServerPanel(this, colors);
+        popupPanel(panel, panel.build(java.util.Collections.emptyList(), probedServers,
+                failedServers, checkingKeys(), panelListener()));
+    }
+
+    /** Tutup panel server seperti menekan kembali. (pengujian) */
+    protected void dismissServerPanelForTest() {
+        if (serverPanel != null) serverPanel.dismiss();
+    }
+
+    /** Tekan tombol kembali. (pengujian) */
+    protected void tekanKembali() {
+        onBackPressed();
+    }
+
     /** Keadaan tampil bilah kontrol, untuk pengujian. */
     protected boolean controlsVisibleForTest() {
         return controlsVisible;
@@ -1860,6 +1894,18 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     }
 
     @Override public void onBackPressed() {
+        // Televisi: kembali pertama menyembunyikan kontrol, kembali berikutnya
+        // meninggalkan pemutar. Di televisi layar penuh bukan pilihan yang bisa
+        // dimatikan, jadi memakai urutan ponsel akan membuat Master menekan
+        // kembali berkali-kali tanpa melihat sesuatu terjadi pada gambarnya.
+        if (id.shuyasal.kuromaku.ui.TvMode.isTelevision(this)) {
+            if (controlsVisible) {
+                hideControlsNow();
+                return;
+            }
+            super.onBackPressed();
+            return;
+        }
         // Urutan yang konsisten: keluar dari mode rotasi lebih dulu, lalu layar
         // penuh, baru meninggalkan pemutar — riwayat pemutaran tidak hilang.
         if (orientationMode == ORIENTATION_FORCED_LANDSCAPE) {

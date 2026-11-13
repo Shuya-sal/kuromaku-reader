@@ -155,6 +155,51 @@ public class AnimePlayerTvControlsTest {
         }
     }
 
+    @Test public void menutupPanelServerMengaktifkanAutoHideLagi() {
+        // Bug yang dilaporkan: buka menu tiga titik -> Server -> tutup panel ->
+        // kontrol tidak pernah menghilang lagi. Sebabnya panelOpen menyala
+        // selamanya karena popup tidak punya pendengar "sudah ditutup".
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+
+            activity.showServerPanelForTest();
+            ShadowLooper.idleMainLooper();
+            assertTrue("prasyarat: panel tercatat terbuka", activity.panelOpenForTest());
+            assertFalse("selama panel terbuka auto-hide ditahan",
+                    activity.shouldHideAfterIdle());
+
+            activity.dismissServerPanelForTest();
+            ShadowLooper.idleMainLooper();
+
+            assertFalse("panel tertutup: penanda harus padam", activity.panelOpenForTest());
+            assertTrue("panel tertutup: auto-hide jalan lagi",
+                    activity.shouldHideAfterIdle());
+        }
+    }
+
+    @Test public void kembaliPertamaMenyembunyikanKontrolKeduaKeluar() {
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+            assertTrue("prasyarat: kontrol tampil", activity.controlsVisibleForTest());
+
+            activity.tekanKembali();
+            ShadowLooper.idleMainLooper();
+            assertFalse("kembali pertama menyembunyikan kontrol",
+                    activity.controlsVisibleForTest());
+            assertFalse("kembali pertama belum keluar dari pemutar",
+                    activity.isFinishing());
+
+            activity.tekanKembali();
+            assertTrue("kembali kedua meninggalkan pemutar", activity.isFinishing());
+        }
+    }
+
     @Test public void fokusDiBilahTidakMenahanPenyembunyian() {
         // Inilah bug "auto hide 1x saja": sorotan selalu ditaruh di bilah saat
         // kontrol dimunculkan, dan dulu sorotan dijadikan penahan penyembunyian
