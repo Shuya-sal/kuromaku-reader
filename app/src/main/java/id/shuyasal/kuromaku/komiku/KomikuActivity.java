@@ -1031,7 +1031,7 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * atau sudah lama. Tidak ada tombol dan tidak ada dialog — pengguna tetap
      * bisa membaca daftar yang sudah tampil sambil menunggu.
      */
-    private void fetchWholeCatalog() {
+    private void fetchWholeCatalog(int startPage, java.util.List<KomikuManga> seed) {
         if (catalogFetching) return;
         catalogFetching = true;
         catalogStop = false;
@@ -1041,15 +1041,20 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                         if (catalogStop || isFinishing()) return false;
                         if (page % 20 == 0) {
                             try {
-                                catalog.save(collected, page);
+                                // Disimpan sebagai belum lengkap: kalau pengambilan
+                                // terhenti, sisa halaman dilanjutkan lain waktu
+                                // alih-alih diulang dari halaman satu.
+                                catalog.save(collected, page, false);
                             } catch (Exception ignored) {
                                 // Percobaan simpan berikutnya akan menggantinya.
                             }
                         }
                         return true;
-                    });
+                    }, startPage, seed);
             try {
-                if (!result.items.isEmpty()) catalog.save(result.items, result.pagesRead);
+                if (!result.items.isEmpty()) {
+                    catalog.save(result.items, result.pagesRead, result.complete);
+                }
             } catch (Exception ignored) {
                 // Katalog lama tetap dipakai bila penyimpanan gagal.
             }
@@ -1083,11 +1088,19 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private void ensureCatalog() {
         if (catalog == null || catalogFetching) return;
         KomikuCatalog.Stats stats = catalog.stats();
-        if (!stats.isEmpty() && System.currentTimeMillis() - stats.updatedAt
-                < CATALOG_MAX_AGE_MS) {
+        if (stats.isEmpty()) {
+            fetchWholeCatalog(1, null);
             return;
         }
-        fetchWholeCatalog();
+        boolean fresh = System.currentTimeMillis() - stats.updatedAt < CATALOG_MAX_AGE_MS;
+        if (!stats.complete) {
+            // Pengambilan sebelumnya terhenti: lanjutkan dari halaman terakhir,
+            // jangan mengulang dari awal dan jangan mengirim ulang permintaan.
+            fetchWholeCatalog(stats.pages + 1, catalog.load());
+            return;
+        }
+        if (fresh) return;
+        fetchWholeCatalog(1, null);
     }
 
     private void showPreferences() {
@@ -1151,6 +1164,14 @@ public class KomikuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             rowAdapter.submit(items);
             statusLine.setText(items.size() + " manga dalam riwayat");
         }
+    }
+
+    @Override protected void onStop() {
+        super.onStop();
+        // Layar ditinggalkan: pengambilan katalog berhenti, supaya tidak ada
+        // ratusan permintaan yang berjalan di latar tanpa sepengetahuan Master.
+        // Sisa halaman dilanjutkan saat beranda dibuka lagi.
+        catalogStop = true;
     }
 
     @Override protected void onDestroy() {

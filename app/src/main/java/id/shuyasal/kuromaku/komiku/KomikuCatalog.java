@@ -39,11 +39,18 @@ public final class KomikuCatalog {
         public final int titles;
         public final int pages;
         public final long updatedAt;
+        /** Sudah sampai halaman terakhir? Katalog sebagian harus dilanjutkan. */
+        public final boolean complete;
 
         Stats(int titles, int pages, long updatedAt) {
+            this(titles, pages, updatedAt, true);
+        }
+
+        Stats(int titles, int pages, long updatedAt, boolean complete) {
             this.titles = titles;
             this.pages = pages;
             this.updatedAt = updatedAt;
+            this.complete = complete;
         }
 
         public boolean isEmpty() {
@@ -80,6 +87,18 @@ public final class KomikuCatalog {
         boolean onPage(int page, List<KomikuManga> collected, boolean hasNext);
     }
 
+    /**
+     * Jeda antar halaman pengambilan katalog.
+     *
+     * <p>Katalog situs mencapai ratusan halaman. Tanpa jeda, membuka beranda
+     * Manga Server 3 mengirim ratusan permintaan beruntun tanpa henti — persis
+     * perilaku yang membuat sebuah situs memblokir alamat IP pengunjungnya.
+     * 400 ms berarti paling banyak 2–3 permintaan per detik.
+     */
+    static final long PAGE_GAP_MS = 400L;
+
+    private long pageGapMs = PAGE_GAP_MS;
+
     private final File file;
 
     public KomikuCatalog(Context context) {
@@ -92,6 +111,16 @@ public final class KomikuCatalog {
 
     public File file() {
         return file;
+    }
+
+    /** Jeda antar halaman saat ini, untuk pengujian. */
+    long pageGapMs() {
+        return pageGapMs;
+    }
+
+    /** Atur jeda antar halaman; pengujian memakai 0 agar tidak menunggu. */
+    void setPageGapMs(long ms) {
+        pageGapMs = Math.max(0, ms);
     }
 
     // ---------------------------------------------------------------- baca
@@ -129,9 +158,9 @@ public final class KomikuCatalog {
         try {
             JSONObject root = new JSONObject(readFile());
             return new Stats(root.optInt("count", 0), root.optInt("pages", 0),
-                    root.optLong("updatedAt", 0));
+                    root.optLong("updatedAt", 0), root.optBoolean("complete", true));
         } catch (Exception broken) {
-            return new Stats(0, 0, 0);
+            return new Stats(0, 0, 0, true);
         }
     }
 
@@ -142,6 +171,15 @@ public final class KomikuCatalog {
     // --------------------------------------------------------------- tulis
 
     public void save(List<KomikuManga> items, int pages) throws IOException {
+        save(items, pages, true);
+    }
+
+    /**
+     * Simpan katalog beserta penanda apakah pengambilannya sudah sampai
+     * halaman terakhir. Katalog sebagian tidak boleh dianggap segar: kalau
+     * dianggap segar, sisa judulnya tidak akan pernah diambil lagi.
+     */
+    public void save(List<KomikuManga> items, int pages, boolean complete) throws IOException {
         JSONArray array = new JSONArray();
         Map<String, Boolean> seen = new LinkedHashMap<>();
         for (KomikuManga manga : items) {
@@ -167,6 +205,7 @@ public final class KomikuCatalog {
             root.put("count", array.length());
             root.put("pages", pages);
             root.put("updatedAt", System.currentTimeMillis());
+            root.put("complete", complete);
             root.put("items", array);
         } catch (Exception ignored) {
             // JSONObject hanya menolak kunci null; kunci di atas selalu ada.
@@ -208,8 +247,27 @@ public final class KomikuCatalog {
      * lambat.
      */
     public Result fetchAll(KomikuSource source, Listener listener) {
+        return fetchAll(source, listener, 1, null);
+    }
+
+    /**
+     * Lanjutkan pengambilan dari halaman tertentu, dengan judul yang sudah
+     * terkumpul sebagai titik mulai.
+     *
+     * <p>Dipakai saat pengambilan sebelumnya terhenti di tengah jalan: Master
+     * tidak perlu mengulang dari halaman satu, dan situs tidak menerima
+     * permintaan yang sama dua kali.
+     */
+    public Result fetchAll(KomikuSource source, Listener listener, int startPage,
+                           List<KomikuManga> seed) {
         Map<String, KomikuManga> collected = new LinkedHashMap<>();
-        int page = 1;
+        if (seed != null) {
+            for (KomikuManga manga : seed) {
+                if (manga == null || manga.id.isEmpty()) continue;
+                collected.putIfAbsent(manga.id, manga);
+            }
+        }
+        int page = Math.max(1, startPage);
         int pagesRead = 0;
         boolean complete = false;
         String stopped = "";
@@ -248,8 +306,20 @@ public final class KomikuCatalog {
                 complete = true;
                 break;
             }
+            jedaAntarHalaman();
             page++;
         }
         return new Result(new ArrayList<>(collected.values()), pagesRead, complete, stopped);
+    }
+
+    /** Jeda sopan antar halaman; diabaikan bila jeda disetel 0. */
+    private void jedaAntarHalaman() {
+        if (pageGapMs <= 0) return;
+        try {
+            Thread.sleep(pageGapMs);
+        } catch (InterruptedException stop) {
+            // Pengambilan dihentikan: pulihkan penanda interupsi.
+            Thread.currentThread().interrupt();
+        }
     }
 }

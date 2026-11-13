@@ -113,6 +113,8 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private boolean controlsVisible = true;
     private boolean panelOpen;
+    /** Jumlah dialog/panel yang sedang terbuka (bisa bertumpuk). */
+    private int panelDepth;
 
     private ExoPlayer player;
     private DefaultTrackSelector trackSelector;
@@ -911,10 +913,14 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     }
 
     private void dismissServerPanel() {
-        if (serverPanel != null && serverPanel.isShowing()) serverPanel.dismiss();
+        if (serverPanel != null && serverPanel.isShowing()) {
+            // Pendengar tutup pada popup yang memadamkan penanda; memanggil
+            // setPanelOpen(false) di sini juga akan menghitungnya dua kali.
+            serverPanel.dismiss();
+            return;
+        }
         serverPanel = null;
         serverPanelView = null;
-        setPanelOpen(false);
     }
 
     /** Panel ditampilkan sebagai popup agar tidak memindahkan layar video. */
@@ -1886,10 +1892,32 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         // Label menu dibaca saat menu dibuka; tidak ada state tambahan di sini.
     }
 
-    /** Catat bahwa sebuah dialog/panel sedang terbuka agar timer tidak jalan. */
+    /**
+     * Catat bahwa sebuah dialog/panel sedang terbuka agar timer tidak jalan.
+     *
+     * <p>Dihitung, bukan sekadar benar/salah. Menu pemutar membuka dialog lain
+     * di atas dirinya sendiri ("Kualitas", "Subtitle", "Kecepatan"), dan dialog
+     * pertama ditutup <b>setelah</b> dialog kedua terbuka. Dengan penanda
+     * benar/salah, penutupan dialog pertama memadamkan penanda padahal dialog
+     * kedua masih tampil — timer auto-hide lalu berjalan dan bilah kontrol
+     * menghilang di belakang dialog.
+     */
     private void setPanelOpen(boolean open) {
-        panelOpen = open;
-        if (open) cancelHideControls();
+        if (open) panelOpened(); else panelClosed();
+    }
+
+    /** Satu panel lagi terbuka. */
+    protected void panelOpened() {
+        panelDepth++;
+        panelOpen = true;
+        cancelHideControls();
+    }
+
+    /** Satu panel tertutup; penanda padam hanya bila tidak ada panel lain. */
+    protected void panelClosed() {
+        panelDepth = Math.max(0, panelDepth - 1);
+        panelOpen = panelDepth > 0;
+        if (panelOpen) cancelHideControls();
         else scheduleHideControls();
     }
 

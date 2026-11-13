@@ -185,6 +185,69 @@ public class KomikuCatalogTest {
         assertFalse("berhenti atas permintaan", result.complete);
     }
 
+    @Test public void adaJedaAntarHalamanAgarSitusTidakDibanjiri() throws Exception {
+        // Katalog situs ratusan halaman. Tanpa jeda, membuka beranda Server 3
+        // mengirim ratusan permintaan beruntun — perilaku yang membuat situs
+        // memblokir alamat IP pengunjung.
+        KomikuCatalog catalog = new KomikuCatalog(tempFile());
+        assertTrue("jeda bawaan minimal 300 ms, terbaca " + catalog.pageGapMs(),
+                catalog.pageGapMs() >= 300);
+    }
+
+    @Test public void jedaBisaDimatikanUntukPengujian() throws Exception {
+        final String page1 = fixture("api_page1.html");
+        final String page2 = fixture("api_page2.html");
+        KomikuSource source = new KomikuSource(url -> {
+            if (url.equals(KomikuSource.catalogPageUrl(1))) return page1;
+            if (url.equals(KomikuSource.catalogPageUrl(2))) return page2;
+            return "<div class=\"bge\"></div>";
+        });
+        KomikuCatalog catalog = new KomikuCatalog(tempFile());
+        catalog.setPageGapMs(0);
+        long started = System.currentTimeMillis();
+        catalog.fetchAll(source, null);
+        assertTrue("tanpa jeda selesai cepat",
+                System.currentTimeMillis() - started < 2000);
+    }
+
+    @Test public void pengambilanLanjutDariHalamanTerakhir() throws Exception {
+        // Katalog yang terhenti di tengah jalan dilanjutkan, bukan diulang dari
+        // halaman satu: tidak ada permintaan yang dikirim dua kali.
+        final List<String> requested = new ArrayList<>();
+        final String page2 = fixture("api_page2.html");
+        KomikuSource source = new KomikuSource(url -> {
+            requested.add(url);
+            return page2;
+        });
+        List<KomikuManga> seed = new ArrayList<>();
+        seed.add(new KomikuManga("lama", "Judul Lama", "https://komiku.org/manga/lama/",
+                "", "Manga", "Chapter 1", "1 jam lalu"));
+
+        KomikuCatalog catalog = new KomikuCatalog(tempFile());
+        catalog.setPageGapMs(0);
+        KomikuCatalog.Result result = catalog.fetchAll(source, null, 3, seed);
+
+        assertEquals("hanya satu permintaan", 1, requested.size());
+        assertEquals("mulai dari halaman tiga", KomikuSource.catalogPageUrl(3),
+                requested.get(0));
+        assertTrue("judul lama tetap ada", result.items.size() > 1);
+    }
+
+    @Test public void katalogSebagianTidakDianggapLengkap() throws Exception {
+        File file = tempFile();
+        KomikuCatalog catalog = new KomikuCatalog(file);
+        List<KomikuManga> items = new ArrayList<>();
+        items.add(new KomikuManga("satu", "Judul Satu", "https://komiku.org/manga/satu/",
+                "", "Manga", "", ""));
+
+        catalog.save(items, 40, false);
+        assertFalse("sebagian: belum lengkap", catalog.stats().complete);
+        assertEquals(40, catalog.stats().pages);
+
+        catalog.save(items, 40, true);
+        assertTrue("lengkap", catalog.stats().complete);
+    }
+
     @Test public void judulGandaTidakDigandakan() throws Exception {
         final String page1 = fixture("api_page1.html");
         // Situs yang mengulang halaman yang sama (pernah terjadi saat halaman

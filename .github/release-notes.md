@@ -1,3 +1,21 @@
+## 2.70.0 — Pemeriksaan menyeluruh: tiga bug lagi, dan beban ke situs sumber dikekang
+
+### Bug yang diperbaiki
+
+* **Dialog bertumpuk memadamkan penanda panel.** Menu tiga titik membuka dialog lain di atas dirinya sendiri ("Kualitas", "Subtitle", "Kecepatan"), dan dialog pertama ditutup *setelah* dialog kedua terbuka. Karena penandanya hanya benar/salah, penutupan dialog pertama memadamkan penanda padahal dialog kedua masih tampil — timer auto-hide berjalan dan bilah kontrol menghilang di belakang dialog. Penanda sekarang **dihitung**, bukan benar/salah.
+* **Server panel ditutup dua kali dihitung.** Penutupan panel server lewat menu tidak lagi mengurangi hitungan dua kali.
+* **Pengambilan katalog Manga Server 3 membanjiri situs.** Ini yang paling serius: katalog diambil halaman demi halaman sampai **1200 halaman tanpa jeda sama sekali** — ratusan permintaan beruntun ke situs komunitas, dan berjalan terus walau layar sudah ditinggalkan. Sekarang:
+  * ada jeda **400 ms** antar halaman (paling banyak 2–3 permintaan per detik),
+  * pengambilan **berhenti** saat layar ditinggalkan,
+  * katalog yang belum lengkap **dilanjutkan dari halaman terakhir**, bukan diulang dari halaman satu.
+
+### Beban yang sudah diukur (bukan perkiraan)
+
+* Katalog Server 3: maksimal sekali per 12 jam, kini berjeda dan bisa dilanjutkan.
+* Pemeriksaan server Anime: satu permintaan per mirror saat panel dibuka, hasilnya disimpan **10 menit** per episode + mirror, jadi membuka ulang panel tidak mengirim apa pun.
+* Gambar chapter: satu permintaan per gambar, paling banyak **3 berjalan bersamaan**.
+* Indeks chapter Manga Server 2: halaman terbatas, disimpan **5 menit**.
+
 ## 2.69.0 — Pemutar TV: UI tidak lagi menempel setelah buka menu tiga titik, dan tombol kembali jadi dua langkah
 
 * **Akar "buka titik tiga lalu UI tidak menghilang":** panel server dibuat sebagai popup tanpa pendengar "sudah ditutup". Sekali Master membuka panel itu — lewat menu tiga titik atau tombol Server — penanda "panel terbuka" menyala selamanya, dan selama menyala auto-hide sengaja ditahan. Akibatnya kontrol menutupi gambar terus sampai pemutar ditutup. Penanda itu sekarang padam begitu panel ditutup, dan hitungan 5 detik langsung berjalan lagi.

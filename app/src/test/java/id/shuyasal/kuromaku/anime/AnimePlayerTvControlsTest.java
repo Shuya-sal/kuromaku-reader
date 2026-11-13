@@ -155,6 +155,31 @@ public class AnimePlayerTvControlsTest {
         }
     }
 
+    @Test public void dialogBertumpukTidakMemadamkanPenandaPanel() {
+        // Menu pemutar membuka dialog lain di atas dirinya sendiri, dan dialog
+        // pertama ditutup SETELAH yang kedua terbuka. Dengan penanda benar/salah,
+        // penutupan dialog pertama memadamkan penanda padahal dialog kedua masih
+        // tampil: timer auto-hide berjalan dan bilah kontrol menghilang di
+        // belakang dialog.
+        jadikanTelevisi();
+        try (ActivityController<AnimePlayerActivity> controller =
+                     Robolectric.buildActivity(AnimePlayerActivity.class, episode()).setup()) {
+            AnimePlayerActivity activity = controller.get();
+            ShadowLooper.idleMainLooper();
+
+            activity.panelOpened();
+            activity.panelOpened();   // dialog kedua di atas yang pertama
+            activity.panelClosed();   // dialog pertama ditutup
+
+            assertTrue("dialog kedua masih terbuka", activity.panelOpenForTest());
+            assertFalse("auto-hide masih ditahan", activity.shouldHideAfterIdle());
+
+            activity.panelClosed();
+            assertFalse("semua dialog tertutup", activity.panelOpenForTest());
+            assertTrue("auto-hide jalan lagi", activity.shouldHideAfterIdle());
+        }
+    }
+
     @Test public void menutupPanelServerMengaktifkanAutoHideLagi() {
         // Bug yang dilaporkan: buka menu tiga titik -> Server -> tutup panel ->
         // kontrol tidak pernah menghilang lagi. Sebabnya panelOpen menyala
