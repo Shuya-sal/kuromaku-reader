@@ -87,6 +87,20 @@
             android:exported="false" />
 
         <activity
+            android:name=".anime.kompi.KompiActivity"
+            android:exported="false"
+            android:configChanges="uiMode" />
+
+        <activity
+            android:name=".anime.kompi.KompiDetailActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".anime.kompi.KompiPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" />
+
+        <activity
             android:name=".anime.AnimePlayerActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize" />

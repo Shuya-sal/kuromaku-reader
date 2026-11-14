@@ -83,7 +83,7 @@ public class TvSourceHubTest {
         }
     }
 
-    @Test public void limaKartuSumberBisaDipilihDenganRemote() {
+    @Test public void enamKartuSumberBisaDipilihDenganRemote() {
         try (ActivityController<SourceHubActivity> controller =
                      Robolectric.buildActivity(SourceHubActivity.class).setup()) {
             SourceHubActivity activity = controller.get();
@@ -92,11 +92,11 @@ public class TvSourceHubTest {
             org.robolectric.shadows.ShadowLooper.idleMainLooper();
 
             List<View> kartu = kartuSumber(root);
-            assertEquals("lima sumber tampil", 5, kartu.size());
+            assertEquals("enam sumber tampil", 6, kartu.size());
 
             String[] harapan = {"source_hub_card_novel", "source_hub_card_voratoon",
                     "source_hub_card_shinigami", "source_hub_card_komiku",
-                    "source_hub_card_otakudesu"};
+                    "source_hub_card_otakudesu", "source_hub_card_kompi"};
             for (int index = 0; index < harapan.length; index++) {
                 View view = kartu.get(index);
                 assertEquals("urutan kartu " + index, harapan[index], view.getTag());
@@ -141,7 +141,7 @@ public class TvSourceHubTest {
             org.robolectric.shadows.ShadowLooper.idleMainLooper();
 
             List<View> semua = kartuSumber(root);
-            assertEquals(5, semua.size());
+            assertEquals("enam kartu sumber", 6, semua.size());
             View kartu = semua.get(2);
             assertEquals("Manga Server 2", "source_hub_card_shinigami", kartu.getTag());
             kartu.requestFocus();
@@ -162,7 +162,7 @@ public class TvSourceHubTest {
                      Robolectric.buildActivity(SourceHubActivity.class).setup()) {
             SourceHubActivity activity = controller.get();
             View root = activity.getWindow().getDecorView();
-            assertEquals("lima kartu tetap tampil di ponsel", 5, kartuSumber(root).size());
+            assertEquals("enam kartu tetap tampil di ponsel", 6, kartuSumber(root).size());
         }
     }
 

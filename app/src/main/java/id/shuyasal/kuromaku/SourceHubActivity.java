@@ -114,6 +114,11 @@ public class SourceHubActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 R.drawable.ic_film, 0xFF2F7DE1,
                 "source_hub_card_otakudesu", () -> open(OtakudesuActivity.class)));
 
+        cards.addView(card(R.string.source_kompi, R.string.source_kompi_note,
+                R.drawable.ic_film, 0xFFB0552C,
+                "source_hub_card_kompi",
+                () -> open(id.shuyasal.kuromaku.anime.kompi.KompiActivity.class)));
+
         content.addView(cards);
 
         TextView footer = Ui.label(this, getString(R.string.source_hub_footer), 11, 0x99E4E2DE);

@@ -1,3 +1,24 @@
+## 2.71.0 — Sumber anime kedua: Animekompi, dengan server berkas langsung
+
+### Yang baru
+
+* **Kartu "Anime Server 2" di halaman sumber.** Sumber anime kedua, terpisah dari Anime Streaming (Otakudesu). Sumber lama tidak diubah sama sekali: alamat, tata letak, unduhan, dan riwayatnya tetap.
+* **Beranda per bagian**: Episode Terbaru, Populer Minggu Ini, Sedang Tayang, dan Film, lengkap dengan pencarian.
+* **Pemutar sendiri**, bukan peramban: daftar episode membuka pemutar aplikasi.
+* **Server ditandai jujur.** Hanya server yang memberi berkas video yang diputar:
+  * **Pixel HD** (pixeldrain) dan **Mp4upload** — berkas langsung, 720p.
+  * GDrive, HD Pahe, VidHide — hanya halaman pemutar, jadi ditolak dengan alasan jelas dan tombol "Buka player sumber". Layar hitam tidak pernah ditampilkan sebagai "berhasil".
+* **Televisi**: layar penuh sejak awal, kontrol hilang sendiri saat video berjalan dan muncul lagi pada setiap tekanan tombol, kiri/kanan menggeser 10 detik saat kontrol tersembunyi, dan tombol kembali menyembunyikan kontrol dulu lalu keluar.
+
+### Kenapa sumber ini ditambahkan
+
+Server video Otakudesu sedang bermasalah (beberapa mirror membalas galat dan hanya menyisakan halaman pemutar). Animekompi menyediakan berkas `.mp4` langsung lewat Pixel HD dan Mp4upload, jadi anime bisa benar-benar diputar tanpa perantara pemutar beriklan.
+
+### Yang diuji
+
+* 14 tes baru: pembacaan beranda, pencarian, detail (episode terbaru dulu), penandaan server berkas, pengubahan tautan pixeldrain/mp4upload menjadi alamat berkas, penolakan halaman pemutar, penyampaian galat sumber, serta layar ponsel dan televisi (bagian tergambar, kartu membuka detail, kegagalan dijelaskan, kartu bisa disorot remote).
+* Tes penandaan server terbukti gagal saat perbaikannya dilepas sementara.
+
 ## 2.70.0 — Pemeriksaan menyeluruh: tiga bug lagi, dan beban ke situs sumber dikekang
 
 ### Bug yang diperbaiki

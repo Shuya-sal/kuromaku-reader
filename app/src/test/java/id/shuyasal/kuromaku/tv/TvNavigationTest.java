@@ -99,7 +99,7 @@ public class TvNavigationTest {
             SourceHubActivity activity = siapkanLayar(controller);
             View root = activity.getWindow().getDecorView();
             List<View> semua = kartu(root);
-            assertEquals("lima kartu sumber", 5, semua.size());
+            assertEquals("enam kartu sumber", 6, semua.size());
 
             for (int index = 0; index < semua.size() - 1; index++) {
                 View tujuan = berikutnya(root, semua.get(index), View.FOCUS_DOWN);
