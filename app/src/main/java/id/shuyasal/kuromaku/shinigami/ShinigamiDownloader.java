@@ -92,6 +92,90 @@ public final class ShinigamiDownloader {
     private static final java.util.Set<String> RUNNING =
             java.util.Collections.synchronizedSet(new java.util.HashSet<String>());
 
+    /**
+     * Hasil validasi halaman yang sudah pernah diperiksa.
+     *
+     * <p>Validasi penuh membuka berkas DAN mendekode gambarnya. Sebelum ini,
+     * setiap kali daftar chapter digambar ulang, semua halaman semua baris
+     * divalidasi ulang — puluhan sampai ratusan dekode bitmap di main thread.
+     * Dengan lima unduhan berjalan, hasilnya aplikasi tersendat lalu ditutup
+     * sistem. Berkas halaman tidak pernah berubah setelah selesai ditulis
+     * (tulis ke .tmp lalu ganti nama), jadi hasilnya aman diingat selama
+     * ukuran dan waktu ubahnya sama.
+     */
+    private static final java.util.Map<String, String> VALIDATED =
+            new java.util.HashMap<String, String>();
+    private static final int VALIDATED_MAX = 4096;
+
+    private static String stamp(File file) {
+        return file.length() + ":" + file.lastModified();
+    }
+
+    private static boolean slugOk(String chapterId) {
+        return chapterId != null && chapterId.matches("[A-Za-z0-9_-]{1,128}");
+    }
+
+    /**
+     * Cek murah: berkas halaman ada dan berukuran wajar.
+     *
+     * <p>Dipakai untuk menghitung persentase dan menandai baris di daftar
+     * chapter, yang terjadi sangat sering. Jangan dipakai untuk memutuskan
+     * sebuah chapter benar-benar utuh — untuk itu tetap {@link #pageFile}.
+     */
+    public boolean pageSaved(String chapterId, int index) {
+        if (index < 0 || !slugOk(chapterId)) return false;
+        File file = new File(chapterDir(chapterId), index + ".img");
+        if (!file.isFile() || file.length() < 8) return false;
+        final String kunci = file.getAbsolutePath();
+        final String cap = stamp(file);
+        synchronized (VALIDATED) {
+            if (cap.equals(VALIDATED.get(kunci))) return true;
+        }
+        // Header + penanda akhir berkas: cukup untuk memastikan gambar tidak
+        // terpotong, tanpa mendekode bitmap sama sekali.
+        byte[] head = new byte[16];
+        int read;
+        try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+            read = in.read(head);
+        } catch (IOException error) {
+            return false;
+        }
+        if (read < 8) return false;
+        try {
+            ShinigamiImageRequest.validate(200, "image/*", Arrays.copyOf(head, read));
+            if (file.length() > 32L * 1024 * 1024 || !hasCompleteContainer(file, head)) return false;
+            android.graphics.BitmapFactory.Options ukuran = new android.graphics.BitmapFactory.Options();
+            ukuran.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), ukuran);
+            if (ukuran.outWidth <= 0 || ukuran.outHeight <= 0) return false;
+        } catch (IOException | RuntimeException error) {
+            return false;
+        }
+        synchronized (VALIDATED) {
+            if (VALIDATED.size() > VALIDATED_MAX) VALIDATED.clear();
+            VALIDATED.put(kunci, cap);
+        }
+        return true;
+    }
+
+    /** Semua halaman ada menurut cek murah, tanpa membuka satu gambar pun. */
+    public boolean downloadedQuick(String chapterId, int expectedPages) {
+        if (expectedPages <= 0) return false;
+        for (int index = 0; index < expectedPages; index++) {
+            if (!pageSaved(chapterId, index)) return false;
+        }
+        return true;
+    }
+
+    /** Jumlah halaman yang ada menurut cek murah. */
+    public int savedPagesQuick(String chapterId, int expectedPages) {
+        int saved = 0;
+        for (int index = 0; index < expectedPages; index++) {
+            if (pageSaved(chapterId, index)) saved++;
+        }
+        return saved;
+    }
+
     public boolean isDownloaded(String chapterId, int expectedPages) {
         if (expectedPages <= 0) return false;
         for (int index = 0; index < expectedPages; index++) {
@@ -110,8 +194,8 @@ public final class ShinigamiDownloader {
     }
 
     public String storageLabel(String chapterId, int expectedPages) {
-        if (isDownloaded(chapterId, expectedPages)) return LABEL_SAVED;
         int state = ShinigamiDownloadStatus.state(chapterId);
+        if (state == ShinigamiDownloadStatus.SAVED) return LABEL_SAVED;
         if (state == ShinigamiDownloadStatus.FAILED
                 || state == ShinigamiDownloadStatus.CANCELLED
                 || state == ShinigamiDownloadStatus.PARTIAL) return LABEL_FAILED;
@@ -122,6 +206,9 @@ public final class ShinigamiDownloader {
             int percent = ShinigamiDownloadStatus.percent(chapterId);
             return percent > 0 ? "Mengunduh " + percent + "%" : LABEL_RUNNING;
         }
+        // Tanpa catatan status: cukup cek murah, jangan dekode gambar hanya
+        // untuk memberi label di daftar chapter.
+        if (downloadedQuick(chapterId, expectedPages)) return LABEL_SAVED;
         return LABEL_NOT_SAVED;
     }
 
@@ -129,6 +216,11 @@ public final class ShinigamiDownloader {
         if (index < 0 || chapterId == null || !chapterId.matches("[A-Za-z0-9_-]{1,128}")) return null;
         File file = new File(chapterDir(chapterId), index + ".img");
         if (!file.isFile() || file.length() < 8) return null;
+        final String kunci = file.getAbsolutePath();
+        final String cap = stamp(file);
+        synchronized (VALIDATED) {
+            if (cap.equals(VALIDATED.get(kunci))) return file;
+        }
         byte[] head = new byte[16];
         int read;
         try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
@@ -145,18 +237,17 @@ public final class ShinigamiDownloader {
         // Dimensions alone are not proof of a complete image (truncated files can have them).
         try {
             if (file.length() > 32L * 1024 * 1024 || !hasCompleteContainer(file, head)) return null;
+            // Cukup ukuran gambar, tanpa mendekode bitmap: berkas sudah
+            // dipastikan utuh oleh hasCompleteContainer di atas, sedangkan
+            // dekode penuh hanya memakan memori tanpa bukti tambahan.
             android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
             bounds.inJustDecodeBounds = true;
             android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
-            android.graphics.BitmapFactory.Options sampled = new android.graphics.BitmapFactory.Options();
-            sampled.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;
-            sampled.inSampleSize = 1;
-            while (Math.max(bounds.outWidth, bounds.outHeight) / sampled.inSampleSize > 1024)
-                sampled.inSampleSize *= 2;
-            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), sampled);
-            if (bitmap == null) return null;
-            bitmap.recycle();
+            synchronized (VALIDATED) {
+                if (VALIDATED.size() > VALIDATED_MAX) VALIDATED.clear();
+                VALIDATED.put(kunci, cap);
+            }
             return file;
         } catch (IOException | RuntimeException error) {
             return null;

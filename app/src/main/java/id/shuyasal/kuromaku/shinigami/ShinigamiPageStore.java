@@ -28,12 +28,14 @@ final class ShinigamiPageStore {
     }
 
     /** Jumlah halaman yang sudah lengkap dan lolos validasi. */
+    /**
+     * Halaman yang tersimpan, dihitung dengan cek murah.
+     *
+     * <p>Dipakai untuk progres yang tampil terus-menerus; validasi penuh
+     * (buka + dekode gambar) hanya dilakukan sekali di akhir unduhan.
+     */
     static int savedCount(ShinigamiDownloader local, String chapterId, int total) {
-        int saved = 0;
-        for (int index = 0; index < total; index++) {
-            if (local.pageFile(chapterId, index) != null) saved++;
-        }
-        return saved;
+        return local.savedPagesQuick(chapterId, total);
     }
 
     static int percent(ShinigamiDownloader local, String chapterId, int total) {

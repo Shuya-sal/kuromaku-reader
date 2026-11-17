@@ -94,7 +94,7 @@ public final class ShinigamiDownloadQueue {
         ShinigamiDownloader local = new ShinigamiDownloader(context);
         for (String chapterId : chapterIds) {
             if (chapterId == null || chapterId.isEmpty()) continue;
-            if (local.isDownloaded(chapterId, store.expectedPages(chapterId))) continue;
+            if (local.downloadedQuick(chapterId, store.expectedPages(chapterId))) continue;
             missing.add(chapterId);
         }
         return missing;

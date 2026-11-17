@@ -250,8 +250,23 @@ public class ShinigamiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity 
      * Membangun ulang seluruh daftar akan membuat ring selalu mulai dari nol,
      * sehingga animasinya tidak pernah terlihat.
      */
-    private final ShinigamiDownloadStatus.Listener downloadStateListener =
-            () -> main.post(this::refreshDownloadStates);
+    /**
+     * Pembaruan daftar chapter digabung.
+     *
+     * <p>Satu halaman selesai = satu pemberitahuan. Dengan lima chapter berjalan,
+     * dulu setiap pemberitahuan langsung menggambar ulang seluruh daftar; di
+     * perangkat kelas menengah itu membuat aplikasi tersendat lalu ditutup
+     * sistem. Sekarang paling banyak sekali per 400 ms.
+     */
+    private boolean refreshMenunggu;
+    private final ShinigamiDownloadStatus.Listener downloadStateListener = () -> {
+        if (refreshMenunggu) return;
+        refreshMenunggu = true;
+        main.postDelayed(() -> {
+            refreshMenunggu = false;
+            refreshDownloadStates();
+        }, 400);
+    };
     private final Map<String, ChapterRow> rows = new HashMap<>();
 
     private static final class ChapterRow {
@@ -1012,10 +1027,8 @@ public class ShinigamiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity 
     /** Persentase dari halaman yang benar-benar tersimpan, bukan timer. */
     private int downloadPercent(String chapterId, int expectedPages) {
         if (expectedPages <= 0) return 0;
-        int saved = 0;
-        for (int index = 0; index < expectedPages; index++) {
-            if (downloader.pageFile(chapterId, index) != null) saved++;
-        }
+        // Cek murah: cukup keberadaan berkas, tanpa mendekode gambar.
+        int saved = downloader.savedPagesQuick(chapterId, expectedPages);
         return Math.max(0, Math.min(100, saved * 100 / expectedPages));
     }
 

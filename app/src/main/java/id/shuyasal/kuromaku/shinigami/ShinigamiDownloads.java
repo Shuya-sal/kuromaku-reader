@@ -110,11 +110,12 @@ public final class ShinigamiDownloads {
             int expected = Math.max(store.expectedPages(chapterId), countPages(folder));
             int valid = 0;
             long bytes = 0;
+            // Layar unduhan hanya perlu ukuran dan jumlah halaman: pakai cek
+            // murah (header + penanda akhir berkas), tanpa mendekode gambar.
             for (int index = 0; index < expected; index++) {
-                File page = local.pageFile(chapterId, index);
-                if (page == null) continue;
+                if (!local.pageSaved(chapterId, index)) continue;
                 valid++;
-                bytes += page.length();
+                bytes += new File(folder, index + ".img").length();
             }
             if (valid == 0) continue;
             boolean complete = expected > 0 && valid >= expected;

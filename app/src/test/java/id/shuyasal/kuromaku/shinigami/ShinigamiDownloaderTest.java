@@ -201,4 +201,59 @@ public class ShinigamiDownloaderTest {
         assertEquals(5, store.page(CHAPTER));
         assertEquals(ShinigamiDownloader.LABEL_NOT_SAVED, downloader.storageLabel(CHAPTER, 2));
     }
+
+    /**
+     * Cek murah harus benar tanpa membuka gambar.
+     *
+     * <p>Validasi penuh mendekode bitmap; memanggilnya berulang untuk setiap
+     * baris daftar chapter membuat aplikasi tersendat ketika beberapa unduhan
+     * berjalan sekaligus.
+     */
+    @Test public void testCekMurahTanpaDekode() throws Exception {
+        ShinigamiDownloader downloader = new ShinigamiDownloader(context);
+        downloader.chapterDir(CHAPTER).mkdirs();
+        File halaman = new File(downloader.chapterDir(CHAPTER), "0.img");
+        java.io.FileOutputStream out = new java.io.FileOutputStream(halaman);
+        out.write(page);
+        out.close();
+
+        assertTrue(downloader.pageSaved(CHAPTER, 0));
+        assertFalse(downloader.pageSaved(CHAPTER, 1));
+        assertEquals(1, downloader.savedPagesQuick(CHAPTER, 3));
+        assertFalse(downloader.downloadedQuick(CHAPTER, 2));
+    }
+
+    @Test public void testBerkasTerpotongDitolakCekMurahDanValidasiPenuh() throws Exception {
+        ShinigamiDownloader downloader = new ShinigamiDownloader(context);
+        downloader.chapterDir(CHAPTER).mkdirs();
+        File halaman = new File(downloader.chapterDir(CHAPTER), "0.img");
+        java.io.FileOutputStream out = new java.io.FileOutputStream(halaman);
+        out.write(java.util.Arrays.copyOf(page, page.length / 2)); // terpotong
+        out.close();
+
+        // Gambar terpotong tidak boleh dihitung tersimpan, sekalipun ukurannya
+        // sudah lebih dari 8 bita — cek murah pun memeriksa penanda akhir.
+        assertFalse(downloader.pageSaved(CHAPTER, 0));
+        assertNull(downloader.pageFile(CHAPTER, 0));
+        assertFalse(downloader.isDownloaded(CHAPTER, 1));
+        assertFalse(downloader.downloadedQuick(CHAPTER, 1));
+    }
+
+    @Test public void testHasilValidasiDiingatDanIkutBerubahSaatBerkasBerubah() throws Exception {
+        ShinigamiDownloader downloader = new ShinigamiDownloader(context);
+        downloader.chapterDir(CHAPTER).mkdirs();
+        File halaman = new File(downloader.chapterDir(CHAPTER), "0.img");
+        java.io.FileOutputStream out = new java.io.FileOutputStream(halaman);
+        out.write(page);
+        out.close();
+
+        assertNotNull(downloader.pageFile(CHAPTER, 0));
+        assertNotNull(downloader.pageFile(CHAPTER, 0)); // jalur ingatan
+        halaman.setLastModified(halaman.lastModified() + 5000L);
+        assertNotNull(downloader.pageFile(CHAPTER, 0));
+        java.io.FileOutputStream rusak = new java.io.FileOutputStream(halaman);
+        rusak.write(new byte[]{1, 2, 3, 4, 5, 6, 7, 8, 9});
+        rusak.close();
+        assertNull(downloader.pageFile(CHAPTER, 0));
+    }
 }
