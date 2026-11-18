@@ -35,7 +35,7 @@ public final class ShinigamiImageRequest {
     ShinigamiImageRequest(String url, String referer, OkHttpClient client) {
         this.url = url;
         this.client = client;
-        this.referer = ShinigamiConfig.isValidBase(referer) ? referer.replaceAll("/+$", "") + "/" : "https://shinigami.asia/";
+        this.referer = ShinigamiConfig.isValidBase(referer) ? referer.replaceAll("/+$", "") + "/" : "https://s1.shinigami.mx/";
     }
 
     private static boolean registered;

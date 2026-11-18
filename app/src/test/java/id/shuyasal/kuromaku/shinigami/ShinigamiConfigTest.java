@@ -38,10 +38,34 @@ public class ShinigamiConfigTest {
 
     @Test
     public void aValidAddressIsStoredAndReadBack() {
-        assertTrue(config.setApiBase("https://api.shngm.io/v1/"));
-        assertEquals("https://api.shngm.io/v1", config.apiBase());
-        assertTrue(config.setSiteBase("https://11.shinigami.asia"));
-        assertEquals("https://11.shinigami.asia", config.siteBase());
+        assertTrue(config.setApiBase("https://api.shinigami.io/v1/"));
+        assertEquals("https://api.shinigami.io/v1", config.apiBase());
+        assertTrue(config.setSiteBase("https://s1.shinigami.mx"));
+        assertEquals("https://s1.shinigami.mx", config.siteBase());
+    }
+
+    @Test
+    public void anAddressFromTheDeadServerIsReplacedOnce() {
+        // Versi lama menyimpan alamat ini; server itu sekarang balas 502.
+        context.getSharedPreferences(ShinigamiConfig.FILE_NAME, Context.MODE_PRIVATE)
+                .edit().putString("api_base", "https://api.shngm.io/v1")
+                .putString("site_base", "https://shinigami.asia").commit();
+
+        assertEquals(ShinigamiConfig.DEFAULT_API_BASE, config.apiBase());
+        assertEquals(ShinigamiConfig.DEFAULT_SITE_BASE, config.siteBase());
+        // Nilai tersimpan ikut pindah, bukan hanya hasil bacaan.
+        assertEquals(ShinigamiConfig.DEFAULT_API_BASE,
+                context.getSharedPreferences(ShinigamiConfig.FILE_NAME, Context.MODE_PRIVATE)
+                        .getString("api_base", ""));
+        assertEquals(ShinigamiConfig.DEFAULT_SITE_BASE,
+                context.getSharedPreferences(ShinigamiConfig.FILE_NAME, Context.MODE_PRIVATE)
+                        .getString("site_base", ""));
+    }
+
+    @Test
+    public void aDifferentLiveMirrorIsKept() {
+        assertTrue(config.setApiBase("https://api2.shinigami.io/v1"));
+        assertEquals("https://api2.shinigami.io/v1", config.apiBase());
     }
 
     @Test

@@ -147,8 +147,8 @@ public class ShinigamiTabsTest {
             tagged(host, "shinigami_chip_Manga Terbaru").performClick();
             await(host);
             String newestTitles = lastListRequest();
-            assertTrue(newestTitles, newestTitles.contains("sort=rank"));
-            assertTrue(newestTitles, newestTitles.contains("sort_order=asc"));
+            assertTrue(newestTitles, newestTitles.contains("sort=new_manga"));
+            assertTrue(newestTitles, newestTitles.contains("sort_order=desc"));
         }
     }
 

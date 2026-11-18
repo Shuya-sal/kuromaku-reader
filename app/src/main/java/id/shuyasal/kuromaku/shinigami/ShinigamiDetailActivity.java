@@ -634,7 +634,10 @@ public class ShinigamiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity 
                 }
                 chapterPage = Math.max(1, reachedPage);
                 chapterTotalPages = Math.max(pages, chapterPage);
-                chapterTotalRecord = Math.max(record, chapters.size());
+                // Sumber baru tidak mengirim total chapter. Nol berarti "belum
+                // diketahui": hitungan Chapter yang tampil dipakai apa adanya dan
+                // sisa halaman tetap boleh dimuat.
+                chapterTotalRecord = record > 0 ? Math.max(record, chapters.size()) : 0;
                 updateChapterHeading();
                 renderChapters();
                 moreButton.setVisibility(View.GONE);

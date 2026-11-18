@@ -51,6 +51,13 @@ public class ShinigamiDetailIndexTest {
         }
     }
 
+    /** Sumber baru: tanpa total_page/total_record, hanya cursor + has_next. */
+    public static class CursorDetail extends ShinigamiDetailActivity {
+        @Override protected ShinigamiSource createSource() {
+            return new ShinigamiSource(this, ShinigamiDetailIndexTest::cursorRoute);
+        }
+    }
+
     Context context;
 
     @Before public void setup() {
@@ -73,6 +80,53 @@ public class ShinigamiDetailIndexTest {
             return chapterPage(asc, secondPage);
         }
         throw new java.io.IOException("unexpected " + url);
+    }
+
+    static final List<String> CURSOR_REQUESTS = new ArrayList<>();
+
+    static String cursorRoute(String url) throws java.io.IOException {
+        if (url.contains("/manga/detail/")) return mangaDetail();
+        if (url.contains("/chapter/") && url.contains("/list")) {
+            CURSOR_REQUESTS.add(url);
+            boolean asc = url.contains("sort_order=asc");
+            String cursor = "";
+            int found = url.indexOf("&cursor=");
+            if (found >= 0) {
+                int end = url.indexOf('&', found + 1);
+                cursor = end < 0 ? url.substring(found + 8) : url.substring(found + 8, end);
+            }
+            boolean secondPage = "c2".equals(cursor);
+            return cursorChapterPage(asc, secondPage);
+        }
+        throw new java.io.IOException("unexpected " + url);
+    }
+
+    static String cursorChapterPage(boolean asc, boolean secondPage) throws java.io.IOException {
+        try {
+            JSONArray data = new JSONArray();
+            int first = asc ? (secondPage ? 31 : 1) : (secondPage ? 30 : TOTAL);
+            int last = asc ? (secondPage ? TOTAL : 30) : (secondPage ? 1 : TOTAL - 29);
+            int step = asc ? 1 : -1;
+            for (int n = first; asc ? n <= last : n >= last; n += step) {
+                JSONObject item = new JSONObject();
+                item.put("chapter_id", "ch-" + n);
+                item.put("manga_id", MANGA);
+                item.put("chapter_number", n);
+                item.put("chapter_title", "");
+                item.put("release_date", "2026-01-01T00:00:00Z");
+                data.put(item);
+            }
+            JSONObject meta = new JSONObject();
+            meta.put("has_next", !secondPage);
+            if (!secondPage) meta.put("next_cursor", "c2");
+            JSONObject root = new JSONObject();
+            root.put("retcode", 0);
+            root.put("data", data);
+            root.put("meta", meta);
+            return root.toString();
+        } catch (org.json.JSONException error) {
+            throw new java.io.IOException(error);
+        }
     }
 
     static String mangaDetail() {
@@ -192,6 +246,32 @@ public class ShinigamiDetailIndexTest {
             }
             assertTrue("pencarian harus memuat halaman lanjutan: " + CHAPTER_REQUESTS,
                     fetchedSecondPage);
+        }
+    }
+
+    @Test public void sumberTanpaTotalChapterTetapMemuatHalamanBerikutnya() throws Exception {
+        CURSOR_REQUESTS.clear();
+        try (ActivityController<CursorDetail> controller =
+                     Robolectric.buildActivity(CursorDetail.class, intent()).setup()) {
+            CursorDetail detail = controller.get();
+            await(detail);
+            List<String> shown = labels(detail);
+            assertEquals("kedua halaman harus termuat walau total tidak dikirim", 60,
+                    shown.size());
+            assertTrue(shown.toString(), shown.contains("Chapter 1"));
+            assertTrue(shown.toString(), shown.contains("Chapter 60"));
+
+            TextView heading = detail.getWindow().getDecorView()
+                    .findViewWithTag("shinigami_chapter_heading");
+            if (heading != null) {
+                assertTrue("judul tidak boleh mengarang total: " + heading.getText(),
+                        heading.getText().toString().contains("60"));
+            }
+
+            boolean askedSecondPage = false;
+            for (String url : CURSOR_REQUESTS) if (url.contains("cursor=c2")) askedSecondPage = true;
+            assertTrue("halaman kedua harus diminta lewat cursor: " + CURSOR_REQUESTS,
+                    askedSecondPage);
         }
     }
 

@@ -9,13 +9,14 @@ import java.util.regex.Pattern;
 
 public final class ShinigamiConfig {
     public static final String FILE_NAME = "kuromaku_shinigami_config";
-    public static final String DEFAULT_API_BASE = "https://api.shngm.io/v1";
-    public static final String DEFAULT_SITE_BASE = "https://shinigami.asia";
+    public static final String DEFAULT_API_BASE = "https://api.shinigami.io/v1";
+    public static final String DEFAULT_SITE_BASE = "https://s1.shinigami.mx";
     private static final String KEY_API_BASE = "api_base";
     private static final String KEY_SITE_BASE = "site_base";
     private static final Pattern HOST_PATTERN = Pattern.compile(
             "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$");
     private static final String[] ALLOWED_ROOTS = {
+            "shinigami.io", "shinigami.mx", "shinigami.gg",
             "shinigami.asia", "shinigami.to", "shngm.io", "shngm.id"
     };
     private final SharedPreferences prefs;
@@ -26,12 +27,42 @@ public final class ShinigamiConfig {
 
     public String apiBase() {
         String stored = prefs.getString(KEY_API_BASE, "");
-        return isValidBase(stored) ? normalize(stored) : DEFAULT_API_BASE;
+        if (!isValidBase(stored)) return DEFAULT_API_BASE;
+        if (isRetiredHost(stored)) {
+            // Aplikasi versi lama menyimpan alamat API yang sekarang tidak lagi
+            // menjawab. Alamat itu diganti ke alamat baru sekali, tanpa menyentuh
+            // pengaturan lain; kalau pengguna memang memakai cermin lain yang
+            // masih hidup, cermin itu tetap dipakai.
+            prefs.edit().putString(KEY_API_BASE, DEFAULT_API_BASE).apply();
+            return DEFAULT_API_BASE;
+        }
+        return normalize(stored);
     }
 
     public String siteBase() {
         String stored = prefs.getString(KEY_SITE_BASE, "");
-        return isValidBase(stored) ? normalize(stored) : DEFAULT_SITE_BASE;
+        if (!isValidBase(stored)) return DEFAULT_SITE_BASE;
+        if (isRetiredHost(stored)) {
+            prefs.edit().putString(KEY_SITE_BASE, DEFAULT_SITE_BASE).apply();
+            return DEFAULT_SITE_BASE;
+        }
+        return normalize(stored);
+    }
+
+    /** Alamat lama yang sudah tidak menjawab (server 502 domain mati). */
+    static boolean isRetiredHost(String value) {
+        try {
+            String host = new URI(value.trim()).getHost();
+            if (host == null) return false;
+            String lower = host.toLowerCase(Locale.ROOT);
+            return lower.equals("api.shngm.io") || lower.equals("shngm.io")
+                    || lower.endsWith(".shngm.io")
+                    || lower.equals("shinigami.asia") || lower.endsWith(".shinigami.asia")
+                    || lower.equals("shinigami.to") || lower.endsWith(".shinigami.to")
+                    || lower.equals("shinigami.gg") || lower.endsWith(".shinigami.gg");
+        } catch (Exception error) {
+            return false;
+        }
     }
 
     public boolean setApiBase(String value) {

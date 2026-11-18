@@ -44,7 +44,7 @@ public final class ShinigamiSource {
      */
     public enum Feed {
         POPULAR("rank", "desc"),
-        NEW_TITLES("rank", "asc"),
+        NEW_TITLES("new_manga", "desc"),
         NEW_CHAPTERS("latest", "desc");
 
         public final String sortWire;
@@ -119,6 +119,26 @@ public final class ShinigamiSource {
             this.loadedAt = loadedAt;
         }
     }
+    /** Rantai cursor halaman chapter per manga+urutan; kunci → cursor halaman 2,3,… */
+    private static final java.util.LinkedHashMap<String, java.util.ArrayList<String>> CURSOR_CHAIN =
+            new java.util.LinkedHashMap<>(4, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(
+                        java.util.Map.Entry<String, java.util.ArrayList<String>> eldest) {
+                    return size() > 6;
+                }
+            };
+
+    private String chapterListUrl(String mangaId, String cursor, String order, int pageForUrl) {
+        StringBuilder url = new StringBuilder(config.apiBase())
+                .append("/chapter/").append(encode(mangaId))
+                .append("/list?page=").append(Math.max(1, pageForUrl))
+                .append("&page_size=").append(CHAPTER_PAGE_SIZE)
+                .append("&limit=").append(CHAPTER_PAGE_SIZE)
+                .append("&sort_by=chapter_number&sort_order=").append(order);
+        if (cursor != null && !cursor.isEmpty()) url.append("&cursor=").append(encode(cursor));
+        return url.toString();
+    }
+
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS).readTimeout(20, TimeUnit.SECONDS)
             .callTimeout(30, TimeUnit.SECONDS).followRedirects(false)
@@ -175,9 +195,15 @@ public final class ShinigamiSource {
     private Page list(int page, String sortWire, String sortOrder, String keyword,
                       String genreSlug, String status, boolean newestFirstByCreated)
             throws SourceException {
+        int wantedPage = Math.max(1, page);
+        // Sumber baru menghitung posisi dengan offset/limit; cermin lama masih
+        // memakai page/page_size. Keduanya dikirim dengan nilai yang sama supaya
+        // tidak ada cermin yang melompati atau menggandakan halaman.
         StringBuilder url = new StringBuilder(config.apiBase())
-                .append("/manga/list?page=").append(Math.max(1, page))
+                .append("/manga/list?page=").append(wantedPage)
                 .append("&page_size=").append(PAGE_SIZE)
+                .append("&offset=").append((wantedPage - 1) * PAGE_SIZE)
+                .append("&limit=").append(PAGE_SIZE)
                 .append("&sort=").append(sortWire)
                 .append("&sort_order=").append(sortOrder);
         if (keyword != null && !keyword.isEmpty()) url.append("&q=").append(encode(keyword));
@@ -205,8 +231,14 @@ public final class ShinigamiSource {
         }
         JSONObject meta = root.optJSONObject("meta");
         if (meta == null) throw changedShape();
-        return new Page(ordered, Math.max(1, page),
-                Math.max(1, meta.optInt("total_page", 1)), meta.optLong("total_record", items.size()));
+        // Sumber baru tidak mengirim total halaman/judul. Satu-satunya penanda
+        // yang jujur adalah has_next: selama masih ada, satu halaman lagi boleh
+        // diminta; begitu habis, pemuatan berhenti.
+        int declaredPages = meta.optInt("total_page", 0);
+        int totalPages = declaredPages > 0 ? declaredPages
+                : (meta.optBoolean("has_next", false) ? wantedPage + 1 : wantedPage);
+        return new Page(ordered, wantedPage, Math.max(1, totalPages),
+                meta.optLong("total_record", 0L));
     }
 
     public ShinigamiManga detail(String mangaId) throws SourceException {
@@ -228,9 +260,45 @@ public final class ShinigamiSource {
      */
     public ChapterPage chapters(String mangaId, int page, String sortOrder) throws SourceException {
         requireId(mangaId, "manga");
-        JSONObject root = getJson(config.apiBase() + "/chapter/" + encode(mangaId)
-                + "/list?page=" + Math.max(1, page) + "&page_size=" + CHAPTER_PAGE_SIZE
-                + "&sort_by=chapter_number&sort_order=" + sortOrder);
+        final int wanted = Math.max(1, page);
+        final String order = "asc".equals(sortOrder) ? "asc" : "desc";
+        final String key = mangaId + "|" + order;
+        String cursor;
+        synchronized (CURSOR_CHAIN) {
+            java.util.ArrayList<String> chain = CURSOR_CHAIN.get(key);
+            if (chain == null) {
+                chain = new java.util.ArrayList<>();
+                CURSOR_CHAIN.put(key, chain);
+            }
+            // Sumber baru memakai cursor berantai, bukan nomor halaman. Untuk
+            // halaman yang belum pernah diambil, rantai diisi dengan meminta
+            // halaman sebelumnya secara berurutan — tidak ada nomor halaman
+            // yang bisa ditebak, dan menebak akan menghasilkan daftar ganda.
+            while (chain.size() < wanted - 1) {
+                int fetchPage = chain.size() + 1;
+                String fetchCursor = fetchPage == 1 ? null : chain.get(fetchPage - 2);
+                JSONObject root = getJson(chapterListUrl(mangaId, fetchCursor, order, fetchPage));
+                JSONObject meta = root.optJSONObject("meta");
+                String next = meta == null ? "" : meta.optString("next_cursor", "");
+                if (next.isEmpty()) break;
+                chain.add(next);
+            }
+            cursor = wanted == 1 ? null
+                    : (chain.size() >= wanted - 1 ? chain.get(wanted - 2) : null);
+        }
+        JSONObject root = getJson(chapterListUrl(mangaId, cursor, order, wanted));
+        JSONObject responseMeta = root.optJSONObject("meta");
+        String nextCursor = responseMeta == null ? "" : responseMeta.optString("next_cursor", "");
+        boolean hasNext = responseMeta != null && responseMeta.optBoolean("has_next", false);
+        if (!nextCursor.isEmpty() || hasNext) {
+            synchronized (CURSOR_CHAIN) {
+                java.util.ArrayList<String> chain = CURSOR_CHAIN.get(key);
+                if (chain == null) { chain = new java.util.ArrayList<>(); CURSOR_CHAIN.put(key, chain); }
+                while (chain.size() < wanted - 1) chain.add("");
+                if (chain.size() == wanted - 1) chain.add(nextCursor);
+                else if (wanted - 1 < chain.size()) chain.set(wanted - 1, nextCursor);
+            }
+        }
         JSONArray data = requireArray(root);
         LinkedHashMap<String, ShinigamiChapter> items = new LinkedHashMap<>();
         for (int i = 0; i < data.length(); i++) {
@@ -247,10 +315,11 @@ public final class ShinigamiSource {
         }
         JSONObject meta = root.optJSONObject("meta");
         if (meta == null) throw changedShape();
-        int totalRecord = meta.optInt("total_record", items.size());
-        int totalPage = Math.max(1, meta.optInt("total_page", 1));
-        return new ChapterPage(new ArrayList<>(items.values()), Math.max(1, page),
-                totalPage, totalRecord);
+        int declaredPages = meta.optInt("total_page", 0);
+        int totalRecord = meta.optInt("total_record", 0);
+        int totalPage = Math.max(1, declaredPages > 0 ? declaredPages
+                : (hasNext ? wanted + 1 : wanted));
+        return new ChapterPage(new ArrayList<>(items.values()), wanted, totalPage, totalRecord);
     }
 
     /**
@@ -296,6 +365,13 @@ public final class ShinigamiSource {
         synchronized (INDEX_CACHE) {
             if (mangaId == null) INDEX_CACHE.clear();
             else INDEX_CACHE.remove(mangaId);
+        }
+        synchronized (CURSOR_CHAIN) {
+            if (mangaId == null) CURSOR_CHAIN.clear();
+            else {
+                CURSOR_CHAIN.remove(mangaId + "|asc");
+                CURSOR_CHAIN.remove(mangaId + "|desc");
+            }
         }
     }
 
@@ -416,7 +492,7 @@ public final class ShinigamiSource {
     }
 
     public List<Genre> genres() throws SourceException {
-        JSONArray data = requireArray(getJson(config.apiBase() + "/genre/list"));
+        JSONArray data = requireArray(getJson(config.apiBase() + "/taxonomy/list?type=genre&limit=100"));
         List<Genre> genres = new ArrayList<>();
         for (int i = 0; i < data.length(); i++) {
             JSONObject item = data.optJSONObject(i);
