@@ -244,6 +244,74 @@ public class KompiSource {
                 number.isEmpty() ? "Episode baru" : "Episode " + number);
     }
 
+    // --------------------------------------------------------------- genre
+
+    /** Satu genre dari sumber. */
+    public static final class Genre {
+        public final String slug;
+        public final String name;
+
+        Genre(String slug, String name) {
+            this.slug = slug;
+            this.name = name;
+        }
+
+        @Override public String toString() {
+            return name;
+        }
+    }
+
+    /** Daftar genre, diurutkan menurut nama supaya mudah dicari mata. */
+    public List<Genre> genres() throws SourceException {
+        JSONArray array = jsonArray("/api/genres");
+        List<Genre> out = new ArrayList<>();
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject node = array.optJSONObject(i);
+            if (node == null) continue;
+            String slug = node.optString("slug", "");
+            String name = node.optString("name", "");
+            if (slug.isEmpty() || name.isEmpty()) continue;
+            out.add(new Genre(slug, name));
+        }
+        java.util.Collections.sort(out, (a, b) -> a.name.compareToIgnoreCase(b.name));
+        return out;
+    }
+
+    /**
+     * Anime dalam satu genre, satu halaman 24 judul.
+     *
+     * <p>Alamat ini bagian dari API sumber sendiri
+     * ({@code /api/anime?genre=...&page=...}); bila tidak ada hasil di halaman
+     * yang diminta, daftar kosong dikembalikan — bukan halaman kosong karangan.
+     */
+    public List<Item> byGenre(String slug, int page) throws SourceException {
+        String path = "/api/anime?genre=" + encode(slug) + "&page=" + Math.max(1, page);
+        JSONObject root = json(path);
+        JSONArray array = root.optJSONArray("data");
+        List<Item> items = new ArrayList<>();
+        if (array == null) return items;
+        for (int i = 0; i < array.length(); i++) {
+            Item item = animeItem(array.optJSONObject(i));
+            if (item != null) items.add(item);
+        }
+        return items;
+    }
+
+    private JSONArray jsonArray(String path) throws SourceException {
+        String body;
+        try {
+            body = transport.get(BASE + path, BASE + "/");
+        } catch (IOException error) {
+            throw new SourceException(error.getMessage() == null
+                    ? "Sumber tidak dapat dihubungi." : error.getMessage(), error);
+        }
+        try {
+            return new JSONArray(body);
+        } catch (JSONException error) {
+            throw new SourceException("Daftar genre tidak terbaca.", error);
+        }
+    }
+
     static String absolute(String value) {
         if (value == null || value.isEmpty()) return "";
         return value.startsWith("/") ? BASE + value : value;

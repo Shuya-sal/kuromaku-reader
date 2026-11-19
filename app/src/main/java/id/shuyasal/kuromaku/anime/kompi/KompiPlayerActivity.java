@@ -1,5 +1,7 @@
 package id.shuyasal.kuromaku.anime.kompi;
 
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -33,6 +35,10 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import id.shuyasal.kuromaku.anime.AnimeDownloadPolicy;
+import id.shuyasal.kuromaku.anime.AnimeDownloadQueue;
+import id.shuyasal.kuromaku.anime.AnimeDownloadTask;
+import id.shuyasal.kuromaku.anime.AnimeDownloads;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
 import id.shuyasal.kuromaku.ui.SentuhLompat;
@@ -59,6 +65,10 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     public static final String EXTRA_SLUG = "slug";
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_EPISODE = "episode";
+    /** Slug anime induk: dipakai riwayat supaya semua episode satu anime menyatu. */
+    public static final String EXTRA_ANIME_SLUG = "anime_slug";
+    public static final String EXTRA_POSTER = "poster";
+    public static final String EXTRA_EPISODE_NUMBER = "episode_number";
 
     private static final long SEMBUNYI_MS = 3200;
     private static final long GESER_MS = 10_000;
@@ -81,8 +91,12 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private ProgressBar spinner;
     private Button tombolPutar;
     private Button tombolLayarPenuh;
+    private LinearLayout panelMenu;
+    private Button tombolUnduh;
     /** Layar penuh = bilah sistem disembunyikan; orientasi tetap ikut perangkat. */
     private boolean layarPenuh;
+    /** Orientasi yang diminta tombol rotasi (lanskap bila true). */
+    private boolean permintaanLanskap;
     private final List<KompiSource.Server> servers = new ArrayList<>();
     private String serverAktif = "";
 
@@ -157,12 +171,60 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         overlayParams.gravity = Gravity.BOTTOM;
         root.addView(overlay, overlayParams);
 
+        // Baris atas: judul di kiri, tombol titik tiga di kanan. Server, layar
+        // penuh, dan rotasi masuk ke menu titik tiga supaya tidak berebut tempat
+        // dengan tombol putar dan tidak menutupi judul.
+        LinearLayout barisAtas = new LinearLayout(this);
+        barisAtas.setOrientation(LinearLayout.HORIZONTAL);
+        barisAtas.setGravity(Gravity.CENTER_VERTICAL);
+
         TextView judulView = Ui.label(this,
                 (judul == null ? "" : judul) + (episode == null ? "" : " · " + episode),
                 15, android.graphics.Color.WHITE);
         judulView.setTypeface(null, Typeface.BOLD);
         judulView.setMaxLines(2);
-        overlay.addView(judulView);
+        barisAtas.addView(judulView, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button menu = tombol("⋮", this::toggleMenuAtas);
+        menu.setContentDescription("Menu pemutar");
+        menu.setTag("tombol_menu");
+        barisAtas.addView(menu, new LinearLayout.LayoutParams(
+                Ui.dp(this, 56), Ui.dp(this, Ui.TOUCH_DP)));
+        overlay.addView(barisAtas);
+
+        // Menu titik tiga: berisi tombol yang dulu berjejer di bawah.
+        panelMenu = new LinearLayout(this);
+        panelMenu.setOrientation(LinearLayout.VERTICAL);
+        panelMenu.setVisibility(View.GONE);
+        panelMenu.setTag("panel_menu");
+        panelMenu.setBackgroundColor(0xE6000000);
+        int padMenu = Ui.dp(this, 10);
+        panelMenu.setPadding(padMenu, padMenu, padMenu, padMenu);
+        LinearLayout.LayoutParams panelParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        panelParams.topMargin = Ui.dp(this, 8);
+        overlay.addView(panelMenu, panelParams);
+
+        Button daftarServer = tombolMenu("Server", "tombol_server", this::toggleServer);
+        Button layarPenuh = tombolMenu("Layar penuh", "tombol_layar_penuh",
+                this::toggleLayarPenuh);
+        tombolLayarPenuh = layarPenuh;
+        Button rotasi = tombolMenu("Putar layar", "tombol_rotasi", this::putarOrientasi);
+        Button unduh = tombolMenu("Unduh episode", "tombol_unduh_episode", this::unduhEpisode);
+        tombolUnduh = unduh;
+        for (Button item : new Button[] {daftarServer, layarPenuh, rotasi, unduh}) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, Ui.TOUCH_DP));
+            params.topMargin = Ui.dp(this, 6);
+            panelMenu.addView(item, params);
+        }
+
+        TextView catatanRotasi = Ui.label(this,
+                "Rotasi mengikuti isi layar; layar penuh menyembunyikan bilah sistem.",
+                11, 0xFFAAAAAA);
+        catatanRotasi.setPadding(0, Ui.dp(this, 8), 0, 0);
+        panelMenu.addView(catatanRotasi);
 
         status = Ui.label(this, "Menyiapkan…", 13, 0xFFCCCCCC);
         status.setPadding(0, Ui.dp(this, 6), 0, Ui.dp(this, 8));
@@ -176,11 +238,8 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         Button putar = tombol("Putar", this::putarAtauJeda);
         tombolPutar = putar;
         Button maju = tombol("+10 dtk", () -> geser(GESER_MS));
-        Button daftarServer = tombol("Server", this::tampilkanServer);
-        Button layarPenuh = tombol("Layar penuh", this::toggleLayarPenuh);
-        tombolLayarPenuh = layarPenuh;
         Button keluar = tombol("Keluar", this::finish);
-        for (Button tombol : new Button[] {kembali, putar, maju, daftarServer, layarPenuh, keluar}) {
+        for (Button tombol : new Button[] {kembali, putar, maju, keluar}) {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     0, Ui.dp(this, Ui.TOUCH_DP), 1f);
             params.setMargins(Ui.dp(this, 4), 0, Ui.dp(this, 4), 0);
@@ -191,6 +250,7 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         panelServer = new LinearLayout(this);
         panelServer.setOrientation(LinearLayout.VERTICAL);
         panelServer.setVisibility(View.GONE);
+        panelServer.setTag("panel_server");
         overlay.addView(panelServer);
 
         root.setOnClickListener(view -> {
@@ -254,6 +314,145 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         });
     }
 
+    private Button tombolMenu(String teks, String tag, Runnable aksi) {
+        Button button = tombol(teks, aksi);
+        button.setTag(tag);
+        button.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        button.setPadding(Ui.dp(this, 12), 0, Ui.dp(this, 12), 0);
+        return button;
+    }
+
+    /**
+     * Buka-tutup menu titik tiga. Daftar server ikut ditutup supaya menunya
+     * tidak pernah terbuka dua lapis.
+     */
+    private void toggleMenuAtas() {
+        boolean tampil = panelMenu.getVisibility() != View.VISIBLE;
+        panelMenu.setVisibility(tampil ? View.VISIBLE : View.GONE);
+        if (tampil) {
+            panelServer.setVisibility(View.GONE);
+            setKontrolTampil(true);
+            if (TvMode.isTelevision(this)) {
+                View first = TvFocus.firstFocusable(panelMenu);
+                if (first != null) first.requestFocus();
+            }
+        }
+    }
+
+    /**
+     * Buka-tutup daftar server.
+     *
+     * <p>Sebelumnya metode ini selalu menampilkan daftar dan tidak pernah
+     * menutupnya, sehingga daftar server tidak bisa dihilangkan dari layar
+     * selain dengan memilih salah satu server.
+     */
+    private void toggleServer() {
+        if (panelServer.getVisibility() == View.VISIBLE) {
+            panelServer.setVisibility(View.GONE);
+            return;
+        }
+        tampilkanServer();
+    }
+
+    /**
+     * Putar tampilan 90 derajat: potret ↔ lanskap.
+     *
+     * <p>Yang dibaca adalah orientasi yang <em>diminta</em>, bukan orientasi
+     * layar saat ini. Di HP yang fitur putar-otomatisnya mati, permintaan
+     * lanskap tidak langsung mengubah layar, sehingga membaca layar membuat
+     * tombol terus meminta lanskap dan tidak pernah kembali potret.
+     */
+    private void putarOrientasi() {
+        boolean sedangLanskap = permintaanLanskap
+                || getResources().getConfiguration().orientation
+                        == Configuration.ORIENTATION_LANDSCAPE;
+        permintaanLanskap = !sedangLanskap;
+        setRequestedOrientation(permintaanLanskap
+                ? ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                : ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+    }
+
+
+    /**
+     * Catat tontonan ke riwayat Anime Server 2.
+     *
+     * <p>Dicatat saat episode benar-benar diminta diputar (server berkas
+     * ditemukan dan dipilih), bukan saat layar pemutar terbuka — membuka
+     * pemutar yang ternyata hanya memuat halaman pemutar bukan tontonan.
+     */
+    private void catatRiwayat() {
+        if (slug == null || slug.isEmpty()) return;
+        String posterR = getIntent().getStringExtra(EXTRA_POSTER);
+        String indent = getIntent().getStringExtra(EXTRA_ANIME_SLUG);
+        int nomor = getIntent().getIntExtra(EXTRA_EPISODE_NUMBER, 0);
+        KompiHistory.record(this, indent == null || indent.isEmpty() ? slug : indent,
+                judul == null ? "" : judul, posterR, episode, slug, nomor);
+    }
+
+    /**
+     * Unduh episode yang sedang diputar.
+     *
+     * <p>Yang diunduh adalah berkas yang benar-benar disediakan server
+     * ({@code resolve} mengembalikan alamat berkas langsung). Bila server ini
+     * hanya menyediakan halaman pemutar, tombol memberi alasan dan menawarkan
+     * membukanya di peramban — tidak ada unduhan palsu.
+     */
+    private void unduhEpisode() {
+        if (!AnimeDownloadPolicy.allowed(this)) {
+            status.setText("Unduhan belum diizinkan. Aktifkan izin unduhan lebih dulu.");
+            setKontrolTampil(true);
+            return;
+        }
+        final String labelEp = episode == null || episode.isEmpty() ? "Episode" : episode;
+        final String urlServer = serverAktif;
+        if (urlServer == null || urlServer.isEmpty()) {
+            status.setText("Belum ada server aktif untuk diunduh.");
+            setKontrolTampil(true);
+            return;
+        }
+        final String animeId = slug;
+        final String posterR = getIntent().getStringExtra(EXTRA_POSTER);
+        final String judulR = judul == null ? "Anime" : judul;
+        status.setText("Menyiapkan unduhan " + labelEp + "…");
+        setKontrolTampil(true);
+        worker.execute(() -> {
+            String media = null;
+            String alasan = null;
+            try {
+                media = source.resolve(urlServer);
+            } catch (KompiSource.SourceException error) {
+                alasan = error.getMessage();
+            }
+            final String berkas = media;
+            final String pesan = alasan;
+            main(() -> {
+                if (isFinishing()) return;
+                if (berkas == null || berkas.isEmpty()) {
+                    status.setText(pesan == null || pesan.isEmpty()
+                            ? "Server ini hanya menyediakan halaman pemutar, bukan berkas yang "
+                            + "bisa disimpan."
+                            : pesan);
+                    setKontrolTampil(true);
+                    return;
+                }
+                if (AnimeDownloads.isSaved(KompiPlayerActivity.this, animeId,
+                        AnimeDownloads.episodeKey(slug, labelEp))) {
+                    status.setText("Episode ini sudah tersimpan.");
+                    setKontrolTampil(true);
+                    return;
+                }
+                // Kualitas hanya ditampilkan bila sumber benar-benar menyebutnya.
+                AnimeDownloadTask task = new AnimeDownloadTask(animeId, judulR, posterR,
+                        labelEp, slug, "", "Anime Server 2", berkas, "PROGRESSIVE");
+                boolean queued = AnimeDownloadQueue.enqueue(KompiPlayerActivity.this, task);
+                status.setText(queued
+                        ? "Unduhan dimasukkan ke antrean: " + labelEp
+                        : "Unduhan tidak dapat dijadwalkan.");
+                setKontrolTampil(true);
+            });
+        });
+    }
+
     private void tampilkanServer() {
         panelServer.removeAllViews();
         panelServer.setVisibility(View.VISIBLE);
@@ -284,6 +483,7 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private void putarServer(KompiSource.Server server) {
         serverAktif = server.url;
+        catatRiwayat();
         panelServer.setVisibility(View.GONE);
         spinner.setVisibility(View.VISIBLE);
         status.setText("Memeriksa " + server.label + "…");
@@ -417,7 +617,7 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * Layar penuh: bilah sistem disembunyikan, orientasi tetap mengikuti
      * perangkat.
      *
-     * <p>Pemutar Anime Streaming sudah punya tombol ini; pemutar Anime Server 2
+     * <p>Pemutar Anime Server 1 sudah punya tombol ini; pemutar Anime Server 2
      * belum, jadi menonton di sini selalu menyisakan status bar dan bilah
      * navigasi yang memakan sebagian gambar. Orientasi sengaja tidak dipaksa:
      * memutar perangkat ke samping tetap keputusan pembaca, dan layar penuh di

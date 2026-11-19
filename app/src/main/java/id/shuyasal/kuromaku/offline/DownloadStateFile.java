@@ -18,7 +18,7 @@ import java.util.Map;
 /**
  * Status unduhan yang bertahan setelah proses aplikasi mati.
  *
- * <p>Ketiga modul (Novel, Manga Server 2, Anime Streaming) menulis keadaan
+ * <p>Ketiga modul (Novel, Manga Server 2, Anime Server 1) menulis keadaan
  * unduhannya ke satu berkas JSON di penyimpanan internal aplikasi. Sebelumnya
  * status hanya hidup di memori: begitu proses dibunuh Android, layar menampilkan
  * "belum diunduh" padahal berkasnya ada dan pekerjaan WorkManager mungkin masih

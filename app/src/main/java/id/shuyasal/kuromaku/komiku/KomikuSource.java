@@ -352,13 +352,30 @@ public final class KomikuSource {
             if (paragraph != null) updated = updateFrom(paragraph.text());
         }
 
+        // Kartu katalog memuat DUA baris chapter: "Awal: Chapter 1" lalu
+        // "Terbaru: Chapter 10". Yang pertama bukan chapter terbaru, jadi
+        // "Terbaru:" dicari lebih dulu; "Awal:" hanya dipakai bila sumbernya
+        // memang tidak menyediakan baris terbaru.
         String latest = "";
-        Element newest = card.selectFirst("div.new1 a[title*=Chapter], div.new1 a");
+        Element newest = card.selectFirst("div.new1 a[title*=Terbaru]");
+        if (newest == null) {
+            for (Element row : card.select("div.new1 a")) {
+                if (row.text().toLowerCase(java.util.Locale.ROOT).contains("terbaru")) {
+                    newest = row;
+                    break;
+                }
+            }
+        }
+        if (newest == null) {
+            for (Element row : card.select("div.new1 a")) {
+                if (!row.text().toLowerCase(java.util.Locale.ROOT).contains("awal")) {
+                    newest = row;
+                    break;
+                }
+            }
+        }
         if (newest != null) {
             latest = newest.text().replace("Terbaru:", "").replace("Awal:", "").trim();
-        } else {
-            Element chapter = card.selectFirst("div.new1 a");
-            if (chapter != null) latest = chapter.text().trim();
         }
 
         return new KomikuManga(id, title, url, cover, type, latest, updated);

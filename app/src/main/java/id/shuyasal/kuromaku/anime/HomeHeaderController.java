@@ -1,7 +1,7 @@
 package id.shuyasal.kuromaku.anime;
 
 /**
- * Satu sumber keadaan untuk header beranda Anime Streaming.
+ * Satu sumber keadaan untuk header beranda Anime Server 1.
  *
  * <p>Masalah yang ditutup: sebelumnya setiap event {@code onScrolled} langsung
  * memanggil tampil/sembunyi, tanpa ambang dan tanpa menunggu animasi selesai.

@@ -22,7 +22,7 @@
     <string name="source_komiku_note">Baca komik dari Komiku langsung di aplikasi, tanpa iklan situs.</string>
     <string name="source_kompi">Anime Server 2</string>
     <string name="source_kompi_note">Anime subtitle Indonesia dari Animekompi, server berkas langsung.</string>
-    <string name="source_otakudesu">Anime Streaming</string>
+    <string name="source_otakudesu">Anime Server 1</string>
     <string name="source_otakudesu_note">Streaming anime subtitle Indonesia, dengan unduhan episode.</string>
 
     <string name="home">Beranda</string>

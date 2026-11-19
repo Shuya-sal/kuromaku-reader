@@ -105,6 +105,48 @@ public final class AnimeDownloads {
     }
 
     /** Akar penyimpanan unduhan anime. */
+    /**
+     * Jumlah episode tersimpan untuk satu anime.
+     *
+     * <p>Dipakai layar lain (mis. daftar episode Anime Server 2) untuk menandai
+     * episode yang sudah benar-benar ada di perangkat.
+     */
+    public static int savedCount(Context context, String animeId) {
+        if (context == null || animeId == null || animeId.trim().isEmpty()) return 0;
+        int jumlah = 0;
+        for (File file : listMetaFiles(context, animeId.trim())) {
+            jumlah += 1;
+        }
+        return jumlah;
+    }
+
+    /**
+     * Kunci episode yang tersimpan untuk satu anime.
+     *
+     * <p>Dibaca dari nama berkas metadata — sengaja tidak mengurai isinya:
+     * layar daftar episode hanya perlu tahu episode mana yang ada, dan
+     * mengurai setiap berkas pada setiap pembaruan daftar akan memakan waktu.
+     */
+    public static List<String> savedEpisodeKeys(Context context, String animeId) {
+        List<String> out = new ArrayList<>();
+        for (File file : listMetaFiles(context, animeId)) {
+            String name = file.getName();
+            out.add(name.substring(0, name.length() - 5));
+        }
+        return out;
+    }
+
+    private static List<File> listMetaFiles(Context context, String animeId) {
+        List<File> out = new ArrayList<>();
+        if (context == null || animeId == null || animeId.trim().isEmpty()) return out;
+        File[] files = animeDir(context, animeId.trim()).listFiles();
+        if (files == null) return out;
+        for (File file : files) {
+            if (file.getName().endsWith(".json")) out.add(file);
+        }
+        return out;
+    }
+
     public static File root(Context context) {
         return new File(context.getFilesDir(), DIR);
     }

@@ -53,6 +53,7 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private TextView errorText;
     private Button retry;
     private EditText search;
+    private ScrollView scroll;
     private String pendingQuery = "";
 
     /** Sumber dibuat ulang per layar supaya pengujian bisa menggantinya. */
@@ -66,7 +67,36 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         palette = Palette.of(new Prefs(this).resolvedTheme());
         source = createSource();
         buildUi();
+        // Riwayat ditaruh lebih dulu: dibaca dari berkas lokal, jadi sudah ada
+        // sebelum jawaban jaringan datang — dan tetap ada bila sumber gagal.
+        tambahkanRiwayat();
         load("");
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        // Kembali dari pemutar: tontonan yang baru dicatat harus langsung
+        // tampil tanpa perlu menutup layar.
+        segarkanRiwayat();
+    }
+
+    /**
+     * Perbarui rail riwayat di tempat.
+     *
+     * <p>Daftar anime yang sedang tampil tidak disentuh: hanya rail riwayat
+     * yang diganti, jadi posisi gulir dan hasil pencarian tetap.
+     */
+    private void segarkanRiwayat() {
+        if (content == null) return;
+        View lama = content.findViewWithTag("rail_riwayat_kompi");
+        View baru = riwayatRail();
+        if (lama != null) {
+            int posisi = content.indexOfChild(lama);
+            content.removeViewAt(posisi);
+            if (baru != null) content.addView(baru, posisi);
+            return;
+        }
+        if (baru != null) content.addView(baru, 0);
     }
 
     @Override protected void onDestroy() {
@@ -86,25 +116,50 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
+        // Tombol kembali pindah ke kiri: sebelumnya di kanan, dan yang menggantikan
+        // posisinya di kiri justru menu samping. Halaman ini adalah pintu masuk
+        // cabang Anime Server 2, jadi kembali menuju halaman awal sumber.
         Button back = Ui.backButton(this, palette);
+        back.setTag("tombol_kembali");
         back.setOnClickListener(view -> finish());
         header.addView(back, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP)));
 
         TextView title = Ui.label(this, "Anime Server 2", 20, palette.text);
         title.setTypeface(null, Typeface.BOLD);
+        title.setTag("judul_anime_server2");
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
         header.addView(title, titleParams);
 
-        // Menu samping: sebelumnya halaman ini tidak punya jalan ke sumber lain
-        // selain menekan kembali berulang kali.
+        // Menu titik tiga di kanan: Tema tampilan, Genre, Muat ulang — sama
+        // seperti Anime Server 1. Menu samping tetap ada lewat tombol ini juga.
         android.widget.ImageButton menu = Ui.iconButton(this,
                 id.shuyasal.kuromaku.R.drawable.ic_menu, "Buka menu sumber", palette);
         menu.setTag("section_menu");
+        // Hamburger tetap membuka menu sumber (drawer); titik tiga yang membuka
+        // menu pengaturan. Dua menu ini berbeda dan tidak boleh ditukar.
         menu.setOnClickListener(view -> KompiNavigation.showDrawer(this, palette));
+
+        // Hasil unduhan: di kiri titik tiga, sesuai permintaan.
+        android.widget.ImageButton unduhan = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_download, "Hasil unduhan", palette);
+        unduhan.setTag("kompi_downloads");
+        unduhan.setOnClickListener(view -> startActivity(
+                new android.content.Intent(this,
+                        id.shuyasal.kuromaku.anime.AnimeDownloadsActivity.class)));
+
+        android.widget.ImageButton overflow = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_more, "Menu lain", palette);
+        overflow.setTag("kompi_overflow");
+        overflow.setOnClickListener(view -> showOverflow());
+
         header.addView(menu, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+        header.addView(unduhan, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
+        header.addView(overflow, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         root.addView(header);
 
@@ -168,7 +223,7 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         root.addView(retry, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP)));
 
-        ScrollView scroll = new ScrollView(this);
+        scroll = new ScrollView(this);
         scroll.setClipToPadding(false);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -179,7 +234,7 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
         // Status bar transparan: tanpa padding sistem, judul dan tombol kembali
         // naik menutupi jam dan ikon notifikasi. Layar lain (Novel, Manga Server
-        // 1-3, Anime Streaming) sudah memakai padding ini; layar ini belum.
+        // 1-3, Anime Server 1) sudah memakai padding ini; layar ini belum.
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             androidx.core.graphics.Insets bars = insets.getInsets(
                     androidx.core.view.WindowInsetsCompat.Type.systemBars()
@@ -205,6 +260,151 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     // ----------------------------------------------------------------- data
 
+    /** Menu titik tiga: tema, genre, muat ulang, dan menu sumber lain. */
+    private void showOverflow() {
+        final String[] items = {"Tema tampilan", "Genre", "Muat ulang", "Hasil unduhan",
+                "Menu sumber"};
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Anime Server 2")
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) showThemeDialog();
+                    else if (which == 1) showGenreSheet();
+                    else if (which == 2) reloadHome();
+                    else if (which == 3) startActivity(new android.content.Intent(this,
+                            id.shuyasal.kuromaku.anime.AnimeDownloadsActivity.class));
+                    else KompiNavigation.showDrawer(this, palette);
+                })
+                .show();
+    }
+
+    private void showThemeDialog() {
+        final String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti sistem (System)"};
+        int checked = new Prefs(this).theme();
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Tema Anime Server 2")
+                .setSingleChoiceItems(options, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    new Prefs(this).setTheme(which);
+                    applyThemeInPlace();
+                    android.widget.Toast.makeText(this,
+                            "Tema disimpan: " + options[which],
+                            android.widget.Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("Batal", null)
+                .show();
+    }
+
+    /**
+     * Ganti tema di tempat: layar digambar ulang tanpa memuat ulang data, jadi
+     * daftar yang sudah tampil dan kata kunci pencarian tetap ada.
+     */
+    private void applyThemeInPlace() {
+        palette = Palette.of(new Prefs(this).resolvedTheme());
+        final int keepScroll = scroll == null ? 0 : scroll.getScrollY();
+        buildUi();
+        if (keepScroll > 0 && scroll != null) {
+            final ScrollView target = scroll;
+            target.post(() -> target.scrollTo(0, keepScroll));
+        }
+        if (searchFieldText != null && search != null) search.setText(searchFieldText);
+        load(pendingQuery);
+        android.view.View decor = getWindow().getDecorView();
+        androidx.core.view.WindowCompat.getInsetsController(getWindow(), decor)
+                .setAppearanceLightStatusBars(!palette.darkIcons);
+    }
+
+    private String searchFieldText;
+
+    /** Muat ulang beranda tanpa menutup layar. */
+    private void reloadHome() {
+        pendingQuery = "";
+        searchFieldText = "";
+        if (search != null) search.setText("");
+        content.removeAllViews();
+        load("");
+    }
+
+    // --------------------------------------------------------------- genre
+
+    private void showGenreSheet() {
+        showOverflowGenre(null);
+    }
+
+    /**
+     * Daftar genre dari sumber. Dimuat sekali per pembukaan menu; bila gagal,
+     * kegagalannya ditampilkan apa adanya — tidak ada daftar genre karangan.
+     */
+    private void showOverflowGenre(android.app.ProgressDialog unused) {
+        final android.app.ProgressDialog progress =
+                android.app.ProgressDialog.show(this, null, "Memuat genre…", true, false);
+        worker.execute(() -> {
+            List<KompiSource.Genre> list = null;
+            String error = null;
+            try {
+                list = source.genres();
+            } catch (KompiSource.SourceException failure) {
+                error = failure.getMessage();
+            }
+            final List<KompiSource.Genre> genres = list;
+            final String message = error;
+            main.post(() -> {
+                progress.dismiss();
+                if (isFinishing()) return;
+                if (message != null) {
+                    errorText.setText(message);
+                    errorText.setVisibility(View.VISIBLE);
+                    return;
+                }
+                if (genres == null || genres.isEmpty()) {
+                    errorText.setText("Sumber tidak menyediakan daftar genre.");
+                    errorText.setVisibility(View.VISIBLE);
+                    return;
+                }
+                String[] names = new String[genres.size()];
+                for (int i = 0; i < genres.size(); i++) names[i] = genres.get(i).name;
+                new androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("Genre")
+                        .setItems(names, (dialog, which) -> loadGenre(genres.get(which)))
+                        .show();
+            });
+        });
+    }
+
+    /** Tampilkan anime satu genre; halaman berikutnya dimuat saat dugulir. */
+    private void loadGenre(KompiSource.Genre genre) {
+        spinner.setVisibility(View.VISIBLE);
+        errorText.setVisibility(View.GONE);
+        retry.setVisibility(View.GONE);
+        content.removeAllViews();
+        worker.execute(() -> {
+            List<KompiSource.Item> items = null;
+            String error = null;
+            try {
+                items = source.byGenre(genre.slug, 1);
+            } catch (KompiSource.SourceException failure) {
+                error = failure.getMessage();
+            }
+            final List<KompiSource.Item> loaded = items;
+            final String message = error;
+            main.post(() -> {
+                if (isFinishing()) return;
+                spinner.setVisibility(View.GONE);
+                if (message != null) {
+                    showError(message);
+                    return;
+                }
+                if (loaded == null || loaded.isEmpty()) {
+                    errorText.setText("Belum ada anime untuk genre " + genre.name + ".");
+                    errorText.setVisibility(View.VISIBLE);
+                    return;
+                }
+                content.addView(sectionTitle("Genre: " + genre.name));
+                content.addView(grid(loaded));
+                TvFocus.prepare(content, palette);
+            });
+        });
+    }
+
     private void load(String query) {
         spinner.setVisibility(View.VISIBLE);
         errorText.setVisibility(View.GONE);
@@ -215,6 +415,8 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             try {
                 if (query.isEmpty()) {
                     List<KompiSource.Section> sections = source.home();
+                    // Riwayat dibaca di thread utama: jaringan tidak terlibat, jadi rail
+                    // tetap tampil walaupun sumber sedang tidak bisa dihubungi.
                     main.post(() -> showSections(sections));
                 } else {
                     List<KompiSource.Item> items = source.search(query);
@@ -232,6 +434,7 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         if (isFinishing()) return;
         spinner.setVisibility(View.GONE);
         content.removeAllViews();
+        tambahkanRiwayat();
         for (KompiSource.Section section : sections) {
             content.addView(sectionTitle(section.name));
             content.addView(rail(section.items));
@@ -247,6 +450,7 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         if (isFinishing()) return;
         spinner.setVisibility(View.GONE);
         content.removeAllViews();
+        tambahkanRiwayat();
         if (items.isEmpty()) {
             errorText.setText("Tidak ada anime yang cocok dengan \"" + query + "\".");
             errorText.setVisibility(View.VISIBLE);
@@ -264,6 +468,10 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private void showError(String message) {
         if (isFinishing()) return;
         spinner.setVisibility(View.GONE);
+        // Riwayat tetap ditampilkan walau sumber sedang tidak bisa dihubungi:
+        // riwayat dibaca dari berkas lokal, bukan dari jaringan.
+        content.removeAllViews();
+        tambahkanRiwayat();
         errorText.setText(message);
         errorText.setVisibility(View.VISIBLE);
         retry.setVisibility(View.VISIBLE);
@@ -292,6 +500,99 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         }
         scroll.addView(row);
         return scroll;
+    }
+
+    /**
+     * "Lanjutkan Menonton" dari riwayat Anime Server 2.
+     *
+     * <p>Rail ini tidak ada sebelumnya: halaman ini tidak mencatat apa pun saat
+     * episode ditonton, jadi tidak ada riwayat yang bisa ditampilkan. Sekarang
+     * pemutar mencatatnya, dan rail muncul hanya bila riwayatnya berisi.
+     */
+    /**
+     * Sisipkan rail riwayat ke konten yang baru digambar.
+     *
+     * <p>Dipanggil di setiap keadaan — beranda, hasil pencarian, dan galat —
+     * karena riwayat berasal dari berkas lokal; sumber yang sedang tidak bisa
+     * dihubungi tidak boleh menyembunyikan apa yang sudah pernah ditonton.
+     */
+    private void tambahkanRiwayat() {
+        View rail = riwayatRail();
+        if (rail != null) content.addView(rail);
+    }
+
+    private View riwayatRail() {
+        List<KompiHistory.Entry> entries = KompiHistory.all(this);
+        if (entries.isEmpty()) return null;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setTag("rail_riwayat_kompi");
+
+        TextView label = Ui.label(this, "Lanjutkan Menonton", 17, palette.text);
+        label.setTypeface(null, Typeface.BOLD);
+        label.setPadding(Ui.dp(this, 4), Ui.dp(this, 18), Ui.dp(this, 4), Ui.dp(this, 10));
+        box.addView(label);
+
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setClipToPadding(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(Ui.dp(this, 4), 0, Ui.dp(this, 4), 0);
+        int width = Ui.dp(this, TvMode.isTelevision(this) ? 150 : 128);
+        for (KompiHistory.Entry entry : entries) {
+            row.addView(kartuRiwayat(entry, width));
+        }
+        scroll.addView(row);
+        box.addView(scroll);
+        return box;
+    }
+
+    private View kartuRiwayat(KompiHistory.Entry entry, int width) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 10));
+        card.setFocusable(true);
+        card.setClickable(true);
+        card.setContentDescription(entry.title);
+
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackground(Ui.ripple(this, palette.surface, 0, 12, palette.ripple));
+        ImageView poster = new ImageView(this);
+        poster.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        frame.addView(poster, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        card.addView(frame, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Ui.dp(this, 178)));
+        if (!entry.poster.isEmpty()) {
+            Glide.with(this).load(entry.poster).centerCrop().into(poster);
+        }
+
+        TextView title = Ui.label(this, entry.title, 13, palette.text);
+        title.setMaxLines(2);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        title.setPadding(Ui.dp(this, 2), Ui.dp(this, 6), Ui.dp(this, 2), 0);
+        card.addView(title);
+
+        TextView ep = Ui.label(this, entry.episodeText(), 11, palette.muted);
+        ep.setMaxLines(1);
+        ep.setPadding(Ui.dp(this, 2), Ui.dp(this, 2), Ui.dp(this, 2), 0);
+        card.addView(ep);
+
+        card.setOnClickListener(view -> {
+            // Episode terakhir yang sudah ditonton dibuka lagi, bukan beranda.
+            Intent intent = new Intent(this, KompiDetailActivity.class);
+            intent.putExtra(KompiDetailActivity.EXTRA_SLUG, entry.slug);
+            intent.putExtra(KompiDetailActivity.EXTRA_TITLE, entry.title);
+            intent.putExtra(KompiDetailActivity.EXTRA_POSTER, entry.poster);
+            startActivity(intent);
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, Ui.dp(this, 8), 0);
+        card.setLayoutParams(params);
+        TvFocus.focusable(card, palette);
+        return card;
     }
 
     /** Hasil pencarian memakai kisi, bukan baris mendatar. */

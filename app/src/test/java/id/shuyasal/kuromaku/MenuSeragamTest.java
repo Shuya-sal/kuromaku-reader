@@ -56,7 +56,7 @@ public class MenuSeragamTest {
     @Test public void namaSumberMemakaiPenomoranServer() {
         assertEquals("Manga Server 1", context.getString(R.string.source_voratoon));
         assertEquals("Manga Server 2", context.getString(R.string.source_shinigami));
-        assertEquals("Anime Streaming", context.getString(R.string.source_otakudesu));
+        assertEquals("Anime Server 1", context.getString(R.string.source_otakudesu));
         assertEquals("Novel", context.getString(R.string.source_novel));
     }
 
@@ -68,7 +68,7 @@ public class MenuSeragamTest {
             assertTrue("Novel tampil", labels.contains("Novel"));
             assertTrue("Manga Server 1 tampil", labels.contains("Manga Server 1"));
             assertTrue("Manga Server 2 tampil", labels.contains("Manga Server 2"));
-            assertTrue("Anime Streaming tampil", labels.contains("Anime Streaming"));
+            assertTrue("Anime Server 1 tampil", labels.contains("Anime Server 1"));
             assertFalse("nama lama tidak boleh tersisa",
                     labels.contains("Manga Voratoon") || labels.contains("Manga Shinigami")
                             || labels.contains("Anime Otakudesu"));

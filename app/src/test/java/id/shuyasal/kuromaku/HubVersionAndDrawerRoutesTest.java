@@ -140,8 +140,8 @@ public class HubVersionAndDrawerRoutesTest {
         TextView kompi = (TextView) item(panel, "drawer_anime_kompi");
         assertEquals("Anime Server 2", kompi.getText().toString());
 
-        // Urutan: Anime Streaming lalu Anime Server 2, setelah semua manga.
-        assertTrue("Anime Server 2 harus berada setelah Anime Streaming",
+        // Urutan: Anime Server 1 lalu Anime Server 2, setelah semua manga.
+        assertTrue("Anime Server 2 harus berada setelah Anime Server 1",
                 panel.indexOfChild(kompi) > panel.indexOfChild(
                         item(panel, "drawer_anime_otakudesu")));
     }
@@ -168,7 +168,7 @@ public class HubVersionAndDrawerRoutesTest {
 
         TextView kompi = (TextView) item(panel, "drawer_anime_kompi");
         assertEquals("Anime Server 2  ✓", kompi.getText().toString());
-        assertEquals("Anime Streaming", ((TextView) item(panel, "drawer_anime_otakudesu"))
+        assertEquals("Anime Server 1", ((TextView) item(panel, "drawer_anime_otakudesu"))
                 .getText().toString());
         host.finish();
     }

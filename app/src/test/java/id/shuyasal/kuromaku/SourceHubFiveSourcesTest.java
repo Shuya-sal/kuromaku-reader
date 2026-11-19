@@ -44,7 +44,7 @@ public class SourceHubFiveSourcesTest {
             assertNotNull("Manga Server 1", byTag(root, "source_hub_card_voratoon"));
             assertNotNull("Manga Server 2", byTag(root, "source_hub_card_shinigami"));
             assertNotNull("Manga Server 3", byTag(root, "source_hub_card_komiku"));
-            assertNotNull("Anime Streaming", byTag(root, "source_hub_card_otakudesu"));
+            assertNotNull("Anime Server 1", byTag(root, "source_hub_card_otakudesu"));
             // Anime Server 2 punya kartunya sendiri; tanpa ini sumber itu hanya
             // bisa dibuka dari menu samping.
             assertNotNull("Anime Server 2", byTag(root, "source_hub_card_kompi"));

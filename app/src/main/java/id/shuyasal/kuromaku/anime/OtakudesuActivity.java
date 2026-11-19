@@ -313,7 +313,7 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private void showOverflow() {
         String[] items = {"Tema tampilan", "Genre", "Muat ulang"};
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Anime Streaming")
+                .setTitle("Anime Server 1")
                 .setItems(items, (dialog, which) -> {
                     if (which == 0) showThemeDialog();
                     else if (which == 1) showGenreSheet();
@@ -349,7 +349,7 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         menuParams.leftMargin = Ui.dp(this, 4);
         bar.addView(menu, menuParams);
 
-        TextView title = Ui.label(this, "Anime Streaming", 20, palette.text);
+        TextView title = Ui.label(this, "Anime Server 1", 20, palette.text);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
@@ -668,7 +668,7 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         final String[] options = {"Terang (Light)", "Gelap (Dark)", "Ikuti sistem (System)"};
         int checked = new Prefs(this).theme();
         new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Tema Anime Streaming")
+                .setTitle("Tema Anime Server 1")
                 .setSingleChoiceItems(options, checked, (dialog, which) -> {
                     dialog.dismiss();
                     Prefs prefs = new Prefs(this);

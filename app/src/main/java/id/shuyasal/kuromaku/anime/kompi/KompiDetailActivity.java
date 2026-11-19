@@ -36,6 +36,8 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     public static final String EXTRA_SLUG = "slug";
     public static final String EXTRA_TITLE = "title";
     public static final String EXTRA_COVER = "cover";
+    /** Alias untuk penelepon yang memakai nama poster. */
+    public static final String EXTRA_POSTER = "cover";
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -125,6 +127,17 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        // Status bar transparan: tanpa padding sistem, tombol kembali dan judul
+        // anime naik ke area jam. Halaman ini juga menampilkan poster di atas,
+        // jadi padding samping tetap dipertahankan di dalam listener.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                            | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(Ui.dp(this, 16) + bars.left, Ui.dp(this, 14) + bars.top,
+                    Ui.dp(this, 16) + bars.right, bars.bottom);
+            return insets;
+        });
         setContentView(root);
     }
 
@@ -202,8 +215,9 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         if (detail.episodes.isEmpty()) {
             body.addView(Ui.label(this, "Sumber ini belum memuat episode.", 13, palette.muted));
         }
+        KompiHistory.Entry riwayat = KompiHistory.forSlug(this, slug);
         for (KompiSource.Episode episode : detail.episodes) {
-            body.addView(barisEpisod(detail, episode));
+            body.addView(barisEpisod(detail, episode, riwayat));
         }
 
         TvFocus.prepare(body, palette);
@@ -213,7 +227,14 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         }
     }
 
-    private View barisEpisod(KompiSource.Detail detail, KompiSource.Episode episode) {
+    /**
+     * Baris episode dengan penanda episode terakhir yang ditonton.
+     *
+     * <p>Tanda ini datang dari riwayat yang nyata, bukan tanda yang ditebak dari
+     * nomor episode terbesar.
+     */
+    private View barisEpisod(KompiSource.Detail detail, KompiSource.Episode episode,
+                             KompiHistory.Entry riwayat) {
         LinearLayout baris = new LinearLayout(this);
         baris.setOrientation(LinearLayout.HORIZONTAL);
         baris.setGravity(Gravity.CENTER_VERTICAL);
@@ -234,6 +255,31 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         baris.addView(nama, new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        if (riwayat != null && episode.slug.equals(riwayat.episodeSlug)) {
+            TextView tanda = Ui.label(this, "\u2713 Ditonton", 12, palette.accent);
+            tanda.setPadding(Ui.dp(this, 8), 0, 0, 0);
+            baris.addView(tanda);
+        }
+
+        // Unduhan per episode: tombolnya membuka pemutar episode itu lebih dulu,
+        // karena berkas media baru diketahui setelah server episode diperiksa.
+        Button unduh = Ui.chip(this, "Unduh", palette);
+        unduh.setTag("unduh_" + episode.slug);
+        unduh.setContentDescription("Unduh " + episode.name);
+        unduh.setOnClickListener(view -> unduhEpisode(detail, episode));
+        LinearLayout.LayoutParams unduhParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP));
+        unduhParams.setMargins(Ui.dp(this, 8), 0, 0, 0);
+        baris.addView(unduh, unduhParams);
+
+        // Episode yang berkasnya sudah tersimpan ditandai, bukan tombolnya
+        // dibiarkan seolah belum pernah diunduh.
+        if (sudahTersimpan(episode)) {
+            TextView tersimpan = Ui.label(this, "\u2713 Tersimpan", 12, palette.accent);
+            tersimpan.setPadding(Ui.dp(this, 8), 0, 0, 0);
+            baris.addView(tersimpan);
+        }
+
         baris.setOnClickListener(view -> bukaPemutar(detail, episode));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -243,11 +289,91 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         return baris;
     }
 
+    /**
+     * Episode ini sudah ada di perangkat?
+     *
+     * <p>Kunci unduhan memakai alamat episode ({@code episode.slug}) dan label,
+     * sama dengan yang dipakai antrean unduhan, sehingga tanda "Tersimpan"
+     * hanya muncul untuk episode yang benar-benar ada — bukan tebakan.
+     */
+    private boolean sudahTersimpan(KompiSource.Episode episode) {
+        String key = id.shuyasal.kuromaku.anime.AnimeDownloads.episodeKey(
+                episode.slug, episode.name);
+        return id.shuyasal.kuromaku.anime.AnimeDownloads.isSaved(this, slug, key);
+    }
+
+    /**
+     * Unduh satu episode langsung dari daftar episode.
+     *
+     * <p>Alurnya tidak membuka pemutar: server episode diperiksa di latar
+     * belakang, berkas media pertama yang benar-benar tersedia dipilih, lalu
+     * unduhan diantrekan. Bila episode ini hanya punya halaman pemutar,
+     * pengguna diberi alasannya — tidak ada unduhan palsu.
+     */
+    private void unduhEpisode(KompiSource.Detail detail, KompiSource.Episode episode) {
+        if (!id.shuyasal.kuromaku.anime.AnimeDownloadPolicy.allowed(this)) {
+            android.widget.Toast.makeText(this,
+                    "Unduhan belum diizinkan. Aktifkan izin unduhan lebih dulu.",
+                    android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        final String labelEp = episode.name;
+        android.widget.Toast.makeText(this, "Menyiapkan unduhan " + labelEp + "…",
+                android.widget.Toast.LENGTH_SHORT).show();
+        worker.execute(() -> {
+            String berkas = null;
+            String alasan = null;
+            try {
+                KompiSource.EpisodeInfo info = source.episode(episode.slug);
+                for (KompiSource.Server server : info.servers) {
+                    if (!server.file) continue;
+                    String media = source.resolve(server.url);
+                    if (media != null && !media.isEmpty()) {
+                        berkas = media;
+                        break;
+                    }
+                }
+                if (berkas == null) {
+                    alasan = "Episode ini hanya menyediakan halaman pemutar, bukan berkas "
+                            + "yang bisa disimpan aplikasi.";
+                }
+            } catch (KompiSource.SourceException error) {
+                alasan = error.getMessage() == null ? "Server tidak dapat dihubungi."
+                        : error.getMessage();
+            }
+            final String media = berkas;
+            final String pesan = alasan;
+            main.post(() -> {
+                if (isFinishing()) return;
+                if (media == null) {
+                    android.widget.Toast.makeText(this, pesan,
+                            android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
+                id.shuyasal.kuromaku.anime.AnimeDownloadTask task =
+                        new id.shuyasal.kuromaku.anime.AnimeDownloadTask(
+                                slug, detail.title, detail.cover, labelEp, episode.slug,
+                                "", "Anime Server 2", media, "PROGRESSIVE");
+                boolean queued = id.shuyasal.kuromaku.anime.AnimeDownloadQueue
+                        .enqueue(this, task);
+                android.widget.Toast.makeText(this,
+                        queued ? "Unduhan dimasukkan ke antrean: " + labelEp
+                                : "Unduhan tidak dapat dijadwalkan.",
+                        android.widget.Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+
     private void bukaPemutar(KompiSource.Detail detail, KompiSource.Episode episode) {
         Intent intent = new Intent(this, KompiPlayerActivity.class);
         intent.putExtra(KompiPlayerActivity.EXTRA_SLUG, episode.slug);
         intent.putExtra(KompiPlayerActivity.EXTRA_TITLE, detail.title);
         intent.putExtra(KompiPlayerActivity.EXTRA_EPISODE, episode.name);
+        // Riwayat disimpan per anime, bukan per episode: tanpa slug induk,
+        // menonton episode 2 akan tampil sebagai judul kedua di riwayat.
+        intent.putExtra(KompiPlayerActivity.EXTRA_ANIME_SLUG, slug);
+        intent.putExtra(KompiPlayerActivity.EXTRA_POSTER, detail.cover);
+        intent.putExtra(KompiPlayerActivity.EXTRA_EPISODE_NUMBER, episode.number);
         startActivity(intent);
     }
 }

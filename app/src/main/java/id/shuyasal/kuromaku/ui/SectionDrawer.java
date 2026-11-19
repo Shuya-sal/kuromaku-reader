@@ -44,7 +44,7 @@ public final class SectionDrawer {
         default void onAnimeOtakudesu() {
         }
 
-        /** Anime Kompi (Server 2); implementasi lama boleh mengabaikan. */
+        /** Anime Server 2 (Animekompi); implementasi lama boleh mengabaikan. */
         default void onAnimeKompi() {
         }
         void onRestore();
@@ -140,7 +140,7 @@ public final class SectionDrawer {
         });
 
         String animeLabel = currentSection == Section.ANIME_OTAKUDESU
-                ? "Anime Streaming  ✓" : "Anime Streaming";
+                ? "Anime Server 1  ✓" : "Anime Server 1";
         addDrawerItem(activity, panel, animeLabel, "drawer_anime_otakudesu",
                 currentSection == Section.ANIME_OTAKUDESU, palette, () -> {
                     drawer.dismiss();
