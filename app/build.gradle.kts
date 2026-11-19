@@ -8,8 +8,14 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 110
-        versionName = "2.74.0"
+        versionCode = 111
+        versionName = "2.75.0"
+    }
+
+    // Versi tampil di halaman awal lewat BuildConfig.VERSION_NAME, jadi labelnya
+    // tidak pernah basi ketika nomor rilis dinaikkan.
+    buildFeatures {
+        buildConfig = true
     }
 
     // One checked-in debug keystore, used by both CI and local builds.

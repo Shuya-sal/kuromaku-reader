@@ -26,7 +26,8 @@ public final class SectionDrawer {
         MANGA_VORATON,
         MANGA_SHINIGAMI,
         MANGA_KOMIKU,
-        ANIME_OTAKUDESU
+        ANIME_OTAKUDESU,
+        ANIME_KOMPI
     }
 
     public interface Listener {
@@ -41,6 +42,10 @@ public final class SectionDrawer {
 
         /** Anime Otakudesu; implementasi lama boleh mengabaikan. */
         default void onAnimeOtakudesu() {
+        }
+
+        /** Anime Kompi (Server 2); implementasi lama boleh mengabaikan. */
+        default void onAnimeKompi() {
         }
         void onRestore();
 
@@ -140,6 +145,17 @@ public final class SectionDrawer {
                 currentSection == Section.ANIME_OTAKUDESU, palette, () -> {
                     drawer.dismiss();
                     if (listener != null) listener.onAnimeOtakudesu();
+                });
+
+        // Anime Server 2 sebelumnya hanya ada di halaman pemilih sumber, tidak
+        // di menu samping — pembaca yang sudah masuk ke sumber lain tidak punya
+        // jalan ke sana selain kembali ke beranda dulu.
+        String kompiLabel = currentSection == Section.ANIME_KOMPI
+                ? "Anime Server 2  ✓" : "Anime Server 2";
+        addDrawerItem(activity, panel, kompiLabel, "drawer_anime_kompi",
+                currentSection == Section.ANIME_KOMPI, palette, () -> {
+                    drawer.dismiss();
+                    if (listener != null) listener.onAnimeKompi();
                 });
 
         View separator = new View(activity);

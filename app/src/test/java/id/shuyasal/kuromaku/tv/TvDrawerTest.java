@@ -147,10 +147,10 @@ public class TvDrawerTest {
         for (TextView item : barisMenu(drawer.getWindow().getDecorView())) {
             tag.add(String.valueOf(item.getTag()));
         }
-        // Lima sumber + cadangan + pulihkan: semuanya harus bisa dijangkau.
+        // Enam sumber + cadangan + pulihkan: semuanya harus bisa dijangkau.
         for (String wajib : new String[]{"drawer_novel", "drawer_manga_voratoon",
                 "drawer_manga_shinigami", "drawer_manga_komiku", "drawer_anime_otakudesu",
-                "drawer_backup", "drawer_restore"}) {
+                "drawer_anime_kompi", "drawer_backup", "drawer_restore"}) {
             assertTrue("menu " + wajib + " ada dan bisa dipilih", tag.contains(wajib));
         }
     }

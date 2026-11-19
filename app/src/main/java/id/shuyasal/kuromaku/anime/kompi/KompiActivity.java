@@ -97,6 +97,15 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         titleParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
         header.addView(title, titleParams);
+
+        // Menu samping: sebelumnya halaman ini tidak punya jalan ke sumber lain
+        // selain menekan kembali berulang kali.
+        android.widget.ImageButton menu = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_menu, "Buka menu sumber", palette);
+        menu.setTag("section_menu");
+        menu.setOnClickListener(view -> KompiNavigation.showDrawer(this, palette));
+        header.addView(menu, new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         root.addView(header);
 
         LinearLayout searchRow = new LinearLayout(this);

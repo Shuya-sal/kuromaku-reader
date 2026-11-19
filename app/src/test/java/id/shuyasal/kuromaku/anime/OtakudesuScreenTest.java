@@ -254,13 +254,15 @@ public class OtakudesuScreenTest {
         assertEquals(View.VISIBLE, tagged(host, "otakudesu_retry").getVisibility());
     }
 
-    @Test public void drawerMemilikiLimaSumber() {
+    @Test public void drawerMemilikiEnamSumber() {
         // Drawer memuat Novel, Manga Server 1, Manga Server 2, Manga Server 3,
-        // dan Anime Streaming.
+        // Anime Streaming, dan Anime Server 2.
         SectionDrawerSections sections = new SectionDrawerSections();
         assertTrue(sections.names().contains("ANIME_OTAKUDESU"));
         assertTrue(sections.names().contains("MANGA_KOMIKU"));
-        assertEquals(5, sections.names().size());
+        assertTrue("Anime Server 2 harus punya bagiannya sendiri",
+                sections.names().contains("ANIME_KOMPI"));
+        assertEquals(6, sections.names().size());
     }
 
     private static final class SectionDrawerSections {

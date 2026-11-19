@@ -78,11 +78,27 @@ public class SourceHubActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         content.setOrientation(LinearLayout.VERTICAL);
         content.setPadding(Ui.dp(this, 20), Ui.dp(this, 28), Ui.dp(this, 20), Ui.dp(this, 28));
 
+        LinearLayout eyebrowRow = new LinearLayout(this);
+        eyebrowRow.setOrientation(LinearLayout.HORIZONTAL);
+        eyebrowRow.setGravity(Gravity.CENTER_VERTICAL);
+        eyebrowRow.setTag("source_hub_eyebrow_row");
+
         TextView eyebrow = Ui.label(this, getString(R.string.source_hub_eyebrow), 12, 0xCCE4E2DE);
         eyebrow.setLetterSpacing(0.18f);
         eyebrow.setTypeface(Typeface.DEFAULT_BOLD);
         eyebrow.setTag("source_hub_eyebrow");
-        content.addView(eyebrow);
+        eyebrowRow.addView(eyebrow, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        // Versi rilis: dibaca dari konfigurasi build, bukan ditulis manual,
+        // supaya tidak pernah basi ketika nomor rilis dinaikkan.
+        TextView version = Ui.label(this, "Versi " + id.shuyasal.kuromaku.BuildConfig.VERSION_NAME,
+                11, 0x99E4E2DE);
+        version.setTag("source_hub_version");
+        version.setContentDescription(getString(R.string.source_hub_version_description));
+        eyebrowRow.addView(version, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        content.addView(eyebrowRow);
 
         TextView title = Ui.label(this, getString(R.string.source_hub_title), 26, Color.WHITE);
         title.setTypeface(Typeface.DEFAULT_BOLD);

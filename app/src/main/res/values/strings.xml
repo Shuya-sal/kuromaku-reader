@@ -6,8 +6,9 @@
 
     <string name="source_hub_eyebrow">KUROMAKU READER</string>
     <string name="source_hub_title">Pilih sumber bacaan</string>
-    <string name="source_hub_subtitle">Empat perpustakaan dalam satu aplikasi. Progres, bookmark, dan favorit tetap tersimpan per sumber.</string>
+    <string name="source_hub_subtitle">Enam perpustakaan dalam satu aplikasi. Progres, bookmark, dan favorit tetap tersimpan per sumber.</string>
     <string name="source_hub_footer">Ketuk kartu untuk mulai membaca</string>
+    <string name="source_hub_version_description">Versi aplikasi</string>
     <string name="source_hub_open">Buka sumber</string>
     <string name="source_hub_background_description">Latar halaman pemilih sumber</string>
 

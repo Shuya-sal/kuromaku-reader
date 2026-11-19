@@ -348,6 +348,13 @@ public class MangaActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             }
 
             @Override
+            public void onAnimeKompi() {
+                startActivity(new Intent(MangaActivity.this,
+                        id.shuyasal.kuromaku.anime.kompi.KompiActivity.class));
+                finish();
+            }
+
+            @Override
             public void onKomiku() {
                 startActivity(new Intent(MangaActivity.this,
                         id.shuyasal.kuromaku.komiku.KomikuActivity.class));

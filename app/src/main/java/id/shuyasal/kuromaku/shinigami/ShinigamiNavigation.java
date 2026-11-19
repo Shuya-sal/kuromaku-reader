@@ -52,6 +52,26 @@ public final class ShinigamiNavigation {
                         activity.finish();
                     }
 
+                    /**
+                     * Manga Server 3. Sebelumnya entri ini ada di menu tetapi
+                     * tidak punya penanganan di sini, jadi mengetuknya hanya
+                     * menutup menu — persis terasa seperti "Server 3 tidak bisa
+                     * dibuka" dari halaman Manga Server 2.
+                     */
+                    @Override
+                    public void onKomiku() {
+                        activity.startActivity(new Intent(activity,
+                                id.shuyasal.kuromaku.komiku.KomikuActivity.class));
+                        activity.finish();
+                    }
+
+                    @Override
+                    public void onAnimeKompi() {
+                        activity.startActivity(new Intent(activity,
+                                id.shuyasal.kuromaku.anime.kompi.KompiActivity.class));
+                        activity.finish();
+                    }
+
                     @Override
                     public void onBackup() {
                         data(activity, "backup");

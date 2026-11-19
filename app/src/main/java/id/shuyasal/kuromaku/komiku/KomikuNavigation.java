@@ -54,6 +54,12 @@ public final class KomikuNavigation {
                         activity.finish();
                     }
 
+                    @Override public void onAnimeKompi() {
+                        activity.startActivity(new Intent(activity,
+                                id.shuyasal.kuromaku.anime.kompi.KompiActivity.class));
+                        activity.finish();
+                    }
+
                     @Override public void onBackup() {
                         data(activity, "backup");
                     }

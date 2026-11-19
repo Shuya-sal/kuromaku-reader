@@ -1079,6 +1079,14 @@ public class OtakudesuActivity extends id.shuyasal.kuromaku.ui.TvActivity {
                         // Sudah di halaman ini.
                     }
 
+                    @Override public void onAnimeKompi() {
+                        startActivity(new Intent(OtakudesuActivity.this,
+                                id.shuyasal.kuromaku.anime.kompi.KompiActivity.class)
+                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                        | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                        finish();
+                    }
+
                     @Override public void onBackup() {
                         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                         intent.addCategory(Intent.CATEGORY_OPENABLE);
