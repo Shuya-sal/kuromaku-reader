@@ -56,6 +56,13 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private static final long SEARCH_DEBOUNCE_MS = 350L;
     /** Durasi animasi sembunyikan/tampilkan header beranda. */
     private static final long CHROME_ANIM_MS = 180L;
+    /** Jumlah judul sorotan dan ukuran banner-nya (lebar dibagi tinggi). */
+    private static final int HIGHLIGHT_LIMIT = 6;
+    private static final int HIGHLIGHT_WIDTH_DP = 232;
+    private static final float HIGHLIGHT_RATIO = 1.6f;
+    /** Jenis item header: sorotan dan rail riwayat. */
+    private static final int TYPE_HIGHLIGHT = 0;
+    private static final int TYPE_CONTINUE = 1;
 
     enum Mode {
         CATALOGUE,
@@ -160,6 +167,13 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private View continueRail;
     private RecyclerView continueList;
     private ContinueAdapter continueAdapter;
+    /** Sorotan beranda: judul yang sumbernya sendiri tandai sebagai rekomendasi. */
+    private LinearLayout highlightRail;
+    private RecyclerView highlightList;
+    private HighlightAdapter highlightAdapter;
+    private final List<ShinigamiManga> highlights = new ArrayList<>();
+    private boolean highlightsLoaded;
+    private boolean highlightsLoading;
     /**
      * Satu ConcatAdapter per jenis tampilan (grid, baris, unduhan). Instance-nya
      * dibuat sekali dan dipakai ulang; pagination tidak pernah memasang adapter
@@ -185,6 +199,7 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     static final class RetainedState {
         final List<ShinigamiManga> items;
+        final List<ShinigamiManga> highlights;
         final List<Row> rows;
         final List<ShinigamiDownloads.Manga> downloads;
         final int page;
@@ -199,22 +214,33 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         final Tab tab;
         final java.util.EnumMap<Tab, TabState> states;
 
+        /** Bentuk lama tanpa sorotan: sorotan dianggap kosong, bukan dihapus. */
         RetainedState(List<ShinigamiManga> items, List<Row> rows,
                       List<ShinigamiDownloads.Manga> downloads,
                       int page, int totalPages,
                       String query, ShinigamiSource.Sort sort, String genre,
                       String status, Mode mode, int scrollPosition, int scrollOffset) {
-            this(items, rows, downloads, page, totalPages, query, sort, genre, status, mode,
-                    scrollPosition, scrollOffset, null, null);
+            this(items, new ArrayList<ShinigamiManga>(), rows, downloads, page, totalPages,
+                    query, sort, genre, status, mode, scrollPosition, scrollOffset, null, null);
         }
 
-        RetainedState(List<ShinigamiManga> items, List<Row> rows,
+        RetainedState(List<ShinigamiManga> items, List<ShinigamiManga> highlights, List<Row> rows,
+                      List<ShinigamiDownloads.Manga> downloads,
+                      int page, int totalPages,
+                      String query, ShinigamiSource.Sort sort, String genre,
+                      String status, Mode mode, int scrollPosition, int scrollOffset) {
+            this(items, highlights, rows, downloads, page, totalPages, query, sort, genre,
+                    status, mode, scrollPosition, scrollOffset, null, null);
+        }
+
+        RetainedState(List<ShinigamiManga> items, List<ShinigamiManga> highlights, List<Row> rows,
                       List<ShinigamiDownloads.Manga> downloads,
                       int page, int totalPages,
                       String query, ShinigamiSource.Sort sort, String genre,
                       String status, Mode mode, int scrollPosition, int scrollOffset,
                       Tab tab, java.util.EnumMap<Tab, TabState> states) {
             this.items = items;
+            this.highlights = highlights == null ? new ArrayList<ShinigamiManga>() : highlights;
             this.rows = rows;
             this.downloads = downloads;
             this.page = page;
@@ -248,7 +274,7 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             offset = (first == null) ? 0 : (first.getTop() - list.getPaddingTop());
         }
         return new RetainedState(
-                new ArrayList<>(items), new ArrayList<>(rows),
+                new ArrayList<>(items), new ArrayList<>(highlights), new ArrayList<>(rows),
                 new ArrayList<>(downloads), page, totalPages,
                 query, sort, genre, status, mode, pos, offset,
                 tab, new java.util.EnumMap<>(tabStates));
@@ -312,6 +338,15 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
             buildUi();
             searchField.setText(query);
+            // Sorotan ikut dipulihkan: rotasi tidak boleh menghapus banner lalu
+            // memintanya ulang ke sumber.
+            highlights.clear();
+            if (retained.highlights != null) highlights.addAll(retained.highlights);
+            highlightsLoaded = !highlights.isEmpty();
+            if (highlightAdapter != null) highlightAdapter.notifyDataSetChanged();
+            if (highlightRail != null) {
+                highlightRail.setVisibility(highlights.isEmpty() ? View.GONE : View.VISIBLE);
+            }
             refreshContinueRail();
             buildFilterChips();
 
@@ -433,8 +468,9 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             }
         });
 
-        // Rail tidak ditempel di atas daftar: ia menjadi item pertama di dalam
-        // RecyclerView supaya ikut tergulir bersama katalog.
+        // Sorotan dan rail riwayat sama-sama menjadi item header di dalam
+        // RecyclerView, jadi keduanya ikut tergulir bersama katalog.
+        highlightRail = buildHighlightRail();
         continueRail = buildContinueRail();
 
         filterRow = new LinearLayout(this);
@@ -542,6 +578,145 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * yang ikut tergulir keluar layar bersama katalog, jadi bukan sticky header.
      * Datanya hanya dari ShinigamiStore (riwayat + progres).
      */
+    /**
+     * Sorotan beranda: banner lebar yang bisa digeser ke samping, menampilkan
+     * judul yang sumbernya sendiri tandai sebagai rekomendasi.
+     *
+     * <p>Sumber tidak menyediakan parameter "hanya rekomendasi"; penanda
+     * {@code is_recommended} disaring dari halaman terpopuler. Karena itu bila
+     * sumber tidak menandai satu pun, seluruh rail disembunyikan — tidak ada
+     * banner yang isinya dikarang.
+     */
+    private LinearLayout buildHighlightRail() {
+        LinearLayout rail = new LinearLayout(this);
+        rail.setOrientation(LinearLayout.VERTICAL);
+        rail.setTag("shinigami_highlight_rail");
+        rail.setPadding(0, Ui.dp(this, 8), 0, Ui.dp(this, 4));
+        rail.setVisibility(View.GONE);
+
+        TextView label = Ui.label(this, "Rekomendasi", 15, palette.text);
+        label.setTypeface(label.getTypeface(), Typeface.BOLD);
+        label.setTag("shinigami_highlight_label");
+        label.setPadding(Ui.dp(this, 14), 0, Ui.dp(this, 14), Ui.dp(this, 6));
+        rail.addView(label);
+
+        highlightList = new RecyclerView(this);
+        highlightList.setTag("shinigami_highlight_cards");
+        highlightList.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false));
+        highlightList.setClipToPadding(false);
+        highlightList.setPadding(Ui.dp(this, 10), 0, Ui.dp(this, 10), 0);
+        highlightList.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        highlightAdapter = new HighlightAdapter();
+        highlightList.setAdapter(highlightAdapter);
+        rail.addView(highlightList, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return rail;
+    }
+
+    /** Banner sorotan: sampul lebar, judul dua baris, rating dan judul alternatif. */
+    private final class HighlightAdapter extends RecyclerView.Adapter<HighlightAdapter.Holder> {
+
+        final class Holder extends RecyclerView.ViewHolder {
+            final ImageView cover;
+            final TextView title;
+            final TextView meta;
+
+            Holder(View item) {
+                super(item);
+                cover = item.findViewWithTag("shinigami_highlight_cover");
+                title = item.findViewWithTag("shinigami_highlight_title");
+                meta = item.findViewWithTag("shinigami_highlight_meta");
+            }
+        }
+
+        @Override
+        public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
+            LinearLayout card = new LinearLayout(ShinigamiActivity.this);
+            card.setOrientation(LinearLayout.VERTICAL);
+            int pad = Ui.dp(ShinigamiActivity.this, 4);
+            card.setPadding(pad, 0, pad, Ui.dp(ShinigamiActivity.this, 6));
+            card.setBackground(Ui.ripple(ShinigamiActivity.this, Color.TRANSPARENT,
+                    Color.TRANSPARENT, 14, palette.ripple));
+
+            // Banner lanskap: tinggi mengikuti lebar, bukan kotak potret.
+            RatioFrameLayout box = new RatioFrameLayout(ShinigamiActivity.this);
+            box.setRatio(HIGHLIGHT_RATIO);
+            box.setTag("shinigami_highlight_box");
+            box.setBackground(Ui.rounded(palette.surface, palette.divider, 14,
+                    ShinigamiActivity.this));
+            box.setClipToOutline(true);
+            ImageView image = new ImageView(ShinigamiActivity.this);
+            image.setTag("shinigami_highlight_cover");
+            image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            image.setBackgroundColor(palette.surface);
+            box.addView(image, new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            LinearLayout.LayoutParams boxParams = new LinearLayout.LayoutParams(
+                    Ui.dp(ShinigamiActivity.this, HIGHLIGHT_WIDTH_DP),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            card.addView(box, boxParams);
+
+            TextView name = Ui.label(ShinigamiActivity.this, "", 13, palette.text);
+            name.setTag("shinigami_highlight_title");
+            name.setMaxLines(2);
+            name.setEllipsize(TextUtils.TruncateAt.END);
+            name.setPadding(0, Ui.dp(ShinigamiActivity.this, 6), 0, 0);
+            card.addView(name);
+
+            TextView meta = Ui.label(ShinigamiActivity.this, "", 11, palette.muted);
+            meta.setTag("shinigami_highlight_meta");
+            meta.setSingleLine(true);
+            meta.setEllipsize(TextUtils.TruncateAt.END);
+            card.addView(meta);
+
+            // Televisi: kartu adalah tujuan fokus, bukan teks di dalamnya.
+            card.setFocusable(true);
+            card.setFocusableInTouchMode(false);
+            card.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(card, palette);
+            return new Holder(card);
+        }
+
+        @Override
+        public void onBindViewHolder(Holder holder, int position) {
+            id.shuyasal.kuromaku.ui.TvFocus.keepRing(holder.itemView, palette, 14);
+            ShinigamiManga manga = highlights.get(position);
+            holder.title.setText(manga.title);
+            holder.title.setTextColor(palette.text);
+            holder.meta.setTextColor(palette.muted);
+            StringBuilder meta = new StringBuilder();
+            // Rating hanya ditampilkan bila sumber benar-benar mengirimnya.
+            if (manga.rating > 0d) {
+                meta.append(String.format(java.util.Locale.ROOT, "%.1f", manga.rating));
+            }
+            if (!manga.format.isEmpty()) {
+                if (meta.length() > 0) meta.append(" · ");
+                meta.append(manga.format);
+            }
+            holder.meta.setText(meta.toString());
+            holder.meta.setVisibility(meta.length() == 0 ? View.GONE : View.VISIBLE);
+            String wide = manga.wideCoverUrl.isEmpty() ? manga.coverUrl : manga.wideCoverUrl;
+            Glide.with(ShinigamiActivity.this)
+                    .load(wide)
+                    .centerCrop()
+                    .override(Ui.dp(ShinigamiActivity.this, HIGHLIGHT_WIDTH_DP),
+                            Math.round(Ui.dp(ShinigamiActivity.this, HIGHLIGHT_WIDTH_DP)
+                                    / HIGHLIGHT_RATIO))
+                    .into(holder.cover);
+            holder.itemView.setOnClickListener(
+                    v -> openDetail(manga.id, manga.title, manga.coverUrl));
+        }
+
+        @Override public void onViewRecycled(Holder holder) {
+            Glide.with(ShinigamiActivity.this).clear(holder.cover);
+            super.onViewRecycled(holder);
+        }
+
+        @Override public int getItemCount() {
+            return highlights.size();
+        }
+    }
+
     private View buildContinueRail() {
         LinearLayout rail = new LinearLayout(this);
         rail.setOrientation(LinearLayout.VERTICAL);
@@ -625,21 +800,31 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             }
         }
 
+        /**
+         * Dua jenis header: 0 = sorotan, 1 = lanjutkan membaca. Keduanya view
+         * tetap (tidak didaur ulang) supaya posisi gulir horizontalnya tidak
+         * hilang saat katalog digulir.
+         */
+        @Override public int getItemViewType(int position) {
+            return position < highlightCount() ? TYPE_HIGHLIGHT : TYPE_CONTINUE;
+        }
+
         @Override public Holder onCreateViewHolder(ViewGroup parent, int viewType) {
-            android.view.ViewGroup.LayoutParams params = continueRail.getLayoutParams();
+            View content = viewType == TYPE_HIGHLIGHT ? highlightRail : continueRail;
+            android.view.ViewGroup.LayoutParams params = content.getLayoutParams();
             if (params == null) {
                 params = new RecyclerView.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             } else {
                 params = new RecyclerView.LayoutParams(params);
             }
-            continueRail.setLayoutParams(params);
-            id.shuyasal.kuromaku.ui.TvFocus.focusable(continueRail, palette);
-            return new Holder(continueRail);
+            content.setLayoutParams(params);
+            id.shuyasal.kuromaku.ui.TvFocus.focusable(content, palette);
+            return new Holder(content);
         }
 
         @Override public void onBindViewHolder(Holder holder, int position) {
-            // Isi rail diperbarui lewat refreshContinueRail().
+            // Isi header diperbarui lewat loadFeed()/refreshContinueRail().
             //
             // Rail SENGAJA tidak disorot sebagai satu kotak: isinya daftar
             // horizontal yang harus bisa dipilih satu per satu dengan remote.
@@ -648,7 +833,15 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         }
 
         @Override public int getItemCount() {
-            return continueAdapter == null || continueAdapter.getItemCount() == 0 ? 0 : 1;
+            return highlightCount() + continueCount();
+        }
+
+        int highlightCount() {
+            return highlights != null && !highlights.isEmpty() ? 1 : 0;
+        }
+
+        int continueCount() {
+            return continueAdapter != null && continueAdapter.getItemCount() > 0 ? 1 : 0;
         }
     }
 
@@ -1344,7 +1537,23 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         final String wantedGenre = genre;
         final String wantedStatus = status;
 
+        // Sorotan dimuat BERSAMA halaman pertama, bukan menyusul sesudahnya.
+        // Kalau banner baru muncul belakangan, item header bertambah satu dan
+        // seluruh katalog bergeser tepat saat pengguna sedang menggulir.
+        final boolean wantsHighlights = !append && targetPage == 1
+                && wantedTab.isCatalogue() && !highlightsLoaded && !highlightsLoading;
+        if (wantsHighlights) highlightsLoading = true;
+
         worker.execute(() -> {
+            List<ShinigamiManga> loadedHighlights = null;
+            if (wantsHighlights) {
+                try {
+                    loadedHighlights = source.recommendations(HIGHLIGHT_LIMIT);
+                } catch (ShinigamiSource.SourceException error) {
+                    // Sorotan bersifat tambahan: katalog tetap tampil walau gagal.
+                    loadedHighlights = new ArrayList<>();
+                }
+            }
             ShinigamiSource.Page result = null;
             String failure = null;
             try {
@@ -1359,11 +1568,23 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             }
             final ShinigamiSource.Page pageResult = result;
             final String message = failure;
+            final List<ShinigamiManga> highlightResult = loadedHighlights;
             main.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (generation != requestGeneration) return;
                 loading = false;
                 spinner.setVisibility(View.GONE);
+                if (highlightResult != null && highlightAdapter != null) {
+                    highlightsLoading = false;
+                    highlightsLoaded = true;
+                    highlights.clear();
+                    highlights.addAll(highlightResult);
+                    highlightAdapter.notifyDataSetChanged();
+                    if (highlightRail != null) {
+                        highlightRail.setVisibility(
+                                highlights.isEmpty() ? View.GONE : View.VISIBLE);
+                    }
+                }
                 if (message != null) {
                     showError(message);
                     return;
@@ -1599,11 +1820,13 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             name.setTag("shinigami_title");
             name.setMaxLines(2);
             name.setEllipsize(TextUtils.TruncateAt.END);
+            name.setPadding(0, Ui.dp(ShinigamiActivity.this, 4), 0, 0);
             card.addView(name);
 
+            // Satu baris ringkas seperti daftar sumber: "Ch. 117 · 3 jam".
             TextView info = Ui.label(ShinigamiActivity.this, "", 11, palette.muted);
             info.setTag("shinigami_subtitle");
-            info.setMaxLines(4);
+            info.setSingleLine(true);
             info.setEllipsize(TextUtils.TruncateAt.END);
             card.addView(info);
 
@@ -1622,20 +1845,16 @@ public class ShinigamiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             holder.subtitle.setTextColor(palette.muted);
             StringBuilder info = new StringBuilder();
             if (manga.latestChapterNumber > 0) {
-                info.append("Chapter terbaru: ").append(ShinigamiManga.formatNumber(manga.latestChapterNumber));
-            }
-            if (!manga.genres.isEmpty()) {
-                if (info.length() > 0) info.append(" - ");
-                info.append(manga.genres.get(0));
+                info.append("Ch. ").append(ShinigamiManga.formatNumber(manga.latestChapterNumber));
             }
             long updated = manga.latestChapterTimeMillis > 0
                     ? manga.latestChapterTimeMillis : manga.updatedAtMillis;
-            // Baris sendiri + format ringkas: tanggal tidak lagi terpotong pada
-            // kartu dua kolom.
-            info.append("\n").append(updated > 0
-                    ? getString(id.shuyasal.kuromaku.R.string.shinigami_update_line,
-                            ShinigamiDates.formatShort(updated))
-                    : "Tanggal belum tersedia");
+            String when = ShinigamiDates.updatedLabel(updated, System.currentTimeMillis());
+            if (!when.isEmpty()) {
+                if (info.length() > 0) info.append(" · ");
+                info.append(when);
+            }
+            if (info.length() == 0) info.append("Chapter belum tersedia");
             holder.subtitle.setText(info.toString());
             holder.coverBox.setOnClickListener(v -> openDetail(manga.id, manga.title, manga.coverUrl));
             loadCover(holder.cover, manga.coverUrl);

@@ -9,6 +9,12 @@ public final class ShinigamiManga {
     public final String title;
     public final String alternativeTitle;
     public final String coverUrl;
+    /**
+     * Sampul lebar (lanskap) milik sumber yang sama, dipakai sorotan di beranda.
+     * Kosong bila sumber tidak menyediakannya; pemanggil wajib memakai
+     * {@link #coverUrl} sebagai cadangan, bukan mengarang gambar.
+     */
+    public final String wideCoverUrl;
     public final String description;
     public final int status;
     public final String releaseYear;
@@ -23,6 +29,8 @@ public final class ShinigamiManga {
     public final List<String> genres;
     public final List<String> authors;
     public final String format;
+    /** True bila sumber menandai judul ini sebagai rekomendasi. */
+    public final boolean recommended;
 
     public ShinigamiManga(String id, String title, String alternativeTitle, String coverUrl,
                           String description, int status, String releaseYear, double rating,
@@ -46,10 +54,23 @@ public final class ShinigamiManga {
                           long viewCount, double latestChapterNumber, String latestChapterTime,
                           List<String> genres, List<String> authors, String format, String updatedAt,
                           String createdAt) {
+        this(id, title, alternativeTitle, coverUrl, "", false, description, status, releaseYear,
+                rating, viewCount, latestChapterNumber, latestChapterTime, genres, authors,
+                format, updatedAt, createdAt);
+    }
+
+    public ShinigamiManga(String id, String title, String alternativeTitle, String coverUrl,
+                          String wideCoverUrl, boolean recommended, String description, int status,
+                          String releaseYear, double rating, long viewCount,
+                          double latestChapterNumber, String latestChapterTime,
+                          List<String> genres, List<String> authors, String format,
+                          String updatedAt, String createdAt) {
         this.id = id == null ? "" : id;
         this.title = title == null ? "" : title;
         this.alternativeTitle = alternativeTitle == null ? "" : alternativeTitle;
         this.coverUrl = coverUrl == null ? "" : coverUrl;
+        this.wideCoverUrl = wideCoverUrl == null ? "" : wideCoverUrl;
+        this.recommended = recommended;
         this.description = description == null ? "" : description;
         this.status = status;
         this.releaseYear = releaseYear == null ? "" : releaseYear;

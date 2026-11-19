@@ -194,13 +194,18 @@ public class ShinigamiCatalogPaginationTest {
             switchToPopular(host);
             layout(list(host));
 
+            // Dua halaman lebih dulu: dengan daftar sependek satu halaman,
+            // scrollToPosition mentok di dasar dan posisinya berubah sendiri
+            // saat isi bertambah — itu bukan lompatan, hanya daftar yang belum
+            // cukup panjang. Anchor harus diuji pada daftar yang sudah panjang.
+            append(host, 2);
             LinearLayoutManager manager = (LinearLayoutManager) list(host).getLayoutManager();
-            manager.scrollToPositionWithOffset(PAGE_SIZE - 2, 0);
+            manager.scrollToPositionWithOffset(PAGE_SIZE, 0);
             layout(list(host));
             int before = manager.findFirstVisibleItemPosition();
-            assertTrue("prasyarat: daftar tergulir ke bawah", before > 0);
+            assertTrue("prasyarat: daftar tergulir ke tengah", before > 0);
 
-            append(host, 2);
+            append(host, 3);
             layout(list(host));
 
             assertEquals("posisi item pertama harus bertahan setelah append",

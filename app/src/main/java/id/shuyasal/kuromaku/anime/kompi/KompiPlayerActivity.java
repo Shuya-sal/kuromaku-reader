@@ -32,6 +32,7 @@ import java.util.concurrent.Executors;
 
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.SentuhLompat;
 import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.TvFocus;
 import id.shuyasal.kuromaku.ui.TvMode;
@@ -128,6 +129,12 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         playerView.setUseController(false);
         root.addView(playerView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        // Ketukan ganda kiri/kanan = mundur/maju 10 detik. Ketukan tunggal tetap
+        // memunculkan atau menyembunyikan kontrol seperti sebelumnya.
+        new SentuhLompat().pasang(playerView,
+                this::toggleKontrolKetuk,
+                sisi -> geser(sisi < 0 ? -GESER_MS : GESER_MS));
 
         spinner = new ProgressBar(this);
         FrameLayout.LayoutParams spinnerParams = new FrameLayout.LayoutParams(
@@ -365,9 +372,18 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
 
     private void geser(long delta) {
         if (player == null) return;
-        long target = Math.max(0, Math.min(player.getDuration(), player.getCurrentPosition() + delta));
+        long durasi = player.getDuration();
+        long dasar = player.getCurrentPosition() + delta;
+        // Batas atas dikurangi sedikit supaya tidak menyentuh akhir berkas
+        // (posisi == durasi dianggap "selesai" dan pemutaran berhenti).
+        long target = Math.max(0, durasi > 0 ? Math.min(durasi - 300L, dasar) : dasar);
         player.seekTo(target);
         jadwalkanSembunyi();
+    }
+
+    /** Ketukan tunggal pada permukaan video: munculkan/sembunyikan kontrol. */
+    private void toggleKontrolKetuk() {
+        setKontrolTampil(overlay.getVisibility() != View.VISIBLE);
     }
 
     // --------------------------------------------------------------- kontrol

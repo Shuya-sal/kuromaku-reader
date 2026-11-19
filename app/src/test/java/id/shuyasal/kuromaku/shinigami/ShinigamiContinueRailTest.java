@@ -322,23 +322,32 @@ public class ShinigamiContinueRailTest {
             list.layout(0, 0, width, 1600);
             Shadows.shadowOf(Looper.getMainLooper()).idle();
 
+            // Kartu memakai satu baris ringkas "Ch. N · waktu". Niat tes lama
+            // tetap dijaga: di grid dua kolom label ini harus utuh, tidak
+            // terpotong elipsis dan tidak kosong.
             boolean sawUpdate = false;
             for (int index = 0; index < list.getChildCount(); index++) {
                 TextView subtitle = list.getChildAt(index)
                         .findViewWithTag("shinigami_subtitle");
                 if (subtitle == null) continue;
                 String text = subtitle.getText().toString();
-                assertFalse("tanggal tidak boleh kosong", text.trim().isEmpty());
-                if (text.contains("Update ")) {
+                assertFalse("waktu tidak boleh kosong", text.trim().isEmpty());
+                assertEquals("label kartu harus satu baris", 1, subtitle.getMaxLines());
+                if (text.startsWith("Ch. ")) {
                     sawUpdate = true;
-                    String line = text.substring(text.indexOf("Update "));
-                    assertFalse("tanggal tidak boleh dipotong dengan elipsis",
-                            line.contains("\u2026") || line.endsWith("..."));
-                    assertTrue("format ringkas: " + line,
-                            line.matches("Update \\d{1,2} [A-Za-z]+ \\d{4}"));
+                    assertTrue("harus ada pemisah dan waktu: " + text,
+                            text.contains(" \u00b7 "));
+                    String waktu = text.substring(text.indexOf(" \u00b7 ") + 3).trim();
+                    assertFalse("waktu tidak boleh kosong: " + text, waktu.isEmpty());
+                    assertFalse("waktu tidak boleh dipotong dengan elipsis",
+                            waktu.contains("\u2026") || waktu.endsWith("..."));
+                    // Relatif ("3 jam", "5 hr") atau tanggal ringkas ("5 Nov 2026").
+                    assertTrue("format waktu tidak dikenal: " + waktu,
+                            waktu.matches("(baru|\\d+ (mnt|jam|hr|mgg|bln|thn))")
+                                    || waktu.matches("\\d{1,2} [A-Za-z]+ \\d{4}"));
                 }
             }
-            assertTrue("kartu harus menampilkan baris Update", sawUpdate);
+            assertTrue("kartu harus menampilkan nomor chapter dan waktu", sawUpdate);
         }
     }
 }

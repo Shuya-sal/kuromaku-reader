@@ -241,6 +241,50 @@ public final class ShinigamiSource {
                 meta.optLong("total_record", 0L));
     }
 
+    /**
+     * Judul sorotan beranda: manga yang sumbernya sendiri tandai
+     * {@code is_recommended}. Penanda ini tidak bisa diminta lewat parameter,
+     * jadi satu halaman feed diambil lalu disaring lokal.
+     *
+     * <p>Feed "judul terbaru" dipakai lebih dulu karena di situs sumber tab
+     * Rekomendasi memang berbentuk daftar judul yang baru diperbarui — pada
+     * halaman pertama ada enam judul bertanda, cukup untuk mengisi banner.
+     * Bila suatu saat penandanya lebih sedikit, sisa slot ditambal dari daftar
+     * terpopuler. Bila sumber tidak menandai satu pun, hasilnya kosong —
+     * sorotan tidak pernah dikarang.
+     */
+    public List<ShinigamiManga> recommendations(int wanted) throws SourceException {
+        int target = Math.max(1, Math.min(wanted, 10));
+        List<ShinigamiManga> picked = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        Page newest = list(1, Feed.NEW_TITLES.sortWire, Feed.NEW_TITLES.order, null, null, null,
+                true);
+        kumpulkanRekomendasi(newest.items, target, picked, seen);
+        if (picked.size() < target) {
+            // Cadangan: halaman terpopuler. Kegagalannya tidak boleh membatalkan
+            // sorotan yang sudah terkumpul.
+            try {
+                Page popular = list(1, Feed.POPULAR.sortWire, Feed.POPULAR.order, null, null, null,
+                        false);
+                kumpulkanRekomendasi(popular.items, target, picked, seen);
+            } catch (SourceException ignored) {
+                // Sorotan tetap tampil dengan isi yang sudah ada.
+            }
+        }
+        return picked;
+    }
+
+    private static void kumpulkanRekomendasi(List<ShinigamiManga> source, int target,
+                                             List<ShinigamiManga> picked,
+                                             java.util.Set<String> seen) {
+        for (ShinigamiManga manga : source) {
+            if (!manga.recommended) continue;
+            if (manga.id.isEmpty() || !seen.add(manga.id)) continue;
+            picked.add(manga);
+            if (picked.size() >= target) return;
+        }
+    }
+
     public ShinigamiManga detail(String mangaId) throws SourceException {
         requireId(mangaId, "manga");
         JSONObject manga = firstObject(getJson(config.apiBase() + "/manga/detail/" + encode(mangaId)));
@@ -514,12 +558,17 @@ public final class ShinigamiSource {
     static ShinigamiManga parseManga(JSONObject item) {
         String id = item.optString("manga_id", "");
         if (id.isEmpty()) id = item.optString("id", "");
+        // Sampul potret untuk kartu; sampul lebar untuk sorotan beranda. Keduanya
+        // dari sumber yang sama — yang lebar tidak pernah dikarang bila kosong.
         String cover = item.optString("cover_portrait_url", "");
-        if (cover.isEmpty()) cover = item.optString("cover_image_url", "");
+        String wide = item.optString("cover_image_url", "");
+        if (cover.isEmpty()) cover = wide;
         if (cover.isEmpty()) cover = item.optString("cover_image", "");
+        if (wide.isEmpty()) wide = item.optString("cover_image", "");
         JSONObject taxonomy = item.optJSONObject("taxonomy");
         return new ShinigamiManga(id, item.optString("title", ""), item.optString("alternative_title", ""),
-                safeImage(cover), item.optString("description", ""), item.optInt("status", -1),
+                safeImage(cover), safeImage(wide), item.optBoolean("is_recommended", false),
+                item.optString("description", ""), item.optInt("status", -1),
                 item.optString("release_year", ""), item.optDouble("user_rate", 0d),
                 item.optLong("view_count", 0L), item.optDouble("latest_chapter_number", 0d),
                 item.optString("latest_chapter_time", ""), taxonomyNames(taxonomy, "Genre"),

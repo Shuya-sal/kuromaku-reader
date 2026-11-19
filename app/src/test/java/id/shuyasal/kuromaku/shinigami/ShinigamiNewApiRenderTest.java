@@ -43,7 +43,9 @@ public class ShinigamiNewApiRenderTest {
             return new ShinigamiSource(this, url -> {
                 REQUESTS.add(url);
                 if (url.contains("/taxonomy/")) return fixture("newapi_genres.json");
-                return fixture("live_new_api_list.json");
+                // highlight_list.json = respons asli 25 judul terpopuler yang
+                // memuat penanda is_recommended, jadi banner sorotan ikut tergambar.
+                return fixture("highlight_list.json");
             });
         }
     }
@@ -77,6 +79,20 @@ public class ShinigamiNewApiRenderTest {
                 ((java.util.concurrent.ExecutorService) field.get(host))
                         .submit(() -> { }).get(20, java.util.concurrent.TimeUnit.SECONDS);
                 Shadows.shadowOf(Looper.getMainLooper()).idle();
+            }
+
+            // Pindah ke Terpopuler supaya sorotan + grid katalog sama-sama tampil.
+            View popular = host.getWindow().getDecorView()
+                    .findViewWithTag("shinigami_chip_Terpopuler");
+            if (popular != null) {
+                popular.performClick();
+                for (int attempt = 0; attempt < 4; attempt++) {
+                    java.lang.reflect.Field field = ShinigamiActivity.class.getDeclaredField("worker");
+                    field.setAccessible(true);
+                    ((java.util.concurrent.ExecutorService) field.get(host))
+                            .submit(() -> { }).get(20, java.util.concurrent.TimeUnit.SECONDS);
+                    Shadows.shadowOf(Looper.getMainLooper()).idle();
+                }
             }
 
             android.widget.TextView status = host.getWindow().getDecorView()

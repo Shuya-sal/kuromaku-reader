@@ -54,6 +54,7 @@ import java.util.concurrent.Executors;
 import id.shuyasal.kuromaku.R;
 import id.shuyasal.kuromaku.ui.Palette;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.SentuhLompat;
 import id.shuyasal.kuromaku.ui.ThemeManager;
 import id.shuyasal.kuromaku.ui.Ui;
 
@@ -365,7 +366,16 @@ public class AnimePlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         playerView.setShutterBackgroundColor(0xFF000000);
         // Satu ketukan pada permukaan video: munculkan kontrol (dan jadwalkan
         // sembunyi lagi 5 detik), atau sembunyikan bila sedang terlihat.
+        // Ketukan GANDA di sisi kanan = maju 10 detik, sisi kiri = mundur 10
+        // detik — pendengar klik di bawah tetap dipakai jalur remote televisi,
+        // yang tidak menghasilkan kejadian sentuh.
         playerView.setOnClickListener(v -> toggleControls());
+        new SentuhLompat().pasang(playerView,
+                this::toggleControls,
+                sisi -> {
+                    seekBy(sisi < 0 ? -SEEK_STEP_MS : SEEK_STEP_MS);
+                    showControls();
+                });
         root.addView(playerView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 

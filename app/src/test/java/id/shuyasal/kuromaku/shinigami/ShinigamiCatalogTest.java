@@ -92,11 +92,13 @@ public class ShinigamiCatalogTest {
             // Kartu grid diuji pada tab Terpopuler.
             tagged(host, "shinigami_chip_Terpopuler").performClick(); await(host);
             TextView info = bindFirst(host).findViewWithTag("shinigami_subtitle");
-            assertTrue(info.getText().toString(), info.getText().toString().contains("Chapter terbaru: 210"));
-            // Baris tanggal kini ringkas dan berdiri sendiri agar tidak terpotong
-            // pada kartu dua kolom: "Update 5 Nov 2026".
-            assertTrue(info.getText().toString(),
-                    info.getText().toString().contains("Update 5 Nov 2026"));
+            String label = info.getText().toString();
+            // Kartu ringkas seperti daftar sumber: nomor chapter + waktu.
+            assertTrue(label, label.startsWith("Ch. 210"));
+            // Fixture bertanggal 2026-11-05; diuji bukan kosong dan bukan
+            // "Tanggal belum tersedia" — formatnya relatif atau tanggal ringkas.
+            assertFalse(label, label.contains("belum tersedia"));
+            assertTrue("harus ada pemisah setelah chapter: " + label, label.contains(" · "));
         } finally { java.util.TimeZone.setDefault(previous); }
     }
     @Test public void latestChaptersUseLatestSortWithoutLosingFilters() throws Exception {

@@ -1,25 +1,32 @@
-2.73.0 - Manga Server 2 kembali memuat katalog dan chapter
+2.74.0 - beranda Manga Server 2 mengikuti bentuk sumbernya
 
-Sumber Manga Server 2 berpindah alamat: alamat API lama (api.shngm.io) tidak
-lagi menjawab, dan situs barunya ada di s1.shinigami.mx dengan API
-api.shinigami.io. Versi ini memindahkan aplikasi ke alamat baru itu.
+Beranda Manga Server 2 sekarang berbentuk sorotan di atas katalog, bukan lagi
+daftar "Chapter Terbaru" berbaris.
 
 Yang berubah
-- Alamat sumber: api.shinigami.io, situs rujukan s1.shinigami.mx, gambar dari
-  cdn.shinigami.gg. Alamat lama tetap diterima, jadi konfigurasi lama tidak
-  membuat aplikasi berhenti.
-- Penomoran halaman katalog: sumber baru memakai offset/limit dan penanda
-  has_next, bukan total halaman. "Muat lagi" berhenti saat sumber menyatakan
-  tidak ada halaman berikutnya; tidak ada nomor halaman yang dikarang.
-- Daftar chapter: sumber baru memakai cursor berantai. Aplikasi mengikuti
-  rantai itu apa adanya, jadi halaman kedua dan seterusnya tidak menggandakan
-  atau melewatkan chapter.
-- Tab "Manga Terbaru" memakai urutan new_manga dari sumber (judul yang paling
-  baru ditambahkan lebih dulu), bukan lagi perkiraan dari urutan populer.
-- Daftar genre memakai alamat baru /taxonomy/list (38 genre).
-- Jumlah chapter tidak lagi dikarang saat sumber tidak mengirimkannya; yang
-  tampil adalah jumlah chapter yang benar-benar sudah dimuat, dan halaman
-  berikutnya tetap bisa dimuat.
+- Sorotan "Rekomendasi": banner lanskap yang bisa digeser ke samping. Isinya
+  HANYA judul yang sumbernya sendiri tandai sebagai rekomendasi (penanda
+  is_recommended) — sama seperti tab Rekomendasi di situs sumber. Pada halaman
+  judul terbaru ada enam judul bertanda, jadi banner terisi penuh; tidak ada
+  judul yang dikarang. Bila sumber tidak menandai satu pun, seluruh banner
+  disembunyikan.
+- Banner memakai sampul lanskap dari sumber, bukan sampul potret, jadi tidak
+  terpotong. Rating hanya tampil bila sumber mengirimkannya.
+- Kartu katalog jadi ringkas satu baris: "Ch. 117 · 3 jam". Waktu relatif untuk
+  judul segar (baru, 5 mnt, 3 jam, 5 hr, 2 mgg, 3 bln), lalu tanggal ringkas
+  (5 Nov 2026) untuk judul lama.
+- Sorotan dimuat bersamaan dengan halaman pertama. Sebelumnya banner yang
+  muncul belakangan menambah satu item dan menggeser seluruh katalog tepat saat
+  pengguna sedang menggulir.
+- Pemutar Anime Server 1 dan Anime Server 2: ketukan ganda di sisi kiri/kanan
+  video melompat 10 detik, dengan label "−10 detik · 1:24". Ketukan tunggal
+  tetap memunculkan/menyembunyikan kontrol seperti sebelumnya.
+
+Yang sengaja TIDAK dibuat
+- Tab "Rank Harian"/"Rank Mingguan" milik situs sumber tidak dibuat, karena API
+  sumber mengabaikan parameter periode: daily, weekly, monthly, dan all
+  mengembalikan daftar yang sama persis. Tombol seperti itu hanya menipu.
+- Jumlah chapter tetap tidak dikarang saat sumber tidak mengirim totalnya.
 
 Yang tidak diubah
 - applicationId, kunci penandatanganan, ID konten, dan seluruh data pengguna.
@@ -28,6 +35,6 @@ Yang tidak diubah
 
 Pengujian
 - Seluruh unit test Android dijalankan.
-- Pemeriksaan langsung ke sumber baru: katalog 24 judul, pencarian, detail,
-  daftar 936 chapter (dua halaman cursor), 10 gambar chapter dari
-  cdn.shinigami.gg, dan 38 genre semuanya terbaca.
+- Tes sorotan memakai respons asli api.shinigami.io: halaman judul terbaru berisi
+  24 judul, enam di antaranya bertanda rekomendasi, dan hanya enam itu yang
+  muncul di banner.
