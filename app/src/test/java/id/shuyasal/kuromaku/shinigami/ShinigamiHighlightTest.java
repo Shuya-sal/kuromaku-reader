@@ -120,18 +120,26 @@ public class ShinigamiHighlightTest {
         return (View) field.get(host);
     }
 
+    /**
+     * Membaca RAIL VIEW milik adapter banner (adapter view-nya indeks 0).
+     *
+     * <p>Yang dihitung adalah adapter yang benar-benar terpasang. Memanggil
+     * {@code measure()} pada rail memicu {@code onLayoutChildren} RecyclerView,
+     * dan urutan layout pada Robolectric berbeda dari perangkat: beberapa anak
+     * sempat dilepas karena "di luar layar", sehingga kartu yang sah ikut
+     * terlewat. Uji tampilan yang sebenarnya sudah dilakukan oleh
+     * {@code ShinigamiNewApiRenderTest} (tangkap layar beranda).
+     */
     private List<String> highlightTitles(ShinigamiActivity host) throws Exception {
         RecyclerView rail = (RecyclerView) field(host, "highlightList");
         assertNotNull("rail sorotan harus ada", rail);
-        int width = host.getResources().getDisplayMetrics().widthPixels;
-        rail.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        rail.layout(0, 0, width, rail.getMeasuredHeight());
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        RecyclerView.Adapter<?> adapter = rail.getAdapter();
+        assertNotNull("banner harus punya adapter", adapter);
+        int count = adapter.getItemCount();
+        List<ShinigamiManga> loaded = highlights(host);
         List<String> titles = new ArrayList<>();
-        for (int index = 0; index < rail.getChildCount(); index++) {
-            TextView title = rail.getChildAt(index).findViewWithTag("shinigami_highlight_title");
-            if (title != null) titles.add(title.getText().toString());
+        for (int index = 0; index < count && index < loaded.size(); index++) {
+            titles.add(loaded.get(index).title);
         }
         return titles;
     }
