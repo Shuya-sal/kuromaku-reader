@@ -120,7 +120,7 @@ public class KompiScreenTest {
         try (ActivityController<Host> controller = buka()) {
             ShadowLooper.idleMainLooper();
             View layar = controller.get().getWindow().getDecorView();
-            assertTrue("judul layar", adaTeks(layar, "Anime Kompi"));
+            assertTrue("judul layar", adaTeks(layar, "Anime Server 2"));
             assertTrue("bagian episode terbaru", adaTeks(layar, "Episode Terbaru"));
             assertTrue("bagian populer", adaTeks(layar, "Populer Minggu Ini"));
             assertTrue("judul anime tampil", adaTeks(layar, "Toaru Anbu no Item"));

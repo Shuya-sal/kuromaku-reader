@@ -18,6 +18,9 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.Player;
 import androidx.media3.datasource.DefaultHttpDataSource;
@@ -77,6 +80,9 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
     private TextView status;
     private ProgressBar spinner;
     private Button tombolPutar;
+    private Button tombolLayarPenuh;
+    /** Layar penuh = bilah sistem disembunyikan; orientasi tetap ikut perangkat. */
+    private boolean layarPenuh;
     private final List<KompiSource.Server> servers = new ArrayList<>();
     private String serverAktif = "";
 
@@ -171,8 +177,10 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         tombolPutar = putar;
         Button maju = tombol("+10 dtk", () -> geser(GESER_MS));
         Button daftarServer = tombol("Server", this::tampilkanServer);
+        Button layarPenuh = tombol("Layar penuh", this::toggleLayarPenuh);
+        tombolLayarPenuh = layarPenuh;
         Button keluar = tombol("Keluar", this::finish);
-        for (Button tombol : new Button[] {kembali, putar, maju, daftarServer, keluar}) {
+        for (Button tombol : new Button[] {kembali, putar, maju, daftarServer, layarPenuh, keluar}) {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     0, Ui.dp(this, Ui.TOUCH_DP), 1f);
             params.setMargins(Ui.dp(this, 4), 0, Ui.dp(this, 4), 0);
@@ -405,8 +413,51 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         }
     }
 
+    /**
+     * Layar penuh: bilah sistem disembunyikan, orientasi tetap mengikuti
+     * perangkat.
+     *
+     * <p>Pemutar Anime Streaming sudah punya tombol ini; pemutar Anime Server 2
+     * belum, jadi menonton di sini selalu menyisakan status bar dan bilah
+     * navigasi yang memakan sebagian gambar. Orientasi sengaja tidak dipaksa:
+     * memutar perangkat ke samping tetap keputusan pembaca, dan layar penuh di
+     * posisi tegak tetap tegak.
+     */
+    private void toggleLayarPenuh() {
+        setLayarPenuh(!layarPenuh);
+    }
+
+    private void setLayarPenuh(boolean aktif) {
+        layarPenuh = aktif;
+        WindowInsetsControllerCompat kendali =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        if (aktif) {
+            kendali.setSystemBarsBehavior(
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            kendali.hide(WindowInsetsCompat.Type.systemBars());
+            setKontrolTampil(true);
+        } else {
+            kendali.show(WindowInsetsCompat.Type.systemBars());
+            setKontrolTampil(true);
+        }
+        if (tombolLayarPenuh != null) {
+            tombolLayarPenuh.setText(aktif ? "Keluar penuh" : "Layar penuh");
+        }
+    }
+
+    /** Untuk pengujian: apakah layar penuh sedang aktif. */
+    protected boolean layarPenuhAktif() {
+        return layarPenuh;
+    }
+
     @Override public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            // Layar penuh ditutup lebih dulu supaya bilah sistem kembali dan
+            // pembaca tidak keluar dari pemutar hanya karena ingin melihat jam.
+            if (layarPenuh) {
+                setLayarPenuh(false);
+                return true;
+            }
             if (overlay.getVisibility() == View.VISIBLE && player != null && player.isPlaying()) {
                 setKontrolTampil(false);
                 return true;

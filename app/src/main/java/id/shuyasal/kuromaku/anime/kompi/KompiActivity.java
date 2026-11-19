@@ -91,7 +91,7 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         header.addView(back, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP)));
 
-        TextView title = Ui.label(this, "Anime Kompi", 20, palette.text);
+        TextView title = Ui.label(this, "Anime Server 2", 20, palette.text);
         title.setTypeface(null, Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -176,6 +176,18 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        // Status bar transparan: tanpa padding sistem, judul dan tombol kembali
+        // naik menutupi jam dan ikon notifikasi. Layar lain (Novel, Manga Server
+        // 1-3, Anime Streaming) sudah memakai padding ini; layar ini belum.
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars()
+                            | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
+            v.setPadding(Ui.dp(this, 16) + bars.left, Ui.dp(this, 14) + bars.top,
+                    Ui.dp(this, 16) + bars.right, bars.bottom);
+            return insets;
+        });
 
         setContentView(root);
     }

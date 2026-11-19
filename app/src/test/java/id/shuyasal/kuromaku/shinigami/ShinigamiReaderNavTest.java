@@ -128,7 +128,12 @@ public class ShinigamiReaderNavTest {
         field.setAccessible(true);
         ExecutorService worker = (ExecutorService) field.get(reader);
         for (int attempt = 0; attempt < 6; attempt++) {
-            worker.submit(() -> { }).get(10, TimeUnit.SECONDS);
+            // Batas 30 detik, bukan 10: di suite penuh mesin menjalankan 1.250
+            // tes berurutan dan pernah butuh >10 detik hanya untuk mengosongkan
+            // antrean, sehingga tes ini gagal acak padahal aplikasinya benar.
+            // Yang ditunggu tetap penyelesaian worker, jadi kegagalan sungguhan
+            // pada pemuatan chapter tetap terdeteksi.
+            worker.submit(() -> { }).get(30, TimeUnit.SECONDS);
             Shadows.shadowOf(Looper.getMainLooper()).idle();
         }
     }

@@ -28,6 +28,7 @@ import org.robolectric.shadows.ShadowDialog;
 
 import id.shuyasal.kuromaku.shinigami.ShinigamiActivity;
 import id.shuyasal.kuromaku.ui.Prefs;
+import id.shuyasal.kuromaku.ui.Ui;
 
 /**
  * Tiga keluhan yang muncul bersama setelah rilis 2.74.0:
@@ -200,5 +201,71 @@ public class HubVersionAndDrawerRoutesTest {
         assertNotNull(started);
         assertEquals(id.shuyasal.kuromaku.anime.kompi.KompiActivity.class.getName(),
                 started.getComponent().getClassName());
+    }
+
+    // ------------------------------------------------- anime server 2: header
+
+    @Test public void judulHalamanAnimeServer2MemakaiNamaBaru() {
+        id.shuyasal.kuromaku.anime.kompi.KompiActivity host =
+                Robolectric.buildActivity(id.shuyasal.kuromaku.anime.kompi.KompiActivity.class)
+                        .setup().get();
+        TextView judul = cariJudul(host.getWindow().getDecorView());
+        assertNotNull("judul halaman harus ada", judul);
+        assertEquals("Anime Server 2", judul.getText().toString());
+        host.finish();
+    }
+
+    /**
+     * Status bar transparan, jadi isi layar wajib memakai padding sistem.
+     *
+     * <p>Tanpa itu judul dan tombol kembali naik ke area jam dan ikon
+     * notifikasi — persis yang dilaporkan pada layar Anime Server 2, sementara
+     * sumber lain sudah benar.
+     */
+    @Test public void headerAnimeServer2TidakMenutupiJam() {
+        id.shuyasal.kuromaku.anime.kompi.KompiActivity host =
+                Robolectric.buildActivity(id.shuyasal.kuromaku.anime.kompi.KompiActivity.class)
+                        .setup().get();
+        // Isi layar = LinearLayout yang dipasang activity, bukan root decor
+        // (decor berisi ViewStub milik AppCompat di indeks 0).
+        View root = null;
+        ViewGroup content = host.findViewById(android.R.id.content);
+        if (content != null && content.getChildCount() > 0) {
+            root = content.getChildAt(0);
+        }
+        assertNotNull("isi layar harus ada", root);
+
+        // Listener insets terpasang berarti layar ini memakai ruang status bar.
+        // Padding-nya baru terisi setelah sistem mengirim insets; di Robolectric
+        // itu tidak terjadi, jadi yang bisa diperiksa adalah pemasangan
+        // listener-nya — satu hal yang membedakan layar ini dari versi rusak.
+        // Dan saat insets dikirim sungguhan, padding atas ikut bertambah.
+        androidx.core.view.WindowInsetsCompat inset =
+                new androidx.core.view.WindowInsetsCompat.Builder()
+                        .setInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars(),
+                                androidx.core.graphics.Insets.of(0, Ui.dp(host, 24), 0,
+                                        Ui.dp(host, 48)))
+                        .build();
+        androidx.core.view.ViewCompat.dispatchApplyWindowInsets(root, inset);
+        assertTrue("padding atas harus memuat tinggi status bar, dapat "
+                        + root.getPaddingTop(),
+                root.getPaddingTop() >= Ui.dp(host, 24) + Ui.dp(host, 14));
+        host.finish();
+    }
+
+    private TextView cariJudul(View view) {
+        if (view instanceof TextView) {
+            TextView text = (TextView) view;
+            CharSequence isi = text.getText();
+            if (isi != null && "Anime Server 2".contentEquals(isi)) return text;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                TextView found = cariJudul(group.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 }
