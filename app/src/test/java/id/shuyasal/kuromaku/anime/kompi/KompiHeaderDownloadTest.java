@@ -63,13 +63,33 @@ public class KompiHeaderDownloadTest {
         return (ViewGroup) content.getChildAt(0);
     }
 
-    @Test public void tombolKembaliAdaDiKiri() {
+    /**
+     * Beranda Anime Server 2 tidak punya tombol kembali: posisi kiri milik
+     * tombol garis tiga (menu), sama seperti beranda Anime Server 1. Kembali
+     * dari layar ini memakai tombol kembali sistem.
+     */
+    @Test public void tidakAdaTombolKembaliDiHeader() {
         KompiActivity host = buka();
         LinearLayout bar = header(host);
-        View kembali = bar.findViewWithTag("tombol_kembali");
-        assertNotNull("tombol kembali harus ada", kembali);
-        assertEquals("kembali harus anak pertama (paling kiri)", kembali, bar.getChildAt(0));
+        assertNull("tombol kembali tidak boleh ada di beranda",
+                bar.findViewWithTag("tombol_kembali"));
         host.finish();
+    }
+
+    @Test public void menuGarisTigaAdaDiPalingKiri() {
+        KompiActivity host = buka();
+        LinearLayout bar = header(host);
+        View menu = bar.findViewWithTag("section_menu");
+        assertNotNull("tombol menu harus ada", menu);
+        assertEquals("menu harus anak pertama (paling kiri)", menu, bar.getChildAt(0));
+        host.finish();
+    }
+
+    @Test public void menuKembaliSistemTetapMenutupLayar() {
+        // Tanpa tombol kembali di layar, jalan keluar tetap harus ada.
+        KompiActivity host = buka();
+        host.getOnBackPressedDispatcher().onBackPressed();
+        assertTrue("kembali sistem harus menutup beranda", host.isFinishing());
     }
 
     @Test public void titikTigaDanUnduhanAdaDiKanan() {

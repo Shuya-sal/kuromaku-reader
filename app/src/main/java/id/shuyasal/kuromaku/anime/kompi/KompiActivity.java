@@ -116,14 +116,18 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
 
-        // Tombol kembali pindah ke kiri: sebelumnya di kanan, dan yang menggantikan
-        // posisinya di kiri justru menu samping. Halaman ini adalah pintu masuk
-        // cabang Anime Server 2, jadi kembali menuju halaman awal sumber.
-        Button back = Ui.backButton(this, palette);
-        back.setTag("tombol_kembali");
-        back.setOnClickListener(view -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, Ui.dp(this, Ui.TOUCH_DP)));
+        // Tanpa tombol kembali: beranda ini adalah pintu masuk cabang Anime
+        // Server 2, jadi tombol garis tiga yang menempati posisi kiri — sama
+        // seperti beranda Anime Server 1. Kembali dari sini memakai tombol
+        // kembali sistem.
+        android.widget.ImageButton menu = Ui.iconButton(this,
+                id.shuyasal.kuromaku.R.drawable.ic_menu, "Menu", palette);
+        menu.setTag("section_menu");
+        menu.setOnClickListener(view -> KompiNavigation.showDrawer(this, palette));
+        LinearLayout.LayoutParams menuParams = new LinearLayout.LayoutParams(
+                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP));
+        menuParams.leftMargin = Ui.dp(this, 4);
+        header.addView(menu, menuParams);
 
         TextView title = Ui.label(this, "Anime Server 2", 20, palette.text);
         title.setTypeface(null, Typeface.BOLD);
@@ -133,15 +137,8 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         titleParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
         header.addView(title, titleParams);
 
-        // Menu titik tiga di kanan: Tema tampilan, Genre, Muat ulang — sama
-        // seperti Anime Server 1. Menu samping tetap ada lewat tombol ini juga.
-        android.widget.ImageButton menu = Ui.iconButton(this,
-                id.shuyasal.kuromaku.R.drawable.ic_menu, "Buka menu sumber", palette);
-        menu.setTag("section_menu");
-        // Hamburger tetap membuka menu sumber (drawer); titik tiga yang membuka
-        // menu pengaturan. Dua menu ini berbeda dan tidak boleh ditukar.
-        menu.setOnClickListener(view -> KompiNavigation.showDrawer(this, palette));
-
+        // Kanan: hasil unduhan, lalu titik tiga berisi Tema tampilan, Genre,
+        // Muat ulang, dan Menu sumber.
         // Hasil unduhan: di kiri titik tiga, sesuai permintaan.
         android.widget.ImageButton unduhan = Ui.iconButton(this,
                 id.shuyasal.kuromaku.R.drawable.ic_download, "Hasil unduhan", palette);
@@ -155,8 +152,6 @@ public class KompiActivity extends id.shuyasal.kuromaku.ui.TvActivity {
         overflow.setTag("kompi_overflow");
         overflow.setOnClickListener(view -> showOverflow());
 
-        header.addView(menu, new LinearLayout.LayoutParams(
-                Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         header.addView(unduhan, new LinearLayout.LayoutParams(
                 Ui.dp(this, Ui.TOUCH_DP), Ui.dp(this, Ui.TOUCH_DP)));
         header.addView(overflow, new LinearLayout.LayoutParams(

@@ -8,8 +8,8 @@ android {
         applicationId = "id.shuyasal.kuromaku"
         minSdk = 26
         targetSdk = 35
-        versionCode = 114
-        versionName = "2.78.0"
+        versionCode = 115
+        versionName = "2.79.0"
     }
 
     // Versi tampil di halaman awal lewat BuildConfig.VERSION_NAME, jadi labelnya
