@@ -56,6 +56,11 @@ public final class AnimeDownloadTask {
      * memberi alamat {@code /api/file/<id>?download} tanpa ekstensi, padahal
      * jawabannya {@code video/mp4}. Alamat seperti itu tetap diterima karena
      * jenisnya sudah dipastikan oleh penyedia berkas, bukan ditebak dari nama.
+     *
+     * <p>Matroska ({@code .mkv}) ikut diterima: itulah format yang benar-benar
+     * diterbitkan sumber untuk unduhan, sedangkan server pemutarnya memakai
+     * mp4. Jenis berkas tetap diverifikasi ulang setelah diunduh — ekstensi
+     * tidak pernah dipakai sebagai bukti tunggal.
      */
     public boolean downloadable() {
         if (url.isEmpty() || episodeKey.isEmpty() || animeId.isEmpty()) return false;
@@ -68,9 +73,14 @@ public final class AnimeDownloadTask {
                     || lower.contains("/player")) {
                 return false;
             }
-            if (lower.contains(".mp4") || lower.contains(".webm")) return true;
+            if (lower.contains(".mp4") || lower.contains(".webm")
+                    || lower.contains(".mkv")) {
+                return true;
+            }
             // Penyedia berkas yang alamatnya tanpa ekstensi.
-            return lower.contains("pixeldrain.com/api/file/");
+            if (lower.contains("pixeldrain.com/api/file/")) return true;
+            // Tautan unduhan resmi sumber yang alamatnya tanpa ekstensi.
+            return lower.contains("acefile.co/f/") || lower.contains("buzzheavier.com/");
         }
         return false;
     }

@@ -17,6 +17,7 @@ import android.widget.TextView;
 
 import com.bumptech.glide.Glide;
 
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -311,58 +312,165 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * pengguna diberi alasannya — tidak ada unduhan palsu.
      */
     private void unduhEpisode(KompiSource.Detail detail, KompiSource.Episode episode) {
+        // Persetujuan unduhan diminta di sini, seperti di Anime Server 1.
+        // Tanpa ini antrean menolak setiap permintaan dan tombol Unduh tidak
+        // pernah menghasilkan berkas — persis keluhan "belum bisa download".
         if (!id.shuyasal.kuromaku.anime.AnimeDownloadPolicy.allowed(this)) {
-            android.widget.Toast.makeText(this,
-                    "Unduhan belum diizinkan. Aktifkan izin unduhan lebih dulu.",
-                    android.widget.Toast.LENGTH_LONG).show();
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Unduhan offline")
+                    .setMessage(id.shuyasal.kuromaku.anime.AnimeDownloadPolicy.notice())
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Setuju", (dialog, which) -> {
+                        id.shuyasal.kuromaku.anime.AnimeDownloadPolicy.acknowledge(this);
+                        unduhEpisode(detail, episode);
+                    })
+                    .show();
             return;
         }
         final String labelEp = episode.name;
+        final String kunci = id.shuyasal.kuromaku.anime.AnimeDownloads.episodeKey(
+                episode.slug, episode.name);
+        if (id.shuyasal.kuromaku.anime.AnimeDownloads.isSaved(this, slug, kunci)) {
+            android.widget.Toast.makeText(this,
+                    "Episode ini sudah tersimpan di perangkat.",
+                    android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
         android.widget.Toast.makeText(this, "Menyiapkan unduhan " + labelEp + "…",
                 android.widget.Toast.LENGTH_SHORT).show();
         worker.execute(() -> {
-            String berkas = null;
+            List<KompiSource.Download> tautan = null;
             String alasan = null;
             try {
-                KompiSource.EpisodeInfo info = source.episode(episode.slug);
-                // Semua server dicoba berurutan, bukan hanya yang ditandai
-                // berkas: sebagian server baru ketahuan jenisnya setelah diurai
-                // (mis. halaman /embed- milik Mp4upload). Yang pertama benar-
-                // benar menghasilkan alamat berkas dipakai; sisanya berhenti.
-                for (KompiSource.Server server : info.servers) {
-                    String media = source.resolve(server.url);
-                    if (media != null && !media.isEmpty()) {
-                        berkas = media;
-                        break;
-                    }
-                }
-                if (berkas == null) {
-                    alasan = "Episode ini hanya menyediakan halaman pemutar, bukan berkas "
-                            + "yang bisa disimpan aplikasi.";
-                }
+                // Tautan unduhan resmi sumber dipakai lebih dulu: inilah yang
+                // benar-benar berupa berkas. Server pemutar di sumber ini
+                // kebanyakan halaman embed, jadi mengandalkannya saja membuat
+                // tombol Unduh selalu gagal.
+                tautan = source.episode(episode.slug).downloads;
             } catch (KompiSource.SourceException error) {
-                alasan = error.getMessage() == null ? "Server tidak dapat dihubungi."
-                        : error.getMessage();
+                alasan = error.getMessage();
             }
-            final String media = berkas;
-            final String pesan = alasan;
+            final List<KompiSource.Download> resmi = tautan;
+            final String pesanGalat = alasan;
             main.post(() -> {
                 if (isFinishing()) return;
-                if (media == null) {
-                    android.widget.Toast.makeText(this, pesan,
-                            android.widget.Toast.LENGTH_LONG).show();
+                if (resmi != null && !resmi.isEmpty()) {
+                    pilihKualitas(detail, episode, resmi);
                     return;
                 }
-                id.shuyasal.kuromaku.anime.AnimeDownloadTask task =
-                        new id.shuyasal.kuromaku.anime.AnimeDownloadTask(
-                                slug, detail.title, detail.cover, labelEp, episode.slug,
-                                "", "Anime Server 2", media, "PROGRESSIVE");
-                boolean queued = id.shuyasal.kuromaku.anime.AnimeDownloadQueue
-                        .enqueue(this, task);
-                android.widget.Toast.makeText(this,
-                        queued ? "Unduhan dimasukkan ke antrean: " + labelEp
-                                : "Unduhan tidak dapat dijadwalkan.",
-                        android.widget.Toast.LENGTH_SHORT).show();
+                // Sumber tidak menerbitkan tautan unduhan: coba server pemutar.
+                cariBerkasDariServer(detail, episode,
+                        pesanGalat == null ? "" : pesanGalat);
+            });
+        });
+    }
+
+    /**
+     * Pilih kualitas unduhan.
+     *
+     * <p>Hanya kualitas yang benar-benar diterbitkan sumber yang ditawarkan —
+     * tidak ada 1080p karangan bila sumbernya hanya menyediakan 480p.
+     */
+    private void pilihKualitas(KompiSource.Detail detail, KompiSource.Episode episode,
+                               List<KompiSource.Download> tautan) {
+        // Satu tautan: langsung jalan, tidak perlu dialog.
+        if (tautan.size() == 1) {
+            antre(detail, episode, tautan.get(0));
+            return;
+        }
+        String[] label = new String[tautan.size()];
+        for (int i = 0; i < tautan.size(); i++) label[i] = tautan.get(i).describe();
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Pilih kualitas · " + episode.name)
+                .setItems(label, (dialog, which) -> antre(detail, episode, tautan.get(which)))
+                .setNegativeButton("Batal", null)
+                .show();
+    }
+
+    /** Antrekan satu tautan unduhan resmi. */
+    private void antre(KompiSource.Detail detail, KompiSource.Episode episode,
+                       KompiSource.Download tautan) {
+        String berkas = resolveUnduhan(tautan.url);
+        if (berkas == null || berkas.isEmpty()) {
+            android.widget.Toast.makeText(this,
+                    "Tautan " + tautan.describe() + " bukan berkas yang bisa disimpan.",
+                    android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        id.shuyasal.kuromaku.anime.AnimeDownloadTask task =
+                new id.shuyasal.kuromaku.anime.AnimeDownloadTask(
+                        slug, detail.title, detail.cover, episode.name, episode.slug,
+                        tautan.resolution, tautan.label, berkas, "PROGRESSIVE");
+        boolean queued = id.shuyasal.kuromaku.anime.AnimeDownloadQueue.enqueue(this, task);
+        android.widget.Toast.makeText(this,
+                queued ? "Unduhan dimasukkan ke antrean: " + episode.name
+                        + (tautan.resolution.isEmpty() ? "" : " · " + tautan.resolution)
+                        : "Unduhan tidak dapat dijadwalkan.",
+                android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Ubah tautan unduhan sumber menjadi alamat berkas.
+     *
+     * <p>Hanya Pixeldrain yang memberi berkas sungguhan dari daftar unduhan
+     * sumber ini. Penyedia lain (acefile, gofile, mirrored, buzzheavier)
+     * menjawab dengan halaman HTML, bukan video — menyimpannya akan menghasilkan
+     * berkas rusak yang diklaim sebagai episode. Karena itu tautan seperti itu
+     * ditolak, dan layar menawarkan "Tonton di sumber" alih-alih unduhan palsu.
+     */
+    static String resolveUnduhan(String url) {
+        if (url == null || url.isEmpty()) return null;
+        String low = url.toLowerCase(java.util.Locale.US);
+        if (!low.contains("pixeldrain.")) return null;
+        java.util.regex.Matcher pixeldrain =
+                java.util.regex.Pattern.compile("/(?:u|api/file)/([A-Za-z0-9]+)").matcher(url);
+        return pixeldrain.find()
+                ? "https://pixeldrain.com/api/file/" + pixeldrain.group(1) + "?download"
+                : null;
+    }
+
+    /**
+     * Tidak ada berkas yang bisa disimpan: tawarkan menonton di sumber.
+     *
+     * <p>Jujur soal batas sumbernya — sebagian episode hanya tersedia sebagai
+     * pemutar di peramban. Yang ditawarkan adalah jalan yang benar-benar
+     * bekerja, bukan tombol unduh yang diam.
+     */
+    private void cariBerkasDariServer(KompiSource.Detail detail, KompiSource.Episode episode,
+                                      String catatan) {
+        String alasan = catatan == null || catatan.isEmpty()
+                ? "Sumber tidak menerbitkan berkas unduhan untuk episode ini."
+                : catatan;
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Unduh tidak tersedia")
+                .setMessage(alasan + "\n\n" + episode.name
+                        + " masih bisa ditonton lewat server pemutar sumbernya.")
+                .setPositiveButton("Tonton di sumber", (dialog, which) ->
+                        tontonDiSumber(episode))
+                .setNegativeButton("Batal", null)
+                .show();
+    }
+
+    /** Buka server pemutar pertama episode ini di peramban. */
+    private void tontonDiSumber(KompiSource.Episode episode) {
+        worker.execute(() -> {
+            String page = "";
+            try {
+                KompiSource.EpisodeInfo info = source.episode(episode.slug);
+                if (!info.servers.isEmpty()) page = info.servers.get(0).url;
+            } catch (KompiSource.SourceException ignored) {
+                page = "";
+            }
+            final String alamat = page;
+            main.post(() -> {
+                if (isFinishing() || alamat == null || alamat.isEmpty()) {
+                    android.widget.Toast.makeText(this, "Server episode tidak dapat dibuka.",
+                            android.widget.Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                new androidx.browser.customtabs.CustomTabsIntent.Builder()
+                        .build()
+                        .launchUrl(this, android.net.Uri.parse(alamat));
             });
         });
     }

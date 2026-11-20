@@ -128,15 +128,50 @@ public class KompiSource {
         }
     }
 
+    /**
+     * Satu tautan unduhan resmi dari sumber.
+     *
+     * <p>Ini berbeda dari {@link Server}: server adalah pemutar, sedangkan
+     * tautan ini diterbitkan sumber khusus untuk disimpan. Kualitasnya ditulis
+     * sumbernya (480p/720p), jadi tombol unduhan hanya menawarkan kualitas yang
+     * benar-benar ada.
+     */
+    public static final class Download {
+        public final String label;
+        public final String url;
+        public final String resolution;
+
+        Download(String label, String url, String resolution) {
+            this.label = label == null ? "" : label.trim();
+            this.url = url == null ? "" : url.trim();
+            this.resolution = resolution == null ? "" : resolution.trim();
+        }
+
+        /** "480p · PixelDrain" untuk ditampilkan apa adanya. */
+        public String describe() {
+            if (resolution.isEmpty()) return label;
+            if (label.isEmpty()) return resolution;
+            return resolution + " \u00b7 " + label;
+        }
+    }
+
     public static final class EpisodeInfo {
         public final String title;
         public final String number;
         public final List<Server> servers;
+        /** Tautan unduhan resmi sumber; kosong bila episode tidak menyediakannya. */
+        public final List<Download> downloads;
 
         EpisodeInfo(String title, String number, List<Server> servers) {
+            this(title, number, servers, new ArrayList<>());
+        }
+
+        EpisodeInfo(String title, String number, List<Server> servers,
+                    List<Download> downloads) {
             this.title = title;
             this.number = number;
             this.servers = servers;
+            this.downloads = downloads == null ? new ArrayList<>() : downloads;
         }
     }
 
@@ -400,7 +435,23 @@ public class KompiSource {
         }
         String number = episode == null ? ""
                 : episode.optString("numberLabel", episode.optString("number", ""));
-        return new EpisodeInfo(anime == null ? "" : anime.optString("title", ""), number, servers);
+        // Daftar unduhan resmi. Sebelumnya tidak dibaca sama sekali, sehingga
+        // tombol unduhan hanya mengandalkan server pemutar — dan server pemutar
+        // di sumber ini kebanyakan halaman embed, jadi unduhan selalu gagal.
+        List<Download> downloads = new ArrayList<>();
+        JSONArray downloadArray = root.optJSONArray("downloads");
+        if (downloadArray != null) {
+            for (int i = 0; i < downloadArray.length(); i++) {
+                JSONObject node = downloadArray.optJSONObject(i);
+                if (node == null) continue;
+                String url = node.optString("url", "");
+                if (url.isEmpty()) continue;
+                downloads.add(new Download(node.optString("label", ""), url,
+                        node.optString("resolution", "")));
+            }
+        }
+        return new EpisodeInfo(anime == null ? "" : anime.optString("title", ""), number,
+                servers, downloads);
     }
 
     /**
@@ -456,12 +507,19 @@ public class KompiSource {
     public String resolve(String serverUrl) throws SourceException {
         if (serverUrl == null || serverUrl.isEmpty()) return null;
         String low = serverUrl.toLowerCase();
+        Matcher pixeldrain =
+                Pattern.compile("/(?:u|api/file)/([A-Za-z0-9]+)").matcher(serverUrl);
         if (low.contains("pixeldrain.")) {
-            Matcher matcher = Pattern.compile("/(?:u|api/file)/([A-Za-z0-9]+)").matcher(serverUrl);
-            if (matcher.find()) {
-                return "https://pixeldrain.com/api/file/" + matcher.group(1) + "?download";
+            if (pixeldrain.find()) {
+                return "https://pixeldrain.com/api/file/" + pixeldrain.group(1) + "?download";
             }
             return null;
+        }
+        // Tautan unduhan resmi sumber: acefile, gofile, dan mirrored.to memberi
+        // berkas lewat alamat yang sudah berupa berkas, bukan halaman pemutar.
+        if (low.contains("acefile.co/") || low.contains("gofile.io/")
+                || low.contains("mirrored.to/")) {
+            return serverUrl;
         }
         if (low.contains("mp4upload.")) {
             String html;

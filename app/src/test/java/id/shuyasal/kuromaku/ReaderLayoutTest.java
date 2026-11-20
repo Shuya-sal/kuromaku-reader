@@ -187,9 +187,18 @@ public class ReaderLayoutTest {
 
         manager.scrollToPositionWithOffset(lastIndex, 0);
         layout();
+        // Robolectric kadang belum menata anak RecyclerView tepat setelah
+        // scrollToPositionWithOffset, sehingga posisi terlihat terakhir masih 0
+        // dan persentase terbaca 0. Tata ulang sekali lagi sebelum menyimpulkan
+        // — yang diuji perilaku ScrollMath di ujung daftar, bukan kecepatan
+        // penataan Robolectric.
+        manager.scrollToPositionWithOffset(lastIndex, 0);
+        layout();
         int atEnd = id.shuyasal.kuromaku.ui.ScrollMath.percent(
                 manager.findLastVisibleItemPosition(), list.getAdapter().getItemCount());
-        assertEquals(100, atEnd);
+        assertEquals("di ujung daftar progres harus 100, dapat posisi "
+                + manager.findLastVisibleItemPosition() + " dari "
+                + list.getAdapter().getItemCount(), 100, atEnd);
     }
 
     @Test

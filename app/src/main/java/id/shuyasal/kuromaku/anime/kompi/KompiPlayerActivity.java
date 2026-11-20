@@ -397,55 +397,124 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
      * hanya menyediakan halaman pemutar, tombol memberi alasan dan menawarkan
      * membukanya di peramban — tidak ada unduhan palsu.
      */
+    /**
+     * Unduh episode yang sedang diputar.
+     *
+     * <p>Tautan unduhan resmi sumber dipakai lebih dulu — itu yang benar-benar
+     * berupa berkas. Server pemutar di sumber ini kebanyakan halaman embed, jadi
+     * mengandalkannya saja membuat tombol Unduh selalu gagal.
+     */
     private void unduhEpisode() {
         if (!AnimeDownloadPolicy.allowed(this)) {
-            status.setText("Unduhan belum diizinkan. Aktifkan izin unduhan lebih dulu.");
-            setKontrolTampil(true);
+            new androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Unduhan offline")
+                    .setMessage(AnimeDownloadPolicy.notice())
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Setuju", (dialog, which) -> {
+                        AnimeDownloadPolicy.acknowledge(this);
+                        unduhEpisode();
+                    })
+                    .show();
             return;
         }
-        final String labelEp = episode == null || episode.isEmpty()
-                ? "Episode" : episode.trim();
-        final String urlServer = serverAktif;
-        if (urlServer == null || urlServer.isEmpty()) {
-            status.setText("Belum ada server aktif untuk diunduh.");
-            setKontrolTampil(true);
-            return;
-        }
-        final String animeId = slug;
-        final String posterR = getIntent().getStringExtra(EXTRA_POSTER);
+        final String labelEp = episode == null || episode.isEmpty() ? "Episode" : episode;
         final String judulR = judul == null ? "Anime" : judul;
+        final String posterR = getIntent().getStringExtra(EXTRA_POSTER);
+        final String animeId = getIntent().getStringExtra(EXTRA_ANIME_SLUG);
+        final String induk = animeId == null || animeId.isEmpty() ? slug : animeId;
+        if (AnimeDownloads.isSaved(this, induk, AnimeDownloads.episodeKey(slug, labelEp))) {
+            status.setText("Episode ini sudah tersimpan.");
+            setKontrolTampil(true);
+            return;
+        }
         status.setText("Menyiapkan unduhan " + labelEp + "…");
         setKontrolTampil(true);
         worker.execute(() -> {
-            String media = null;
+            List<KompiSource.Download> tautan = null;
             String alasan = null;
             try {
-                media = source.resolve(urlServer);
+                tautan = source.episode(slug).downloads;
             } catch (KompiSource.SourceException error) {
                 alasan = error.getMessage();
             }
-            final String berkas = media;
-            final String pesan = alasan;
+            final List<KompiSource.Download> resmi = tautan;
+            final String pesanGalat = alasan;
             main(() -> {
                 if (isFinishing()) return;
-                if (berkas == null || berkas.isEmpty()) {
-                    status.setText(pesan == null || pesan.isEmpty()
-                            ? "Server ini hanya menyediakan halaman pemutar, bukan berkas yang "
-                            + "bisa disimpan."
-                            : pesan);
+                if (resmi != null && !resmi.isEmpty()) {
+                    pilihKualitasUnduhan(resmi, induk, judulR, posterR, labelEp);
+                    return;
+                }
+                cadanganUnduhServer(induk, judulR, posterR, labelEp, pesanGalat);
+            });
+        });
+    }
+
+    private void pilihKualitasUnduhan(List<KompiSource.Download> tautan, String induk,
+                                      String judulR, String posterR, String labelEp) {
+        if (tautan.size() == 1) {
+            antreUnduhan(tautan.get(0), induk, judulR, posterR, labelEp);
+            return;
+        }
+        String[] label = new String[tautan.size()];
+        for (int i = 0; i < tautan.size(); i++) label[i] = tautan.get(i).describe();
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Pilih kualitas")
+                .setItems(label, (dialog, which) ->
+                        antreUnduhan(tautan.get(which), induk, judulR, posterR, labelEp))
+                .setNegativeButton("Batal", null)
+                .show();
+    }
+
+    private void antreUnduhan(KompiSource.Download tautan, String induk, String judulR,
+                              String posterR, String labelEp) {
+        String berkas = KompiDetailActivity.resolveUnduhan(tautan.url);
+        if (berkas == null || berkas.isEmpty()) {
+            status.setText("Tautan " + tautan.describe() + " bukan berkas yang bisa disimpan.");
+            setKontrolTampil(true);
+            return;
+        }
+        AnimeDownloadTask task = new AnimeDownloadTask(induk, judulR, posterR, labelEp, slug,
+                tautan.resolution, tautan.label, berkas, "PROGRESSIVE");
+        boolean queued = AnimeDownloadQueue.enqueue(this, task);
+        status.setText(queued
+                ? "Unduhan dimasukkan ke antrean: " + labelEp
+                + (tautan.resolution.isEmpty() ? "" : " · " + tautan.resolution)
+                : "Unduhan tidak dapat dijadwalkan.");
+        setKontrolTampil(true);
+    }
+
+    /** Cadangan: cari berkas dari server pemutar bila sumber tidak memberi tautan. */
+    private void cadanganUnduhServer(String induk, String judulR, String posterR,
+                                     String labelEp, String catatan) {
+        worker.execute(() -> {
+            String media = null;
+            try {
+                KompiSource.EpisodeInfo info = source.episode(slug);
+                for (KompiSource.Server server : info.servers) {
+                    String berkas = source.resolve(server.url);
+                    if (berkas != null && !berkas.isEmpty()) {
+                        media = berkas;
+                        break;
+                    }
+                }
+            } catch (KompiSource.SourceException ignored) {
+                // Dilaporkan di bawah.
+            }
+            final String berkas = media;
+            main(() -> {
+                if (isFinishing()) return;
+                if (berkas == null) {
+                    status.setText(catatan == null || catatan.isEmpty()
+                            ? "Episode ini hanya menyediakan halaman pemutar, bukan berkas "
+                            + "yang bisa disimpan."
+                            : catatan);
                     setKontrolTampil(true);
                     return;
                 }
-                if (AnimeDownloads.isSaved(KompiPlayerActivity.this, animeId,
-                        AnimeDownloads.episodeKey(slug, labelEp))) {
-                    status.setText("Episode ini sudah tersimpan.");
-                    setKontrolTampil(true);
-                    return;
-                }
-                // Kualitas hanya ditampilkan bila sumber benar-benar menyebutnya.
-                AnimeDownloadTask task = new AnimeDownloadTask(animeId, judulR, posterR,
-                        labelEp, slug, "", "Anime Server 2", berkas, "PROGRESSIVE");
-                boolean queued = AnimeDownloadQueue.enqueue(KompiPlayerActivity.this, task);
+                AnimeDownloadTask task = new AnimeDownloadTask(induk, judulR, posterR,
+                        labelEp, slug, "", "Server video", berkas, "PROGRESSIVE");
+                boolean queued = AnimeDownloadQueue.enqueue(this, task);
                 status.setText(queued
                         ? "Unduhan dimasukkan ke antrean: " + labelEp
                         : "Unduhan tidak dapat dijadwalkan.");
