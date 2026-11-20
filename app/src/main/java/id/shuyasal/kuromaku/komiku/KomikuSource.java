@@ -188,8 +188,26 @@ public final class KomikuSource {
             if (parts.length > 1) updated = parts[parts.length - 1].trim();
         }
 
-        Element chapter = article.selectFirst("a.ls24");
-        String latest = chapter == null ? "" : chapter.text().trim();
+        // Kartu "Terbaru" menaruh chapter pada tautan berciri {@code ls2l}
+        // (167 tautan di beranda), sedangkan {@code ls24} hanya dipakai blok
+        // populer (17 tautan) — memakai ls24 saja membuat chapter terbaru tidak
+        // pernah terbaca pada baris daftar. Keduanya dicoba, dengan ls2l lebih
+        // dulu, lalu cadangan tautan yang href-nya berpola "-chapter-".
+        String latest = "";
+        Element chapter = article.selectFirst("a.ls2l, a.ls24");
+        if (chapter == null) {
+            for (Element tautan : article.select("a[href]")) {
+                String href = tautan.attr("href").toLowerCase(java.util.Locale.ROOT);
+                if (href.contains("-chapter-")) {
+                    chapter = tautan;
+                    break;
+                }
+            }
+        }
+        if (chapter != null) {
+            latest = chapter.text().trim();
+            if (latest.isEmpty()) latest = chapter.attr("title").trim();
+        }
 
         return new KomikuManga(id, title, url, cover, type, latest, updated);
     }
