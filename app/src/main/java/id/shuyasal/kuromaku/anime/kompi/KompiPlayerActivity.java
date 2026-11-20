@@ -403,7 +403,8 @@ public class KompiPlayerActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             setKontrolTampil(true);
             return;
         }
-        final String labelEp = episode == null || episode.isEmpty() ? "Episode" : episode;
+        final String labelEp = episode == null || episode.isEmpty()
+                ? "Episode" : episode.trim();
         final String urlServer = serverAktif;
         if (urlServer == null || urlServer.isEmpty()) {
             status.setText("Belum ada server aktif untuk diunduh.");

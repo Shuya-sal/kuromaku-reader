@@ -325,8 +325,11 @@ public class KompiDetailActivity extends id.shuyasal.kuromaku.ui.TvActivity {
             String alasan = null;
             try {
                 KompiSource.EpisodeInfo info = source.episode(episode.slug);
+                // Semua server dicoba berurutan, bukan hanya yang ditandai
+                // berkas: sebagian server baru ketahuan jenisnya setelah diurai
+                // (mis. halaman /embed- milik Mp4upload). Yang pertama benar-
+                // benar menghasilkan alamat berkas dipakai; sisanya berhenti.
                 for (KompiSource.Server server : info.servers) {
-                    if (!server.file) continue;
                     String media = source.resolve(server.url);
                     if (media != null && !media.isEmpty()) {
                         berkas = media;

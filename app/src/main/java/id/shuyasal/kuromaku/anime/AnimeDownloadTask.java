@@ -49,15 +49,30 @@ public final class AnimeDownloadTask {
                 source.kind == null ? "" : source.kind.name());
     }
 
-    /** Boleh diunduh hanya bila berupa berkas media langsung yang sah. */
+    /**
+     * Boleh diunduh hanya bila berupa berkas media langsung yang sah.
+     *
+     * <p>Bukan hanya alamat berakhiran .mp4: server berkas seperti Pixeldrain
+     * memberi alamat {@code /api/file/<id>?download} tanpa ekstensi, padahal
+     * jawabannya {@code video/mp4}. Alamat seperti itu tetap diterima karena
+     * jenisnya sudah dipastikan oleh penyedia berkas, bukan ditebak dari nama.
+     */
     public boolean downloadable() {
         if (url.isEmpty() || episodeKey.isEmpty() || animeId.isEmpty()) return false;
         if (!"PROGRESSIVE".equals(kind)) return false;
         String lower = url.toLowerCase(java.util.Locale.US);
         // Tolak apa pun yang masih berbentuk halaman, bukan berkas.
         if (lower.startsWith("data:") || lower.startsWith("javascript:")) return false;
-        return lower.endsWith(".mp4") || lower.endsWith(".webm")
-                || lower.contains(".mp4?") || lower.contains(".webm?");
+        if (lower.startsWith("http://") || lower.startsWith("https://")) {
+            if (lower.contains("/embed") || lower.contains("/video.g")
+                    || lower.contains("/player")) {
+                return false;
+            }
+            if (lower.contains(".mp4") || lower.contains(".webm")) return true;
+            // Penyedia berkas yang alamatnya tanpa ekstensi.
+            return lower.contains("pixeldrain.com/api/file/");
+        }
+        return false;
     }
 
     /** Alasan tombol unduh dinonaktifkan, untuk ditampilkan apa adanya. */

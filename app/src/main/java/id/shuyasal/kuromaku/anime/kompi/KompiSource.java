@@ -349,8 +349,10 @@ public class KompiSource {
                 String epSlug = node.optString("slug", "");
                 if (epSlug.isEmpty()) continue;
                 int number = node.optInt("number", -1);
-                String label = node.optString("title", "");
-                if (label.isEmpty()) label = "Episode " + (number < 0 ? "?" : String.valueOf(number));
+                // Sumber menulis title: null untuk sebagian episode. optString
+                // mengubahnya menjadi teks "null", jadi nilainya diperiksa
+                // langsung dan diganti label episode yang wajar.
+                String label = judulEpisode(node, number);
                 episodes.add(new Episode(epSlug, label, number));
             }
         }
@@ -391,7 +393,9 @@ public class KompiSource {
                 if (node == null) continue;
                 String url = node.optString("url", "");
                 if (url.isEmpty()) continue;
-                servers.add(new Server(node.optString("label", "Server"), url, isFileHost(url)));
+                String kind = node.optString("kind", "");
+                servers.add(new Server(node.optString("label", "Server"), url,
+                        isFileHost(url) || isDirectKind(kind)));
             }
         }
         String number = episode == null ? ""
@@ -399,9 +403,37 @@ public class KompiSource {
         return new EpisodeInfo(anime == null ? "" : anime.optString("title", ""), number, servers);
     }
 
+    /**
+     * Judul episode yang bisa dibaca.
+     *
+     * <p>Sebagian episode tidak punya judul ({@code null}); yang dipakai adalah
+     * label nomornya, bukan teks "null".
+     */
+    static String judulEpisode(JSONObject node, int number) {
+        String label = node == null || !node.has("title") || node.isNull("title")
+                ? "" : node.optString("title", "").trim();
+        if (label.equalsIgnoreCase("null")) label = "";
+        if (!label.isEmpty()) return label;
+        return "Episode " + (number < 0 ? "?" : String.valueOf(number));
+    }
+
+    /**
+     * Apakah sumber ini benar-benar berkas media yang bisa disimpan.
+     *
+     * <p>Selain nama host, jenis yang ditulis sumbernya ikut dipakai: server
+     * Pixeldrain disebut {@code direct} dengan alamat {@code /u/<id>}, dan
+     * server Mp4upload bisa datang sebagai halaman {@code /embed-...} yang
+     * masih perlu diurai. Keduanya bisa diunduh, jadi keduanya dikenali —
+     * sementara halaman pemutar lain tetap bukan berkas.
+     */
     static boolean isFileHost(String url) {
         String low = url == null ? "" : url.toLowerCase();
         return low.contains("pixeldrain.") || low.contains("mp4upload.");
+    }
+
+    /** Jenis berkas yang ditulis sumber: {@code direct} berarti berkas langsung. */
+    static boolean isDirectKind(String kind) {
+        return kind != null && "direct".equalsIgnoreCase(kind.trim());
     }
 
     /** URLEncoder versi String: overload Charset baru ada di Android 33. */
